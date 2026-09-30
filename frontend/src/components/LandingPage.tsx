@@ -1,34 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sprout, 
-  ArrowRight, 
-  CheckCircle2, 
+  Layers, 
+  Building2, 
   Warehouse, 
   Truck, 
-  Building2, 
-  MapPin, 
-  Coins, 
+  ArrowRight, 
+  CheckCircle2, 
+  TrendingUp, 
   ChevronRight,
-  ArrowDown,
-  Layers,
-  CreditCard,
   ShieldCheck,
-  Package,
-  TrendingUp,
-  Sparkles
+  Eye,
+  Network,
+  Boxes,
+  Compass,
+  ArrowDown,
+  Sparkles,
+  UserPlus
 } from 'lucide-react';
-import { GetStartedModal } from './GetStartedModal';
-import { LoginModal } from './LoginModal';
-import { FarmerRegisterModal } from './FarmerRegisterModal';
+import { useAuth } from '../context/AuthContext';
+import { RoleSelectModal } from './RoleSelectModal';
+import { RegisterModal } from './RegisterModal';
+import { UserRole } from '../types';
 
 interface LandingPageProps {
   onSelectTab: (tab: string) => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
-  const [isGetStartedOpen, setIsGetStartedOpen] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isFarmerRegisterOpen, setIsFarmerRegisterOpen] = useState(false);
+  const { switchRole } = useAuth();
+
+  // Modal controls
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [registerRole, setRegisterRole] = useState<UserRole>('farmer');
+
+  // Floating bottom bar visibility state
+  const [showFloatingBar, setShowFloatingBar] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 320) {
+        setShowFloatingBar(true);
+      } else {
+        setShowFloatingBar(false);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const handleRoleRoute = async (role: 'farmer' | 'aggregator' | 'buyer') => {
+    await switchRole(role);
+    onSelectTab(role);
+  };
+
+  const handleOpenRegister = (role: UserRole = 'farmer') => {
+    setRegisterRole(role);
+    setIsRegisterOpen(true);
+  };
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -38,88 +68,103 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
   };
 
   return (
-    <div className="bg-[#faf8f5] text-stone-800 font-sans selection:bg-emerald-700 selection:text-white pb-20">
+    <div className="bg-[#faf8f5] text-stone-800 font-sans selection:bg-emerald-600 selection:text-white pb-24">
       
       {/* ========================================================================= */}
       {/* 1. HERO SECTION                                                          */}
       {/* ========================================================================= */}
-      <section id="hero" className="relative pt-8 sm:pt-14 pb-14 sm:pb-18 overflow-hidden border-b border-stone-200">
-        
-        {/* Ambient atmospheric backdrop */}
+      <section id="hero" className="relative pt-6 sm:pt-12 pb-16 sm:pb-24 overflow-hidden border-b border-stone-200">
+        {/* Soft background ambient gradient */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden">
-          <div className="absolute -top-20 left-1/4 w-96 h-96 bg-emerald-200/40 rounded-full blur-3xl" />
-          <div className="absolute top-20 right-1/4 w-96 h-96 bg-amber-200/35 rounded-full blur-3xl" />
+          <div className="absolute -top-32 left-1/4 w-96 h-96 bg-emerald-200/40 rounded-full blur-3xl" />
+          <div className="absolute top-20 right-1/4 w-96 h-96 bg-amber-200/30 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          
-          {/* Wireframe Flow Badge: Small farmer → Aggregation → Large buyer */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-100 text-emerald-950 text-xs sm:text-sm font-extrabold border border-emerald-300 shadow-xs mb-6">
-            <span>Small farmer</span>
-            <span className="text-emerald-500">→</span>
-            <span>Aggregation</span>
-            <span className="text-emerald-500">→</span>
-            <span>Large buyer</span>
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          {/* Subtle Agritech Badge */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100/80 text-emerald-900 text-xs font-bold border border-emerald-300 shadow-xs mb-6">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
+            <span>भारत का एकीकृत कृषि आपूर्ति नेटवर्क • Unified Agricultural Supply</span>
           </div>
 
-          {/* Headline (Specified in Wireframe) */}
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-stone-900 tracking-tight leading-[1.12] max-w-3xl mx-auto mb-5">
-            "From Farm to Market,<br />
-            <span className="text-emerald-800 underline decoration-amber-400 decoration-wavy decoration-2">Made Simple."</span>
+          {/* Main Headline */}
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-stone-900 tracking-tight leading-[1.15] max-w-4xl mx-auto mb-6">
+            From Farm to Market, <span className="text-emerald-700 underline decoration-amber-400 decoration-wavy decoration-2">Made Simple.</span>
           </h1>
 
-          {/* Subheading */}
-          <p className="text-base sm:text-lg md:text-xl text-stone-600 max-w-2xl mx-auto leading-relaxed mb-8 font-normal">
-            KisanConnect helps small farmers find buyers, combine fragmented produce into bulk supply, and connect that supply with larger buyers.
+          {/* Supporting Text */}
+          <p className="text-base sm:text-lg md:text-xl text-stone-600 max-w-3xl mx-auto leading-relaxed mb-8">
+            KisanConnect connects farmers, local aggregators, storage, logistics, and bulk buyers to make agricultural selling and sourcing easier, more transparent, and more connected.
           </p>
 
-          {/* CTAs (Specified in Wireframe: [🌾 Start Selling] [🏭 Source Produce]) */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+          {/* CTAs (No login/register form directly in hero) */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 mb-14">
             <button
-              onClick={() => setIsFarmerRegisterOpen(true)}
-              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-base shadow-lg shadow-emerald-800/25 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2.5"
+              onClick={() => setIsRoleModalOpen(true)}
+              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-emerald-800/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
-              <span>🌾 Start Selling</span>
-              <span className="text-xs bg-emerald-800/80 px-2 py-0.5 rounded font-bold">फसल बेचें</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
+              <span>Get Started</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
 
             <button
-              onClick={() => scrollToSection('for-buyers')}
-              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white hover:bg-stone-50 text-stone-900 font-bold text-base border-2 border-stone-300 shadow-xs hover:border-stone-400 transition-all flex items-center justify-center gap-2"
+              onClick={() => scrollToSection('ecosystem')}
+              className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-white hover:bg-stone-50 text-stone-800 font-bold text-sm sm:text-base border border-stone-300 shadow-xs hover:border-stone-400 transition-all flex items-center justify-center gap-2"
             >
-              <span>🏭 Source Produce</span>
+              <span>Explore How It Works</span>
               <ArrowDown className="w-4 h-4 text-stone-500" />
             </button>
           </div>
 
-          {/* Hero Visual Image */}
-          <div className="relative mx-auto max-w-5xl rounded-3xl overflow-hidden border-2 border-stone-200 shadow-2xl bg-stone-900 group">
+          {/* Hero Visual Banner (Generated photorealistic Indian agritech landscape) */}
+          <div className="relative mx-auto max-w-5xl rounded-3xl overflow-hidden border-2 border-stone-200/90 shadow-2xl bg-stone-900 group">
             <img 
               src="/kisan_hero_agritech.jpg" 
               alt="KisanConnect Modern Agriculture Farm to Market" 
               className="w-full h-64 sm:h-96 md:h-[420px] object-cover object-center group-hover:scale-[1.01] transition-transform duration-700 opacity-95"
             />
-            {/* Overlay Banner */}
+            {/* Visual Glassmorphic Overlay Bar */}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-stone-950/90 via-stone-900/60 to-transparent p-5 sm:p-7 text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="text-white">
                 <div className="flex items-center gap-2 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
                   <span>🌾 Connected Agri-Supply Corridor</span>
                   <span>•</span>
-                  <span>Direct Farm Sourcing</span>
+                  <span>Agra - Western UP Corridor</span>
                 </div>
                 <div className="text-sm sm:text-base font-bold text-stone-100">
-                  Fair prices for farmers • Consistent bulk volume for institutional buyers
+                  Direct Field Sourcing, Controlled Atmosphere Storage & Verified Bulk Logistics
                 </div>
               </div>
 
-              <button
-                onClick={() => setIsGetStartedOpen(true)}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
-              >
-                <span>Get Started Now</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setIsRoleModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5"
+                >
+                  <span>Explore Network</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Micro Trust Stats */}
+          <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto pt-6 border-t border-stone-200/80">
+            <div className="text-center">
+              <div className="text-xl sm:text-2xl font-black text-stone-900">400+</div>
+              <div className="text-xs text-stone-500 font-medium">Verified Farmers</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xl sm:text-2xl font-black text-stone-900">10,000+ MT</div>
+              <div className="text-xs text-stone-500 font-medium">Cold Storage Capacity</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xl sm:text-2xl font-black text-stone-900">₹0 Hidden</div>
+              <div className="text-xs text-stone-500 font-medium">Transparent Net Return</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xl sm:text-2xl font-black text-stone-900">14-Day</div>
+              <div className="text-xs text-stone-500 font-medium">Verified Settlement Cycle</div>
             </div>
           </div>
 
@@ -128,483 +173,358 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
 
 
       {/* ========================================================================= */}
-      {/* 2. KEY METRICS / PILOT (Section in Wireframe)                            */}
+      {/* 2. VISUAL AGRICULTURAL ECOSYSTEM                                         */}
       {/* ========================================================================= */}
-      <section id="key-metrics" className="py-12 sm:py-16 bg-white border-b border-stone-200">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-black mb-1">
-                <span>📍 LIVE PILOT CORRIDOR</span>
-                <span>•</span>
-                <span>WESTERN UP</span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight">
-                Key Metrics & Regional Pilot
-              </h2>
-            </div>
-            <p className="text-xs sm:text-sm text-stone-500 max-w-sm">
-              Demonstrated live pilot across Agra, Mathura, and Aligarh potato and staple agricultural clusters.
-            </p>
-          </div>
-
-          {/* 4 Metric Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            
-            <div className="p-5 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-3xl sm:text-4xl font-black text-emerald-800">400+</div>
-              <div className="text-xs font-bold text-stone-800 mt-1">Verified Farmers</div>
-              <p className="text-[11px] text-stone-500 mt-0.5">Digitally listed farm lots</p>
-            </div>
-
-            <div className="p-5 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-3xl sm:text-4xl font-black text-amber-700">14 Ton</div>
-              <div className="text-xs font-bold text-stone-800 mt-1">Standard Bulk Lots</div>
-              <p className="text-[11px] text-stone-500 mt-0.5">Single freight dispatch</p>
-            </div>
-
-            <div className="p-5 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-3xl sm:text-4xl font-black text-stone-900">₹0</div>
-              <div className="text-xs font-bold text-stone-800 mt-1">Hidden Mandi Cuts</div>
-              <p className="text-[11px] text-stone-500 mt-0.5">Transparent net realization</p>
-            </div>
-
-            <div className="p-5 rounded-2xl bg-stone-50 border border-stone-200 text-center">
-              <div className="text-3xl sm:text-4xl font-black text-blue-800">100%</div>
-              <div className="text-xs font-bold text-stone-800 mt-1">Buyer PO Fulfillment</div>
-              <p className="text-[11px] text-stone-500 mt-0.5">Single invoicing to factories</p>
-            </div>
-
-          </div>
-
-          {/* Pilot Callout Banner */}
-          <div className="mt-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950">
-            <div className="flex items-center gap-2.5">
-              <span className="text-lg">🥔</span>
-              <span><strong>Pilot Live Focus:</strong> Agra Potato (Chipsona, Kufri Jyoti) & Wheat with automated grade sorting and 24-hr escrow payout.</span>
-            </div>
-            <span className="font-bold text-emerald-700 shrink-0">Agra - Western UP Hub</span>
-          </div>
-
-        </div>
-      </section>
-
-
-      {/* ========================================================================= */}
-      {/* 3. HOW IT WORKS (Section in Wireframe: 5 connected nodes)                  */}
-      {/* ========================================================================= */}
-      <section id="how-it-works" className="py-16 sm:py-24 bg-[#faf8f5] border-b border-stone-200">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <span className="text-xs font-black uppercase tracking-widest text-emerald-800 bg-emerald-100 px-3.5 py-1 rounded-full border border-emerald-200">
-              Supply Chain Flow
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-stone-900 tracking-tight mt-3">
-              How It Works
-            </h2>
-            <p className="text-base sm:text-lg font-bold text-emerald-800 mt-2">
-              "Small farms. One connected market."
-            </p>
-            <p className="text-xs sm:text-sm text-stone-500 mt-1 max-w-md mx-auto">
-              Connecting individual small farm lots to industrial-scale buyers with supporting infrastructure.
-            </p>
-          </div>
-
-          {/* 5-Step Connected Flow (Farmer → Aggregator → Bulk Supply → Storage/Transport → Buyer/Factory) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 relative">
-            
-            {/* 1. 🌾 Farmer */}
-            <div className="bg-white rounded-3xl p-6 border-2 border-stone-200 hover:border-emerald-600 transition-all flex flex-col justify-between shadow-xs">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl mb-4">
-                  🌾
-                </div>
-                <div className="text-xs font-black text-emerald-700 uppercase tracking-wider mb-1">
-                  1. Farmer
-                </div>
-                <h3 className="text-lg font-black text-stone-900 mb-2">
-                  Small Farm Lots
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Individual farmers list available harvest lots (2 to 5 Ton) directly from their phone.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-stone-100 text-[11px] font-bold text-emerald-800">
-                किसान स्तर: 2T-5T लॉट
-              </div>
-            </div>
-
-            {/* 2. 📦 Aggregator */}
-            <div className="bg-white rounded-3xl p-6 border-2 border-amber-300 hover:border-amber-500 transition-all flex flex-col justify-between shadow-xs">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl mb-4">
-                  📦
-                </div>
-                <div className="text-xs font-black text-amber-700 uppercase tracking-wider mb-1">
-                  2. Aggregator
-                </div>
-                <h3 className="text-lg font-black text-stone-900 mb-2">
-                  Collection Hubs
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Local village aggregators combine small quantities and verify quality specs.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-stone-100 text-[11px] font-bold text-amber-800">
-                संकलन: माल एकत्रीकरण
-              </div>
-            </div>
-
-            {/* 3. Bulk Supply */}
-            <div className="bg-white rounded-3xl p-6 border-2 border-emerald-500 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl mb-4 font-black">
-                  🏪
-                </div>
-                <div className="text-xs font-black text-emerald-700 uppercase tracking-wider mb-1">
-                  3. Bulk Supply
-                </div>
-                <h3 className="text-lg font-black text-stone-900 mb-2">
-                  Standardized Lots
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Combined high-volume produce becomes visible to verified corporate buyers.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-stone-100 text-[11px] font-bold text-emerald-800">
-                थोक आपूर्ति: 14T-25T
-              </div>
-            </div>
-
-            {/* 4. ❄️ Storage / 🚚 Transport */}
-            <div className="bg-white rounded-3xl p-6 border-2 border-stone-200 hover:border-teal-500 transition-all flex flex-col justify-between shadow-xs">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-xl mb-4">
-                  ❄️🚚
-                </div>
-                <div className="text-xs font-black text-teal-700 uppercase tracking-wider mb-1">
-                  4. Storage / Move
-                </div>
-                <h3 className="text-lg font-black text-stone-900 mb-2">
-                  Cold Chain & Freight
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Integrated cold storage protects shelf-life and GPS freight moves produce reliably.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-stone-100 text-[11px] font-bold text-teal-800">
-                कोल्ड स्टोरेज व ट्रांसपोर्ट
-              </div>
-            </div>
-
-            {/* 5. 🏭 Buyer / Factory */}
-            <div className="bg-white rounded-3xl p-6 border-2 border-stone-200 hover:border-blue-600 transition-all flex flex-col justify-between shadow-xs">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center text-2xl mb-4">
-                  🏭
-                </div>
-                <div className="text-xs font-black text-blue-700 uppercase tracking-wider mb-1">
-                  5. Buyer / Factory
-                </div>
-                <h3 className="text-lg font-black text-stone-900 mb-2">
-                  Industrial Scale
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Large buyers fulfill full procurement demands with 1 single contract & invoice.
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-stone-100 text-[11px] font-bold text-blue-800">
-                फैक्ट्री आपूर्ति: 1 इनवॉइस
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-      </section>
-
-
-      {/* ========================================================================= */}
-      {/* 4. FROM SMALL LOTS TO BULK SUPPLY (Section in Wireframe)                  */}
-      {/* ========================================================================= */}
-      <section id="small-lots-bulk" className="py-16 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <div className="text-center max-w-2xl mx-auto mb-14">
-          <span className="text-xs font-black uppercase tracking-widest text-amber-900 bg-amber-200 px-3.5 py-1 rounded-full border border-amber-300">
-            Core Business Model
-          </span>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-stone-900 tracking-tight mt-3">
-            From Small Lots to Bulk Supply
-          </h2>
-          <p className="text-sm sm:text-base text-stone-600 mt-2">
-            2T + 3T + 5T + 4T combined through KisanConnect Aggregation into 14 Ton Bulk Supply for Bulk Buyers.
-          </p>
-        </div>
-
-        {/* The Exact Visual Diagram from Wireframe */}
-        <div className="bg-white rounded-3xl p-6 sm:p-10 border-2 border-stone-200 shadow-xl overflow-hidden">
-          
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-            
-            {/* Left: 2T + 3T + 5T + 4T */}
-            <div className="lg:col-span-4 space-y-3">
-              <div className="flex items-center justify-between pb-1 border-b border-stone-200">
-                <span className="text-xs font-black uppercase tracking-wider text-stone-500">
-                  Individual Farm Lots
-                </span>
-                <span className="text-xs font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
-                  2T + 3T + 5T + 4T
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🌾</span>
-                  <div>
-                    <div className="text-xs font-black text-stone-900">Farmer A (Khandauli)</div>
-                    <div className="text-[11px] text-stone-500">Potato Chipsona</div>
-                  </div>
-                </div>
-                <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg">
-                  2 Ton
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🌾</span>
-                  <div>
-                    <div className="text-xs font-black text-stone-900">Farmer B (Fatehabad)</div>
-                    <div className="text-[11px] text-stone-500">Potato Chipsona</div>
-                  </div>
-                </div>
-                <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg">
-                  3 Ton
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🌾</span>
-                  <div>
-                    <div className="text-xs font-black text-stone-900">Farmer C (Shamsabad)</div>
-                    <div className="text-[11px] text-stone-500">Potato Kufri Jyoti</div>
-                  </div>
-                </div>
-                <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg">
-                  5 Ton
-                </span>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-center justify-between shadow-xs">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🌾</span>
-                  <div>
-                    <div className="text-xs font-black text-stone-900">Farmer D (Bichpuri)</div>
-                    <div className="text-[11px] text-stone-500">Potato Chipsona</div>
-                  </div>
-                </div>
-                <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-lg">
-                  4 Ton
-                </span>
-              </div>
-
-            </div>
-
-            {/* Middle: ↓ 14 TON (Aggregation Node) */}
-            <div className="lg:col-span-4 text-center py-4 lg:py-0">
-              <div className="p-6 rounded-3xl bg-amber-50 border-2 border-dashed border-amber-400 shadow-sm relative">
-                
-                <div className="w-14 h-14 rounded-2xl bg-amber-500 text-stone-950 flex items-center justify-center text-2xl mx-auto mb-2 shadow-sm font-black">
-                  📦
-                </div>
-
-                <div className="text-xs font-black uppercase tracking-wider text-amber-800 mb-0.5">
-                  KisanConnect Aggregation
-                </div>
-                <h3 className="text-lg font-black text-stone-900">
-                  Combined Village Lot
-                </h3>
-
-                {/* Big 14 TON Badge */}
-                <div className="mt-4 pt-3 border-t border-amber-200">
-                  <div className="text-xs font-bold text-amber-800 uppercase tracking-wider">
-                    Total Volume:
-                  </div>
-                  <div className="text-3xl sm:text-4xl font-black text-amber-950 mt-0.5 tracking-tight">
-                    14 TON
-                  </div>
-                  <div className="text-xs font-black text-emerald-700 mt-1">
-                    ✓ Bulk Supply Standard Grade
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 text-stone-400 font-black text-sm flex items-center justify-center gap-1">
-                <span>↓ Direct Contract Delivery ↓</span>
-              </div>
-            </div>
-
-            {/* Right: Bulk Buyer / Factory */}
-            <div className="lg:col-span-4 bg-stone-900 text-white rounded-3xl p-6 sm:p-7 shadow-xl flex flex-col justify-between h-full border border-stone-800">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-3xl">
-                    🏭
-                  </div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider bg-blue-900/80 text-blue-200 px-2.5 py-1 rounded-full border border-blue-700">
-                    Industrial Order
-                  </span>
-                </div>
-
-                <div className="text-xs font-black uppercase tracking-wider text-blue-300 mb-1">
-                  Procurement
-                </div>
-                <h3 className="text-xl font-black text-white">
-                  Bulk Buyer
-                </h3>
-                <p className="text-xs text-stone-300 mt-2 leading-relaxed">
-                  Food processor or wholesale distributor receives 1 single invoice, 1 scheduled logistics carrier, and certified quality parameters.
-                </p>
-
-                <div className="mt-5 space-y-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-stone-800/80 border border-stone-700 flex items-center justify-between">
-                    <span className="text-stone-400">Buyer:</span>
-                    <span className="font-bold text-white">FreshBites Foods Pvt Ltd</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-stone-800/80 border border-stone-700 flex items-center justify-between">
-                    <span className="text-stone-400">Total Received:</span>
-                    <span className="font-black text-emerald-400">14 Ton Single Lot</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-3 border-t border-stone-800 text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Zero fragmented middleman cuts</span>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-
-      </section>
-
-
-      {/* ========================================================================= */}
-      {/* 5. FOR FARMERS (Section in Wireframe)                                     */}
-      {/* ========================================================================= */}
-      <section id="for-farmers" className="py-16 sm:py-24 bg-white border-y border-stone-200">
+      <section id="ecosystem" className="py-16 sm:py-24 bg-white border-b border-stone-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-2xl mx-auto mb-14">
-            <span className="text-xs font-black uppercase tracking-widest text-emerald-800 bg-emerald-100 px-3.5 py-1 rounded-full border border-emerald-200">
-              For Farmers • किसान
-            </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-stone-900 tracking-tight mt-3">
-              सरल, पारदर्शी और सीधा व्यापार
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 text-stone-700 text-xs font-bold border border-stone-200 mb-3">
+              <Network className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Visual Agricultural Ecosystem</span>
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-black text-stone-900 tracking-tight">
+              The Connected Flow
             </h2>
             <p className="text-sm sm:text-base text-stone-600 mt-2">
-              किसान भाइयों के लिए विशेष रूप से डिज़ाइन किया गया आसान मोबाइल इंटरफ़ेस।
+              Supply → Connect → Aggregate → Store → Transport → Sell
             </p>
           </div>
 
-          {/* 4 Cards from Wireframe (अपनी फसल बेचें, आज का भाव, मेरी फसल, खरीदारों के ऑफर) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            
-            {/* 1. अपनी फसल बेचें */}
-            <div className="p-6 rounded-3xl bg-emerald-50/70 border-2 border-emerald-300 hover:shadow-md transition-all flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-2xl mb-4 shadow-sm">
+          {/* Connected Flow Diagram */}
+          <div className="relative">
+            {/* Desktop Connector Line */}
+            <div className="hidden lg:block absolute top-1/2 left-8 right-8 h-1 bg-gradient-to-r from-emerald-400 via-amber-400 to-blue-500 -translate-y-1/2 z-0 opacity-40 rounded-full" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 relative z-10">
+              
+              {/* Step 1: Farmer */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 shadow-xs hover:shadow-md transition-all text-center flex flex-col items-center">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-3xl mb-3 shadow-xs">
                   🌾
                 </div>
-                <h3 className="text-lg font-black text-stone-900 mb-1">
-                  अपनी फसल बेचें
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed mt-2">
-                  फसल का नाम, मात्रा (क्विंटल) और गाँव बताएं। 2 मिनट में आपकी फसल दर्ज हो जाएगी।
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 mb-1">
+                  1. Supply
+                </span>
+                <h3 className="font-extrabold text-stone-900 text-base mb-1">FARMER</h3>
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Lists harvest crop, volume, variety and availability.
                 </p>
               </div>
-              <div className="mt-4 pt-3 border-t border-emerald-200/80 text-xs font-bold text-emerald-800">
-                सीधी बिक्री →
-              </div>
-            </div>
 
-            {/* 2. आज का भाव */}
-            <div className="p-6 rounded-3xl bg-amber-50/70 border-2 border-amber-300 hover:shadow-md transition-all flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center text-2xl mb-4 shadow-sm">
-                  💰
-                </div>
-                <h3 className="text-lg font-black text-stone-900 mb-1">
-                  आज का भाव
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed mt-2">
-                  आसपास की मंडियों और बड़ी कंपनियों के ताज़ा भाव देखें। कोई भ्रम नहीं।
-                </p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-amber-200/80 text-xs font-bold text-amber-800">
-                ताज़ा मंडी भाव →
-              </div>
-            </div>
-
-            {/* 3. मेरी फसल */}
-            <div className="p-6 rounded-3xl bg-blue-50/70 border-2 border-blue-300 hover:shadow-md transition-all flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-2xl mb-4 shadow-sm">
+              {/* Step 2: Aggregation */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 shadow-xs hover:shadow-md transition-all text-center flex flex-col items-center">
+                <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl mb-3 shadow-xs">
                   📦
                 </div>
-                <h3 className="text-lg font-black text-stone-900 mb-1">
-                  मेरी फसल
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed mt-2">
-                  आपके सभी लिस्टिंग और सौदों की स्थिति एक ही जगह पर सुरक्षित दिखेगी।
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 mb-1">
+                  2. Aggregate
+                </span>
+                <h3 className="font-extrabold text-stone-900 text-base mb-1">AGGREGATION</h3>
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Combines small village lots into standardized bulk lots.
                 </p>
               </div>
-              <div className="mt-4 pt-3 border-t border-blue-200/80 text-xs font-bold text-blue-800">
-                फसल ट्रैकिंग →
+
+              {/* Step 3: Storage */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 shadow-xs hover:shadow-md transition-all text-center flex flex-col items-center">
+                <div className="w-14 h-14 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-3xl mb-3 shadow-xs">
+                  🏬
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 mb-1">
+                  3. Store
+                </span>
+                <h3 className="font-extrabold text-stone-900 text-base mb-1">STORAGE</h3>
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Preserves crop quality in temperature-controlled spaces.
+                </p>
+              </div>
+
+              {/* Step 4: Logistics */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 shadow-xs hover:shadow-md transition-all text-center flex flex-col items-center">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center text-3xl mb-3 shadow-xs">
+                  🚚
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 mb-1">
+                  4. Transport
+                </span>
+                <h3 className="font-extrabold text-stone-900 text-base mb-1">LOGISTICS</h3>
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Dispatches verified freight vehicles directly to buyer hub.
+                </p>
+              </div>
+
+              {/* Step 5: Big Buyer */}
+              <div className="bg-stone-50 rounded-2xl p-5 border border-stone-200 shadow-xs hover:shadow-md transition-all text-center flex flex-col items-center">
+                <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center text-3xl mb-3 shadow-xs">
+                  🏢
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 mb-1">
+                  5. Sell & Fulfill
+                </span>
+                <h3 className="font-extrabold text-stone-900 text-base mb-1">BIG BUYER</h3>
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  Sources high-tonnage produce with guaranteed specs.
+                </p>
+              </div>
+
+            </div>
+          </div>
+
+          {/* Quick 10-second summary bar */}
+          <div className="mt-8 bg-emerald-50 rounded-2xl p-4 border border-emerald-200/80 flex flex-wrap items-center justify-center gap-2 text-center text-xs font-semibold text-emerald-900">
+            <span>🌾 Small Farmer Supply</span>
+            <span className="text-emerald-400">→</span>
+            <span>📦 Aggregator Pools</span>
+            <span className="text-emerald-400">→</span>
+            <span>🏬 Cold Storage Safeguard</span>
+            <span className="text-emerald-400">→</span>
+            <span>🚚 GPS Freight Corridors</span>
+            <span className="text-emerald-400">→</span>
+            <span>🏢 Industrial Bulk Delivery</span>
+          </div>
+
+        </div>
+      </section>
+
+
+      {/* ========================================================================= */}
+      {/* 3. "HOW KISANCONNECT WORKS" (5 Large Visual Cards)                       */}
+      {/* ========================================================================= */}
+      <section id="how-it-works" className="py-16 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-2xl mx-auto mb-14">
+          <span className="text-xs font-black uppercase tracking-widest text-emerald-700 bg-emerald-100/80 px-3 py-1 rounded-full border border-emerald-200">
+            Transparent Workflow
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight mt-3">
+            How KisanConnect Works
+          </h2>
+          <p className="text-sm sm:text-base text-stone-600 mt-2">
+            Five simple steps to connect farm supply directly with industrial procurement.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
+          {/* Card 1 — Farmers */}
+          <div className="bg-white rounded-3xl p-7 border border-stone-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl mb-4">
+                🌾
+              </div>
+              <h3 className="text-xl font-bold text-stone-900 mb-2">Farmers</h3>
+              <p className="text-sm text-stone-600 leading-relaxed mb-4">
+                List your crop, quantity, location and availability.
+              </p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 text-xs text-stone-700">
+              <div className="font-bold text-emerald-800">🥔 120 Quintals Potato (Chipsona)</div>
+              <div className="text-[11px] text-stone-500">Agra, UP • Ready in 2 days</div>
+            </div>
+          </div>
+
+          {/* Card 2 — Demand */}
+          <div className="bg-white rounded-3xl p-7 border border-stone-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center text-2xl mb-4">
+                📈
+              </div>
+              <h3 className="text-xl font-bold text-stone-900 mb-2">Find Demand</h3>
+              <p className="text-sm text-stone-600 leading-relaxed mb-4">
+                See who needs your crop and how much they need.
+              </p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 text-xs text-stone-700">
+              <div className="font-bold text-blue-900">🏢 Haldiram Purees • 500 MT</div>
+              <div className="text-[11px] text-stone-500">Target Price: ₹2,150/Q • Immediate Dispatch</div>
+            </div>
+          </div>
+
+          {/* Card 3 — Aggregation */}
+          <div className="bg-white rounded-3xl p-7 border-2 border-amber-300 shadow-sm hover:shadow-md transition-all flex flex-col justify-between md:col-span-2 lg:col-span-1">
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl mb-4">
+                📦
+              </div>
+              <h3 className="text-xl font-bold text-stone-900 mb-2">Aggregate Supply</h3>
+              <p className="text-sm text-stone-600 leading-relaxed mb-3">
+                Combine produce from multiple farmers to fulfill larger orders.
+              </p>
+            </div>
+            
+            {/* Visual Example Requested */}
+            <div className="bg-amber-50/70 rounded-xl p-3.5 border border-amber-200 text-center font-mono text-xs">
+              <div className="text-stone-700 space-y-0.5">
+                <div>Farmer A → 2 Ton</div>
+                <div>Farmer B → 3 Ton</div>
+                <div>Farmer C → 5 Ton</div>
+              </div>
+              <div className="text-amber-600 font-bold my-1">↓</div>
+              <div className="text-sm font-black text-amber-900 bg-amber-200/80 py-1 rounded-lg">
+                10 Ton Bulk Supply
               </div>
             </div>
+          </div>
 
-            {/* 4. खरीदारों के ऑफर */}
-            <div className="p-6 rounded-3xl bg-indigo-50/70 border-2 border-indigo-300 hover:shadow-md transition-all flex flex-col justify-between">
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-2xl mb-4 shadow-sm">
-                  🤝
-                </div>
-                <h3 className="text-lg font-black text-stone-900 mb-1">
-                  खरीदारों के ऑफर
-                </h3>
-                <p className="text-xs text-stone-600 leading-relaxed mt-2">
-                  कंपनियों और संकलन केंद्रों से सीधे आने वाले ऑफर देखें और मनपसंद भाव चुनें।
-                </p>
+          {/* Card 4 — Storage & Logistics */}
+          <div className="bg-white rounded-3xl p-7 border border-stone-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-2xl mb-4">
+                🏬
               </div>
-              <div className="mt-4 pt-3 border-t border-indigo-200/80 text-xs font-bold text-indigo-800">
-                सीधे ऑफर →
+              <h3 className="text-xl font-bold text-stone-900 mb-2">Store & Move</h3>
+              <p className="text-sm text-stone-600 leading-relaxed mb-4">
+                Connect available storage and transportation when needed.
+              </p>
+            </div>
+            <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 text-xs text-stone-700 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-teal-900">
+                <span>❄️</span> 5,000 MT Cold Storage Space
               </div>
+              <div className="flex items-center gap-1.5 font-bold text-indigo-900">
+                <span>🚚</span> 22T Multi-Axle Carrier Booked
+              </div>
+            </div>
+          </div>
+
+          {/* Card 5 — Big Buyers */}
+          <div className="bg-white rounded-3xl p-7 border border-stone-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between md:col-span-2">
+            <div>
+              <div className="w-12 h-12 rounded-2xl bg-stone-900 text-white flex items-center justify-center text-2xl mb-4">
+                🏢
+              </div>
+              <h3 className="text-xl font-bold text-stone-900 mb-2">Bulk Buyers</h3>
+              <p className="text-sm text-stone-600 leading-relaxed mb-4">
+                Source agricultural produce from a connected supply network with certified quality and scheduled delivery.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200 font-medium">
+                ✓ Single Invoicing
+              </div>
+              <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200 font-medium">
+                ✓ Uniform Quality Grade
+              </div>
+              <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200 font-medium">
+                ✓ Direct Field Traceability
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+
+      {/* ========================================================================= */}
+      {/* 4. FARMER VISUAL STORY (TIMELINE)                                        */}
+      {/* ========================================================================= */}
+      <section id="farmer-journey" className="py-16 sm:py-24 bg-white border-y border-stone-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          <div className="text-center max-w-2xl mx-auto mb-16">
+            <span className="text-xs font-black uppercase tracking-widest text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
+              Farmer Experience
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight mt-3">
+              A Simpler Way to Sell Your Crop
+            </h2>
+            <p className="text-sm sm:text-base text-stone-600 mt-2">
+              No guesswork, no distress selling, no unnecessary middleman cuts.
+            </p>
+          </div>
+
+          {/* Visual Timeline (5 Steps) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            
+            {/* Step 1 */}
+            <div className="relative p-6 rounded-2xl bg-stone-50 border border-stone-200 shadow-xs flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-xl font-black mb-4 shadow-sm">
+                🌾
+              </div>
+              <div className="text-xs font-black text-emerald-700 uppercase tracking-wider mb-1">
+                Step 1
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-2">
+                1. List Your Crop
+              </h3>
+              <p className="text-xs text-stone-500 leading-relaxed">
+                Add crop name, quantity (bags/quintals), and location from your phone.
+              </p>
+            </div>
+
+            {/* Step 2 */}
+            <div className="relative p-6 rounded-2xl bg-stone-50 border border-stone-200 shadow-xs flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl font-black mb-4 shadow-sm">
+                📊
+              </div>
+              <div className="text-xs font-black text-blue-700 uppercase tracking-wider mb-1">
+                Step 2
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-2">
+                2. Discover Demand
+              </h3>
+              <p className="text-xs text-stone-500 leading-relaxed">
+                Instantly view verified buyer requirements and active market orders.
+              </p>
+            </div>
+
+            {/* Step 3 */}
+            <div className="relative p-6 rounded-2xl bg-stone-50 border border-stone-200 shadow-xs flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center text-xl font-black mb-4 shadow-sm">
+                💰
+              </div>
+              <div className="text-xs font-black text-amber-700 uppercase tracking-wider mb-1">
+                Step 3
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-2">
+                3. Compare Offers
+              </h3>
+              <p className="text-xs text-stone-500 leading-relaxed">
+                Review transparent prices and calculate your net profit in advance.
+              </p>
+            </div>
+
+            {/* Step 4 */}
+            <div className="relative p-6 rounded-2xl bg-stone-50 border border-stone-200 shadow-xs flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-2xl bg-teal-600 text-white flex items-center justify-center text-xl font-black mb-4 shadow-sm">
+                🤝
+              </div>
+              <div className="text-xs font-black text-teal-700 uppercase tracking-wider mb-1">
+                Step 4
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-2">
+                4. Make a Deal
+              </h3>
+              <p className="text-xs text-stone-500 leading-relaxed">
+                Lock in quantity and rate with digital verification and contract safety.
+              </p>
+            </div>
+
+            {/* Step 5 */}
+            <div className="relative p-6 rounded-2xl bg-stone-50 border border-stone-200 shadow-xs flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl font-black mb-4 shadow-sm">
+                🚚
+              </div>
+              <div className="text-xs font-black text-indigo-700 uppercase tracking-wider mb-1">
+                Step 5
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-2">
+                5. Deliver / Store
+              </h3>
+              <p className="text-xs text-stone-500 leading-relaxed">
+                Dispatch directly or reserve cold storage space for better off-season prices.
+              </p>
             </div>
 
           </div>
 
-          {/* Farmer Primary Action Box */}
-          <div className="bg-gradient-to-r from-emerald-800 to-emerald-900 rounded-3xl p-6 sm:p-10 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl">
-            <div className="space-y-1 text-center sm:text-left">
-              <h3 className="text-2xl sm:text-3xl font-black">
-                अपनी फसल का सही भाव पाना चाहते हैं?
-              </h3>
-              <p className="text-emerald-100 text-xs sm:text-sm">
-                KisanConnect पर अभी किसान के रूप में जुड़ें और अपनी फसल बेचना शुरू करें।
-              </p>
-            </div>
-
+          {/* Quick CTA to try Farmer Mode */}
+          <div className="mt-10 text-center">
             <button
-              onClick={() => setIsFarmerRegisterOpen(true)}
-              className="px-8 py-4 rounded-2xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-black text-sm sm:text-base shadow-md transition-all hover:scale-105 shrink-0 flex items-center gap-2"
+              onClick={() => handleRoleRoute('farmer')}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md transition-all hover:scale-105"
             >
-              <span>🌾 Start Selling (फसल बेचें)</span>
+              <span>Explore Farmer Portal (किसान पोर्टल देखें)</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -614,178 +534,259 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
 
 
       {/* ========================================================================= */}
-      {/* 6. FOR BUYERS (Section in Wireframe: Aggregator, Wholesale, Factory)      */}
+      {/* 5. BIG BUYER VISUAL STORY / AGGREGATION VISUAL                            */}
       {/* ========================================================================= */}
-      <section id="for-buyers" className="py-16 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        
+      <section id="aggregation-visual" className="py-16 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-2xl mx-auto mb-14">
-          <span className="text-xs font-black uppercase tracking-widest text-blue-800 bg-blue-100 px-3.5 py-1 rounded-full border border-blue-200">
-            For Buyers
+          <span className="text-xs font-black uppercase tracking-widest text-amber-800 bg-amber-100 px-3 py-1 rounded-full border border-amber-200">
+            Solving Fragmented Supply
           </span>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-stone-900 tracking-tight mt-3">
-            Source Aggregated Produce
+          <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight mt-3">
+            From Many Farmers to One Bulk Supply
           </h2>
           <p className="text-sm sm:text-base text-stone-600 mt-2">
-            Multi-tiered procurement tailored for local collection hubs, regional wholesale traders, and industrial food processing plants.
+            Institutional buyers need 500 MT of uniform produce. Individual farmers produce 2 to 5 MT each. KisanConnect bridges this gap seamlessly.
           </p>
         </div>
 
-        {/* 3 Buyer Tiers from Wireframe: Aggregator, Wholesale Buyer, Factory / Processor */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Tier 1: Aggregator */}
-          <div className="p-7 rounded-3xl bg-white border-2 border-stone-200 hover:border-amber-400 shadow-sm flex flex-col justify-between transition-all">
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl mb-4 font-black">
-                📦
+        {/* Aggregation Visual Board */}
+        <div className="bg-white rounded-3xl p-6 sm:p-10 border-2 border-stone-200 shadow-md">
+          <div className="grid grid-cols-1 lg:grid-cols-11 gap-4 items-center">
+            
+            {/* Left: Fragmented Farmers */}
+            <div className="lg:col-span-4 space-y-2.5">
+              <div className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">
+                Smallholder Farmers (Individual Lots)
               </div>
-              <div className="text-xs font-black text-amber-700 uppercase tracking-wider mb-1">
-                Collection Hubs
+              
+              <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 flex items-center justify-between text-xs">
+                <span className="font-bold text-stone-800">🌾 Farmer Ramesh (Khandauli)</span>
+                <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">2T Potato</span>
               </div>
-              <h3 className="text-xl font-black text-stone-900 mb-2">
-                Aggregator
-              </h3>
-              <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
-                Connect directly with nearby smallholder farmers. Combine regional village harvest lots, standardize specs, and supply into high-volume contracts.
-              </p>
+
+              <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 flex items-center justify-between text-xs">
+                <span className="font-bold text-stone-800">🌾 Farmer Suresh (Fatehabad)</span>
+                <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">3T Potato</span>
+              </div>
+
+              <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 flex items-center justify-between text-xs">
+                <span className="font-bold text-stone-800">🌾 Farmer Baldev (Shamsabad)</span>
+                <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">5T Potato</span>
+              </div>
+
+              <div className="bg-stone-50 rounded-xl p-3 border border-stone-200 flex items-center justify-between text-xs">
+                <span className="font-bold text-stone-800">🌾 Farmer Dinesh (Bichpuri)</span>
+                <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">4T Potato</span>
+              </div>
             </div>
-            <div className="mt-5 pt-3 border-t border-stone-100 text-xs font-bold text-amber-700">
-              ✓ Local Hub Integration
+
+            {/* Middle: KisanConnect Aggregator Engine */}
+            <div className="lg:col-span-3 text-center py-4 lg:py-0">
+              <div className="bg-amber-50 rounded-2xl p-5 border-2 border-dashed border-amber-300 shadow-xs">
+                <div className="w-12 h-12 rounded-full bg-amber-500 text-stone-950 flex items-center justify-center font-black text-xl mx-auto mb-2">
+                  📦
+                </div>
+                <div className="font-black text-stone-900 text-sm">
+                  KisanConnect Platform
+                </div>
+                <div className="text-[11px] text-amber-800 font-semibold mt-1">
+                  Local Aggregation Hub
+                </div>
+                <div className="mt-3 pt-3 border-t border-amber-200 text-[11px] text-stone-600 space-y-1">
+                  <div>✓ Unified Quality Sorting</div>
+                  <div>✓ Single Weighment Slip</div>
+                  <div>✓ Escrow Settlement</div>
+                </div>
+              </div>
+
+              <div className="mt-3 text-emerald-700 font-extrabold text-xs flex items-center justify-center gap-1">
+                <span>14T Aggregated Supply</span>
+                <ArrowRight className="w-4 h-4 hidden lg:inline" />
+              </div>
             </div>
+
+            {/* Right: Institutional Bulk Buyer */}
+            <div className="lg:col-span-4 bg-stone-900 text-white rounded-2xl p-6 shadow-lg flex flex-col justify-between h-full">
+              <div>
+                <div className="w-12 h-12 rounded-xl bg-blue-500 text-white flex items-center justify-center text-2xl mb-4">
+                  🏢
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-300">
+                  Bulk Procurement
+                </span>
+                <h3 className="text-lg font-black text-white mt-1">
+                  Institutional Bulk Buyer
+                </h3>
+                <p className="text-xs text-stone-400 mt-2 leading-relaxed">
+                  Food processor or wholesale mandi distributor receives 1 single invoice, 1 coordinated truck delivery, and uniform standard specs.
+                </p>
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-stone-800 flex items-center justify-between text-xs font-bold text-emerald-400">
+                <span>Single PO Fulfilled</span>
+                <span>14 Tonnes Received</span>
+              </div>
+            </div>
+
           </div>
-
-          {/* Tier 2: Wholesale Buyer */}
-          <div className="p-7 rounded-3xl bg-white border-2 border-stone-200 hover:border-emerald-500 shadow-sm flex flex-col justify-between transition-all">
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl mb-4 font-black">
-                🏪
-              </div>
-              <div className="text-xs font-black text-emerald-700 uppercase tracking-wider mb-1">
-                Mandi & Trade Networks
-              </div>
-              <h3 className="text-xl font-black text-stone-900 mb-2">
-                Wholesale Buyer
-              </h3>
-              <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
-                Source reliable 10–25 Ton truckloads with verified digital weighment slips, transparent price benchmarks, and guaranteed dispatch schedules.
-              </p>
-            </div>
-            <div className="mt-5 pt-3 border-t border-stone-100 text-xs font-bold text-emerald-700">
-              ✓ Transparent Mandi Weighment
-            </div>
-          </div>
-
-          {/* Tier 3: Factory / Processor */}
-          <div className="p-7 rounded-3xl bg-white border-2 border-stone-200 hover:border-blue-600 shadow-sm flex flex-col justify-between transition-all">
-            <div>
-              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center text-2xl mb-4 font-black">
-                🏭
-              </div>
-              <div className="text-xs font-black text-blue-700 uppercase tracking-wider mb-1">
-                Corporate & Processing
-              </div>
-              <h3 className="text-xl font-black text-stone-900 mb-2">
-                Factory / Processor
-              </h3>
-              <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
-                Industrial food processors receive certified size/moisture parameters, direct farm traceability, single invoicing, and integrated freight delivery.
-              </p>
-            </div>
-            <div className="mt-5 pt-3 border-t border-stone-100 text-xs font-bold text-blue-700">
-              ✓ Single Master Invoicing
-            </div>
-          </div>
-
-        </div>
-
-        <div className="mt-10 text-center">
-          <button
-            onClick={() => onSelectTab('buyer')}
-            className="px-8 py-3.5 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-sm shadow-md transition-all hover:scale-105 inline-flex items-center gap-2"
-          >
-            <span>🏭 Source Produce (खरीद शुरू करें)</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
         </div>
 
       </section>
 
 
       {/* ========================================================================= */}
-      {/* 7. OUR VISION (Section in Wireframe: Storage, Logistics, Settlement)       */}
+      {/* 6. ROLE-BASED "EXPLORE KISANCONNECT" (3 Large Premium Cards)             */}
       {/* ========================================================================= */}
-      <section id="our-vision" className="py-16 sm:py-24 bg-white border-t border-stone-200">
+      <section id="roles" className="py-16 sm:py-24 bg-white border-y border-stone-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           
-          <div className="text-center max-w-2xl mx-auto mb-14">
-            <span className="text-xs font-black uppercase tracking-widest text-emerald-800 bg-emerald-100 px-3.5 py-1 rounded-full border border-emerald-200">
-              Our Vision
+          <div className="text-center max-w-2xl mx-auto mb-16">
+            <span className="text-xs font-black uppercase tracking-widest text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
+              Interactive Entry
             </span>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-stone-900 tracking-tight mt-3">
-              Supporting Infrastructure
+            <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight mt-3">
+              How do you want to use KisanConnect?
             </h2>
             <p className="text-sm sm:text-base text-stone-600 mt-2">
-              Building the foundational supply chain backbone so Indian farmers never have to sell in distress.
+              Choose your role to explore the platform.
             </p>
           </div>
 
-          {/* 3 Vision Pillars from Wireframe: ❄️ Storage, 🚚 Logistics, 💳 Settlement */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
             
-            {/* 1. ❄️ Storage */}
-            <div className="p-7 rounded-3xl bg-stone-50 border-2 border-stone-200 shadow-xs flex flex-col justify-between">
+            {/* CARD 1 — EXPLORE AS FARMER */}
+            <div 
+              id="role-farmer"
+              className="group relative bg-white rounded-3xl p-7 border-2 border-stone-200 hover:border-emerald-600 hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between"
+            >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-2xl mb-4 font-black">
-                  ❄️
+                <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-3xl mb-5 group-hover:scale-110 transition-transform">
+                  🌾
                 </div>
-                <h3 className="text-lg font-black text-stone-900 mb-1">
-                  Storage
+                <div className="text-[11px] font-black uppercase tracking-wider text-emerald-700 mb-1">
+                  Growers & Sellers
+                </div>
+                <h3 className="text-2xl font-black text-stone-900 mb-2">
+                  Explore as Farmer
                 </h3>
-                <div className="text-xs font-bold text-teal-700 mb-2">Cold Storage Infrastructure</div>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Controlled atmosphere facilities safeguard perishable harvests, helping farmers store produce during peak gluts and sell when market rates improve.
+                <p className="text-xs sm:text-sm text-stone-600 leading-relaxed mb-6">
+                  Sell your crop, discover buyers, compare offers and manage your deals with direct visibility on prices.
                 </p>
+
+                {/* Small visual tags */}
+                <div className="flex flex-wrap gap-1.5 mb-6">
+                  {['My Crop', 'Buyers', 'Offers', 'Deals', 'Storage'].map((tag) => (
+                    <span 
+                      key={tag}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-200"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-stone-200 text-xs font-bold text-teal-800">
-                भंडारण व कोल्ड चेन
+
+              <div>
+                <button
+                  onClick={() => handleRoleRoute('farmer')}
+                  className="w-full py-3.5 px-5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 group-hover:gap-3 transition-all"
+                >
+                  <span>Explore as Farmer</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* 2. 🚚 Logistics */}
-            <div className="p-7 rounded-3xl bg-stone-50 border-2 border-stone-200 shadow-xs flex flex-col justify-between">
+            {/* CARD 2 — EXPLORE AS LOCAL AGGREGATOR */}
+            <div 
+              id="role-aggregator"
+              className="group relative bg-white rounded-3xl p-7 border-2 border-stone-200 hover:border-amber-500 hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between"
+            >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-800 flex items-center justify-center text-2xl mb-4 font-black">
-                  🚚
+                <div className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl mb-5 group-hover:scale-110 transition-transform">
+                  📦
                 </div>
-                <h3 className="text-lg font-black text-stone-900 mb-1">
-                  Logistics
+                <div className="text-[11px] font-black uppercase tracking-wider text-amber-700 mb-1">
+                  Village Hubs
+                </div>
+                <h3 className="text-2xl font-black text-stone-900 mb-2">
+                  Explore as Local Aggregator
                 </h3>
-                <div className="text-xs font-bold text-indigo-700 mb-2">Rural Freight Network</div>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  GPS-connected transport corridors with verified drivers and multi-axle freight carriers connect farm gates directly to wholesale and factory hubs.
+                <p className="text-xs sm:text-sm text-stone-600 leading-relaxed mb-4">
+                  Connect with nearby farmers, aggregate supply and fulfill larger buyer requirements.
                 </p>
+
+                {/* Visual example box */}
+                <div className="bg-amber-50 rounded-xl p-3 border border-amber-200/90 text-center font-mono text-xs mb-5">
+                  <span className="font-bold text-stone-800">2T + 3T + 5T</span>
+                  <span className="text-stone-400 mx-2">↓</span>
+                  <span className="font-black text-amber-900">10T Bulk Order</span>
+                </div>
+
+                {/* Small visual tags */}
+                <div className="flex flex-wrap gap-1.5 mb-6">
+                  {['Farmer Network', 'Aggregate Supply', 'Bulk Orders', 'Margin Estimate'].map((tag) => (
+                    <span 
+                      key={tag}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-200"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-stone-200 text-xs font-bold text-indigo-800">
-                ग्रामीण लॉजिस्टिक्स व परिवहन
+
+              <div>
+                <button
+                  onClick={() => handleRoleRoute('aggregator')}
+                  className="w-full py-3.5 px-5 rounded-2xl bg-amber-600 hover:bg-amber-700 text-stone-950 font-extrabold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 group-hover:gap-3 transition-all"
+                >
+                  <span>Explore as Aggregator</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* 3. 💳 Settlement */}
-            <div className="p-7 rounded-3xl bg-stone-50 border-2 border-stone-200 shadow-xs flex flex-col justify-between">
+            {/* CARD 3 — EXPLORE AS BIG BUYER */}
+            <div 
+              id="role-buyer"
+              className="group relative bg-white rounded-3xl p-7 border-2 border-stone-200 hover:border-blue-600 hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between"
+            >
               <div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl mb-4 font-black">
-                  💳
+                <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-800 flex items-center justify-center text-3xl mb-5 group-hover:scale-110 transition-transform">
+                  🏢
                 </div>
-                <h3 className="text-lg font-black text-stone-900 mb-1">
-                  Settlement
+                <div className="text-[11px] font-black uppercase tracking-wider text-blue-700 mb-1">
+                  Processors & Brands
+                </div>
+                <h3 className="text-2xl font-black text-stone-900 mb-2">
+                  Explore as Big Buyer
                 </h3>
-                <div className="text-xs font-bold text-emerald-700 mb-2">Transparent Escrow & Payout</div>
-                <p className="text-xs text-stone-600 leading-relaxed">
-                  Digital weighment slips automatically trigger escrow settlements into farmer bank accounts within 24 hours, eliminating non-payment risks.
+                <p className="text-xs sm:text-sm text-stone-600 leading-relaxed mb-6">
+                  Post your requirements and discover agricultural supply from multiple farmers and aggregators.
                 </p>
+
+                {/* Small visual tags */}
+                <div className="flex flex-wrap gap-1.5 mb-6">
+                  {['Post Requirement', 'Find Supply', 'Compare Offers', 'Bulk Procurement'].map((tag) => (
+                    <span 
+                      key={tag}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 border border-stone-200"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-stone-200 text-xs font-bold text-emerald-800">
-                पारदर्शी 24 घंटे में भुगतान
+
+              <div>
+                <button
+                  onClick={() => handleRoleRoute('buyer')}
+                  className="w-full py-3.5 px-5 rounded-2xl bg-blue-700 hover:bg-blue-800 text-white font-extrabold text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 group-hover:gap-3 transition-all"
+                >
+                  <span>Explore as Buyer</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
@@ -794,26 +795,246 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
         </div>
       </section>
 
-      {/* Modals */}
-      <GetStartedModal 
-        isOpen={isGetStartedOpen}
-        onClose={() => setIsGetStartedOpen(false)}
-        onSelectFarmer={() => setIsFarmerRegisterOpen(true)}
-        onSelectBuyer={() => onSelectTab('buyer')}
+
+      {/* ========================================================================= */}
+      {/* 7. TRUST / VALUE SECTION                                                 */}
+      {/* ========================================================================= */}
+      <section id="trust-values" className="py-16 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-2xl mx-auto mb-16">
+          <span className="text-xs font-black uppercase tracking-widest text-stone-700 bg-stone-200 px-3 py-1 rounded-full">
+            Core Platform Values
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight mt-3">
+            Built for Transparency and Coordination
+          </h2>
+          <p className="text-sm sm:text-base text-stone-600 mt-2">
+            No unrealistic promises. Just sound supply chain infrastructure.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          
+          {/* Value 1 */}
+          <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-xl mb-4">
+                <Eye className="w-6 h-6" />
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-1">
+                Better Visibility
+              </h3>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Know what is available. Clear information on actual mandi rates, regional lot availability, and storage capacities.
+              </p>
+            </div>
+          </div>
+
+          {/* Value 2 */}
+          <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center text-xl mb-4">
+                <Network className="w-6 h-6" />
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-1">
+                Better Connections
+              </h3>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Connect farmers with actual demand. Direct communication between authentic growers and genuine buyers.
+              </p>
+            </div>
+          </div>
+
+          {/* Value 3 */}
+          <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl mb-4">
+                <Boxes className="w-6 h-6" />
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-1">
+                Bulk Supply
+              </h3>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Combine fragmented supply. Enable small farms to participate in large enterprise orders without middlemen exploitation.
+              </p>
+            </div>
+          </div>
+
+          {/* Value 4 */}
+          <div className="bg-white rounded-2xl p-6 border border-stone-200 shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="w-12 h-12 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl mb-4">
+                <Truck className="w-6 h-6" />
+              </div>
+              <h3 className="font-extrabold text-stone-900 text-base mb-1">
+                Better Coordination
+              </h3>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Coordinate storage, logistics and transactions. Schedule verified vehicles and reserve cold storage directly.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+
+      {/* ========================================================================= */}
+      {/* 8. CROP VISUALS SHOWCASE                                                 */}
+      {/* ========================================================================= */}
+      <section id="crops" className="py-16 sm:py-24 bg-white border-t border-stone-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          <div className="text-center max-w-2xl mx-auto mb-14">
+            <span className="text-xs font-black uppercase tracking-widest text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
+              Supported Agricultural Produce
+            </span>
+            <h2 className="text-3xl sm:text-4xl font-black text-stone-900 tracking-tight mt-3">
+              Multi-Crop Agricultural Network
+            </h2>
+            <p className="text-sm sm:text-base text-stone-600 mt-2">
+              Potato is our initial demo and primary live crop, with multiple staple and horticulture crops supported across regions.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            
+            {/* 1. Potato (Demo Highlight) */}
+            <div className="p-4 rounded-2xl bg-amber-50/70 border-2 border-amber-300 text-center relative group">
+              <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-amber-500 text-stone-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                Live Pilot
+              </span>
+              <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">🥔</div>
+              <div className="font-black text-stone-900 text-sm">Potato (आलू)</div>
+              <div className="text-[11px] text-amber-800 font-semibold mt-1">Full Live Matching</div>
+            </div>
+
+            {/* 2. Wheat */}
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center group hover:border-emerald-400 transition-colors">
+              <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">🌾</div>
+              <div className="font-black text-stone-900 text-sm">Wheat (गेहूं)</div>
+              <div className="text-[11px] text-stone-500 mt-1">Staple Bulk Lots</div>
+            </div>
+
+            {/* 3. Maize */}
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center group hover:border-emerald-400 transition-colors">
+              <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">🌽</div>
+              <div className="font-black text-stone-900 text-sm">Maize (मक्का)</div>
+              <div className="text-[11px] text-stone-500 mt-1">Feed & Industry</div>
+            </div>
+
+            {/* 4. Tomato */}
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center group hover:border-emerald-400 transition-colors">
+              <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">🍅</div>
+              <div className="font-black text-stone-900 text-sm">Tomato (टमाटर)</div>
+              <div className="text-[11px] text-stone-500 mt-1">Cold Chain Transit</div>
+            </div>
+
+            {/* 5. Onion */}
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center group hover:border-emerald-400 transition-colors">
+              <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">🧅</div>
+              <div className="font-black text-stone-900 text-sm">Onion (प्याज)</div>
+              <div className="text-[11px] text-stone-500 mt-1">Ventilated Storage</div>
+            </div>
+
+            {/* 6. Fruits */}
+            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center group hover:border-emerald-400 transition-colors">
+              <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">🥭</div>
+              <div className="font-black text-stone-900 text-sm">Fruits (फल)</div>
+              <div className="text-[11px] text-stone-500 mt-1">Mango, Citrus & CA</div>
+            </div>
+
+          </div>
+
+          <div className="mt-8 text-center text-xs text-stone-500">
+            * Note: Potato is our pilot demo crop with full price calculations and storage scenarios. Additional crop modules activate based on regional harvest seasons.
+          </div>
+
+        </div>
+      </section>
+
+
+      {/* ========================================================================= */}
+      {/* 9. FINAL CTA SECTION                                                     */}
+      {/* ========================================================================= */}
+      <section className="py-20 sm:py-28 bg-gradient-to-b from-stone-900 to-stone-950 text-white text-center">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 flex items-center justify-center text-3xl mx-auto shadow-inner">
+            🌱
+          </div>
+
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-white max-w-2xl mx-auto">
+            Ready to explore KisanConnect?
+          </h2>
+
+          <p className="text-stone-300 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
+            Choose your role and see how the platform works for you.
+          </p>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={() => setIsRoleModalOpen(true)}
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black text-sm sm:text-base shadow-xl transition-all hover:scale-105 flex items-center justify-center gap-2"
+            >
+              <span>Get Started →</span>
+            </button>
+
+            <button
+              onClick={() => handleOpenRegister('farmer')}
+              className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-stone-800/80 hover:bg-stone-800 text-stone-200 font-bold text-sm sm:text-base border border-stone-700 transition-all flex items-center justify-center gap-2"
+            >
+              <UserPlus className="w-4 h-4 text-emerald-400" />
+              <span>नया खाता बनाएं (Register)</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+
+      {/* ========================================================================= */}
+      {/* 10. FLOATING "GET STARTED" BAR (Section 5)                                */}
+      {/* ========================================================================= */}
+      <div 
+        className={`fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-xl transition-all duration-300 pointer-events-none ${
+          showFloatingBar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        }`}
+      >
+        <div className="pointer-events-auto bg-stone-900/90 backdrop-blur-md text-white rounded-2xl p-3 sm:p-3.5 shadow-2xl border border-stone-700 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 pl-1.5 overflow-hidden">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+            <span className="text-xs sm:text-sm font-semibold truncate text-stone-200">
+              Ready to explore KisanConnect?
+            </span>
+          </div>
+
+          <button
+            onClick={() => setIsRoleModalOpen(true)}
+            className="shrink-0 px-4 sm:px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-black text-xs shadow-md transition-all hover:scale-105 flex items-center gap-1.5"
+          >
+            <span>Get Started</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+
+      {/* ========================================================================= */}
+      {/* 11. INTERACTIVE ROLE SELECTION MODAL                                      */}
+      {/* ========================================================================= */}
+      <RoleSelectModal 
+        isOpen={isRoleModalOpen}
+        onClose={() => setIsRoleModalOpen(false)}
+        onSelectRole={handleRoleRoute}
+        onOpenRegister={handleOpenRegister}
       />
 
-      <LoginModal 
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onSuccess={(tab) => onSelectTab(tab)}
-        onSwitchToRegister={() => setIsFarmerRegisterOpen(true)}
-      />
-
-      <FarmerRegisterModal 
-        isOpen={isFarmerRegisterOpen}
-        onClose={() => setIsFarmerRegisterOpen(false)}
-        onSuccess={() => onSelectTab('farmer')}
-        onSwitchToLogin={() => setIsLoginOpen(true)}
+      {/* Universal Registration Modal */}
+      <RegisterModal 
+        isOpen={isRegisterOpen}
+        onClose={() => setIsRegisterOpen(false)}
+        initialRole={registerRole}
+        onSuccessRoleSelect={(role, tab) => {
+          onSelectTab(tab);
+        }}
       />
 
     </div>

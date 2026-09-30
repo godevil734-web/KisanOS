@@ -1,0 +1,21 @@
+{
+  "name": "kisanconnect-platform",
+  "version": "1.0.0",
+  "description": "KisanConnect — Full Agricultural Supply Chain Platform",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "agriculture",
+    "supply-chain",
+    "marketplace",
+    "agritech",
+    "cold-storage",
+    "aggregation"
+  ],
+  "author": "KisanConnect Engineering Team",
+  "license": "ISC"
+}

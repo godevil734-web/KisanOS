@@ -1,4 +1,18 @@
-const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api';
+function resolveApiBase(): string {
+  let base = (import.meta as any).env?.VITE_API_BASE || '/api';
+  if (base && !base.startsWith('http') && !base.startsWith('/')) {
+    base = `https://${base}`;
+  }
+  if (base.endsWith('/')) {
+    base = base.slice(0, -1);
+  }
+  if (base.startsWith('http') && !base.endsWith('/api')) {
+    base = `${base}/api`;
+  }
+  return base;
+}
+
+const API_BASE = resolveApiBase();
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('kc_token');

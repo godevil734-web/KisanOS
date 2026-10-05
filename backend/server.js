@@ -34,8 +34,8 @@ app.use(cors({
     // Allow requests with no origin (like mobile apps, curl, serverless internal)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Allow Vercel preview and production deployments
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    // Allow Vercel and Render deployments
+    if (origin.endsWith('.vercel.app') || origin.endsWith('.onrender.com')) return callback(null, true);
     // Allow localhost/127.0.0.1 in non-production development
     if (process.env.NODE_ENV !== 'production' && (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1'))) {
       return callback(null, true);

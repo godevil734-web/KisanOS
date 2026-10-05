@@ -2,7 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { GoogleAuthButton } from './GoogleAuthButton';
-import { Sprout, ArrowRight, ShieldCheck, AlertCircle, CheckCircle2, KeyRound, Phone, Mail, Lock, User } from 'lucide-react';
+import { 
+  Sprout, 
+  ArrowRight, 
+  ShieldCheck, 
+  AlertCircle, 
+  CheckCircle2, 
+  Phone, 
+  Mail, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  Users, 
+  TrendingUp, 
+  Boxes, 
+  Globe,
+  KeyRound,
+  Shield
+} from 'lucide-react';
 
 interface LoginPageProps {
   next?: string;
@@ -10,41 +27,25 @@ interface LoginPageProps {
   onNavigate: (path: string) => void;
 }
 
-type LoginMode = 'user' | 'admin';
-type LoginTab = 'farmer' | 'aggregator' | 'dealer';
-type FarmerAuthMode = 'otp' | 'password';
+type AuthTab = 'email' | 'phone';
 
 export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigate }) => {
   const { loginWithOtp, sendOtp, loginWithPassword, googleInit, googleVerifyOtp, googleRegister, googleResendOtp } = useAuth();
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const isHi = language === 'hi';
 
-  // Read URL search params for deep linking to role/mode
-  const queryParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  const urlTab = queryParams.get('tab') || queryParams.get('role');
-  const urlMode = queryParams.get('mode');
-  const isInitialAdmin = urlMode === 'admin' || urlTab === 'admin';
+  const [authTab, setAuthTab] = useState<AuthTab>('email');
 
-  const [loginMode, setLoginMode] = useState<LoginMode>(isInitialAdmin ? 'admin' : 'user');
-  const [activeTab, setActiveTab] = useState<LoginTab>(
-    urlTab === 'aggregator' ? 'aggregator' : (urlTab === 'dealer' || urlTab === 'buyer') ? 'dealer' : 'farmer'
-  );
-  const [farmerAuthMode, setFarmerAuthMode] = useState<FarmerAuthMode>('otp');
-  const [farmerPassword, setFarmerPassword] = useState('');
-  
-  // Admin credentials state
-  const [adminIdentifier, setAdminIdentifier] = useState('admin@kisanconnect.in');
-  const [adminPassword, setAdminPassword] = useState('ChangeMe@Admin2026');
+  // Email form state
+  const [emailIdentifier, setEmailIdentifier] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  // Farmer OTP form states
-  const [phone, setPhone] = useState('9876543210'); // Pre-filled with demo for seamless testing
+  // Phone / OTP form state
+  const [phone, setPhone] = useState('9876543210');
   const [otpCode, setOtpCode] = useState('123456');
   const [otpSent, setOtpSent] = useState(false);
   const [demoOtpChip, setDemoOtpChip] = useState<string | null>(null);
-
-  // Business password form states
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
 
   // Google 2FA Email OTP state (Existing User Sign In)
   const [googleOtpState, setGoogleOtpState] = useState<{
@@ -63,46 +64,62 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
   } | null>(null);
   const [googleRegisterRole, setGoogleRegisterRole] = useState<'farmer' | 'aggregator' | 'dealer'>('farmer');
   const [googleRegisterPassword, setGoogleRegisterPassword] = useState('');
-
   const [googleOtpCode, setGoogleOtpCode] = useState('123456');
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Status and error states
+  // Status & error states
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   const getTargetUrl = (role: string) => {
     if (next) return next;
     if (role === 'farmer') return '/dashboard';
     if (role === 'aggregator') return '/aggregator';
-    if (role === 'dealer' || role === 'buyer') return '/dealer';
+    if (role === 'dealer' || role === 'buyer') return '/buyer';
     if (role === 'admin') return '/admin';
     return '/dashboard';
   };
 
-  // Handle Tab Switch
-  const handleTabChange = (tab: LoginTab) => {
-    setActiveTab(tab);
+  // Cooldown effect for resend email OTP
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // Email / Password Login Submit
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailIdentifier.trim() || !password) {
+      setErrorMsg(isHi ? 'कृपया अपना ईमेल या मोबाइल नंबर और पासवर्ड दर्ज करें।' : 'Please enter your email or mobile and password.');
+      return;
+    }
+
+    setLoading(true);
     setErrorMsg(null);
     setSuccessMsg(null);
-    if (tab === 'aggregator') {
-      setIdentifier('vikram@aggregator.in');
-      setPassword('password123');
-    } else if (tab === 'dealer') {
-      setIdentifier('dealer@freshbites.in');
-      setPassword('password123');
-    } else {
-      setPhone('9876543210');
-      setOtpCode('123456');
+
+    try {
+      // Normal login without hardcoding expectedRole allows Farmer/Buyer/Aggregator
+      const loggedUser = await loginWithPassword(emailIdentifier.trim(), password);
+      onSuccess(getTargetUrl(loggedUser?.role || 'farmer'));
+    } catch (err: any) {
+      console.error('[Login] Error:', err);
+      setErrorMsg(
+        err?.message || (isHi ? 'अमान्य ईमेल या पासवर्ड।' : 'Invalid email or password.')
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Farmer: Send OTP
+  // Phone: Send OTP
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanPhone = phone.replace(/\D/g, '').slice(-10);
     if (!cleanPhone || cleanPhone.length !== 10) {
-      setErrorMsg(isHi ? 'कृपया 10 अंकों का वैध मोबाइल नंबर दर्ज करें' : 'Please enter a valid 10-digit mobile number');
+      setErrorMsg(isHi ? 'कृपया 10 अंकों का वैध मोबाइल नंबर दर्ज करें।' : 'Please enter a valid 10-digit mobile number.');
       return;
     }
 
@@ -115,122 +132,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
         setDemoOtpChip(res.demoOtp);
         setOtpCode(res.demoOtp);
       }
-      setSuccessMsg(isHi ? 'ओटीपी सफलतापूर्वक भेजा गया' : 'OTP sent successfully to your mobile');
+      setSuccessMsg(isHi ? 'ओटीपी सफलतापूर्वक भेजा गया!' : 'OTP sent successfully to your mobile!');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to send OTP');
+      setErrorMsg(err.message || (isHi ? 'ओटीपी भेजने में विफल।' : 'Failed to send OTP.'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Farmer: Verify OTP and Login
-  const handleFarmerLogin = async (e: React.FormEvent) => {
+  // Phone: Verify OTP & Sign In
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPhone = phone.replace(/\D/g, '').slice(-10);
     if (!cleanPhone || cleanPhone.length !== 10) {
-      setErrorMsg(isHi ? 'कृपया 10 अंकों का मोबाइल नंबर दर्ज करें' : 'Please enter your 10-digit mobile number');
+      setErrorMsg(isHi ? 'कृपया 10 अंकों का मोबाइल नंबर दर्ज करें।' : 'Please enter your 10-digit mobile number.');
       return;
     }
     if (!otpCode || otpCode.trim().length !== 6) {
-      setErrorMsg(isHi ? 'कृपया 6 अंकों का ओटीपी दर्ज करें' : 'Please enter the 6-digit OTP');
+      setErrorMsg(isHi ? 'कृपया 6 अंकों का ओटीपी दर्ज करें।' : 'Please enter the 6-digit OTP code.');
       return;
     }
 
     setLoading(true);
     setErrorMsg(null);
     try {
-      const loggedUser = await loginWithOtp(cleanPhone, otpCode.trim(), 'farmer');
+      const loggedUser = await loginWithOtp(cleanPhone, otpCode.trim());
       onSuccess(getTargetUrl(loggedUser?.role || 'farmer'));
     } catch (err: any) {
-      setErrorMsg(err.message || (isHi ? 'लॉगिन विफल रहा' : 'Login failed'));
+      setErrorMsg(err.message || (isHi ? 'लॉगिन विफल रहा।' : 'Login failed. Invalid or expired OTP.'));
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Farmer: Password Login
-  const handleFarmerPasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length !== 10) {
-      setErrorMsg(isHi ? 'कृपया 10 अंकों का मोबाइल नंबर दर्ज करें' : 'Please enter your 10-digit mobile number');
-      return;
-    }
-    if (!farmerPassword) {
-      setErrorMsg(isHi ? 'कृपया अपना पासवर्ड दर्ज करें' : 'Please enter your password');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const loggedUser = await loginWithPassword(cleanPhone, farmerPassword, 'farmer');
-      onSuccess(getTargetUrl(loggedUser?.role || 'farmer'));
-    } catch (err: any) {
-      setErrorMsg(err.message || (isHi ? 'लॉगिन विफल रहा' : 'Login failed'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Aggregator / Dealer: Password Login
-  const handleBusinessLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!identifier.trim() || !password) {
-      setErrorMsg(isHi ? 'कृपया ईमेल/मोबाइल और पासवर्ड दर्ज करें' : 'Please enter your email/mobile and password');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const loggedUser = await loginWithPassword(identifier.trim(), password, activeTab);
-      onSuccess(getTargetUrl(loggedUser?.role || activeTab));
-    } catch (err: any) {
-      setErrorMsg(err.message || (isHi ? 'लॉगिन विफल रहा' : 'Login failed'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Administrator: Password Login (Dedicated Admin section)
-  const handleAdminLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adminIdentifier.trim() || !adminPassword) {
-      setErrorMsg(isHi ? 'कृपया व्यवस्थापक ईमेल और पासवर्ड दर्ज करें' : 'Please enter administrator email and password');
-      return;
-    }
-
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const loggedUser = await loginWithPassword(adminIdentifier.trim(), adminPassword, 'admin');
-      onSuccess(getTargetUrl(loggedUser?.role || 'admin'));
-    } catch (err: any) {
-      setErrorMsg(err.message || (isHi ? 'व्यवस्थापक लॉगिन विफल रहा' : 'Admin login failed'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Cooldown effect for resend email OTP
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendCooldown]);
-
-  // Resend Email OTP
-  const handleResendGoogleEmailOtp = async () => {
-    const targetEmail = googleOtpState?.email || googleRegisterState?.googleProfile?.email;
-    if (!targetEmail || resendCooldown > 0) return;
-    try {
-      const res = await googleResendOtp(targetEmail);
-      if (res.demoOtp) setGoogleOtpCode(res.demoOtp);
-      setSuccessMsg(isHi ? 'नया सत्यापन कोड भेजा गया है।' : 'A new verification code has been sent to your Google email.');
-      setResendCooldown(30);
-    } catch (err: any) {
-      setErrorMsg(err.message || (isHi ? 'कोड दोबारा भेजने में विफल' : 'Failed to resend code'));
     }
   };
 
@@ -273,12 +204,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     }
   };
 
-  // Google Email OTP Verification for Existing User
+  // Google Verify OTP
   const handleGoogleVerifyOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!googleOtpState) return;
     if (!googleOtpCode || googleOtpCode.trim().length !== 6) {
-      setErrorMsg(isHi ? 'कृपया ईमेल पर भेजा गया 6 अंकों का कोड दर्ज करें' : 'Please enter the 6-digit email verification code');
+      setErrorMsg(isHi ? 'कृपया 6 अंकों का कोड दर्ज करें' : 'Please enter the 6-digit code');
       return;
     }
 
@@ -288,22 +219,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
       const loggedUser = await googleVerifyOtp(googleOtpState.tempToken, googleOtpCode.trim());
       onSuccess(getTargetUrl(loggedUser?.role || 'farmer'));
     } catch (err: any) {
-      setErrorMsg(err.message || (isHi ? 'सत्यापन कोड अमान्य है' : 'Email verification code is invalid'));
+      setErrorMsg(err.message || (isHi ? 'सत्यापन कोड अमान्य है' : 'Verification code is invalid'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Google Email OTP Verification & Quick Registration for New User
+  // Google Register Submit
   const handleGoogleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!googleRegisterState) return;
     if (!googleOtpCode || googleOtpCode.trim().length !== 6) {
-      setErrorMsg(isHi ? 'कृपया Google ईमेल पर भेजा गया 6 अंकों का कोड दर्ज करें' : 'Please enter the 6-digit email verification code');
-      return;
-    }
-    if (googleRegisterPassword && googleRegisterPassword.length < 6) {
-      setErrorMsg(isHi ? 'पासवर्ड कम से कम 6 अक्षरों का होना चाहिए' : 'Password must be at least 6 characters long');
+      setErrorMsg(isHi ? 'कृपया 6 अंकों का कोड दर्ज करें' : 'Please enter the 6-digit code');
       return;
     }
 
@@ -332,9 +259,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
       const res = await googleRegister(payload);
       if (res.status === 'pending') {
         setSuccessMsg(res.message || (isHi ? 'पंजीकरण सबमिट हुआ! अनुमोदन की प्रतीक्षा है।' : 'Registration submitted! Waiting for approval.'));
-        setTimeout(() => {
-          onSuccess(getTargetUrl(googleRegisterRole));
-        }, 1500);
+        setTimeout(() => onSuccess(getTargetUrl(googleRegisterRole)), 1500);
       } else {
         onSuccess(getTargetUrl(res.user?.role || googleRegisterRole));
       }
@@ -345,818 +270,588 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     }
   };
 
+  const handleResendGoogleEmailOtp = async () => {
+    const targetEmail = googleOtpState?.email || googleRegisterState?.googleProfile?.email;
+    if (!targetEmail || resendCooldown > 0) return;
+    try {
+      const res = await googleResendOtp(targetEmail);
+      if (res.demoOtp) setGoogleOtpCode(res.demoOtp);
+      setSuccessMsg(isHi ? 'नया कोड भेजा गया है।' : 'A new code has been sent to your email.');
+      setResendCooldown(30);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to resend code');
+    }
+  };
+
+  // Demo autofill helper
+  const handleAutoFill = (role: 'farmer' | 'aggregator' | 'buyer') => {
+    setErrorMsg(null);
+    if (role === 'farmer') {
+      setAuthTab('phone');
+      setPhone('9876543210');
+      setOtpCode('123456');
+    } else if (role === 'aggregator') {
+      setAuthTab('email');
+      setEmailIdentifier('vikram@aggregator.in');
+      setPassword('password123');
+    } else if (role === 'buyer') {
+      setAuthTab('email');
+      setEmailIdentifier('dealer@freshbites.in');
+      setPassword('password123');
+    }
+  };
+
   return (
-    <div className="py-6 sm:py-12 px-3 sm:px-4 max-w-xl mx-auto animate-in fade-in duration-150 relative z-10">
+    <div className="min-h-[calc(100vh-72px)] w-full flex items-center justify-center p-3 sm:p-6 lg:p-10 bg-[#07120D] text-white relative overflow-hidden">
       
-      {/* Return Notice (if coming from "List My Crop" or protected route) */}
-      {next === '/list-crop' && (
-        <div className="mb-6 p-3.5 sm:p-4 rounded-2xl bg-[#EEF5F2] border-2 border-[#C5DDD2] text-[#1E3A2B] flex items-center gap-3 shadow-2xs">
-          <Sprout className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 text-[#1E3A2B]" />
-          <div>
-            <div className="font-extrabold text-sm sm:text-base">
-              {isHi ? 'अपनी फसल लिस्ट करने के लिए लॉगिन करें' : 'Log in to list your harvest'}
-            </div>
-            <div className="text-xs text-[#2B3B32] font-medium">
-              {isHi ? 'लॉगिन के तुरंत बाद आप सीधे फसल फॉर्म पर पहुंच जाएंगे।' : 'You will be redirected straight to the listing form after login.'}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Background ambient lighting & subtle tech grid */}
+      <div 
+        className="absolute inset-0 pointer-events-none opacity-20"
+        style={{
+          backgroundImage: `
+            linear-gradient(to right, rgba(74, 222, 128, 0.07) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(74, 222, 128, 0.07) 1px, transparent 1px)
+          `,
+          backgroundSize: '48px 48px'
+        }}
+      />
+      <div className="absolute top-1/4 left-1/4 w-[420px] h-[420px] rounded-full bg-emerald-500/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-[360px] h-[360px] rounded-full bg-cyan-500/10 blur-[100px] pointer-events-none" />
 
-      {/* Main Login Card */}
-      <div className="bg-white/95 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-8 border-2 border-[#D8D2C4] shadow-xl">
+      {/* Main Split-Screen Container */}
+      <div className="relative z-10 w-full max-w-6xl min-h-[620px] rounded-3xl border border-emerald-900/60 bg-[#0A1711]/90 backdrop-blur-xl shadow-2xl shadow-black/60 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
         
-        {/* Title & Subtitle */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-900 text-emerald-400 shadow-xs mb-3">
-            {loginMode === 'admin' ? (
-              <ShieldCheck className="w-6 h-6 text-emerald-400" />
-            ) : (
-              <KeyRound className="w-6 h-6 text-emerald-400" />
-            )}
+        {/* ========================================================================= */}
+        {/* LEFT SIDE (~50% width on Desktop): Brand & Value Proposition Panel        */}
+        {/* ========================================================================= */}
+        <div className="lg:col-span-6 p-6 sm:p-10 lg:p-12 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-emerald-900/60 relative overflow-hidden bg-gradient-to-br from-[#0B1B13] via-[#08150F] to-[#050E0A]">
+          
+          {/* Subtle background crop watermark */}
+          <div 
+            className="absolute inset-0 opacity-[0.04] bg-center bg-cover pointer-events-none"
+            style={{ backgroundImage: `url('/farm_landscape_preview.jpg')` }}
+          />
+
+          <div>
+            {/* Top Brand Header */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-lg shadow-emerald-950/60">
+                <Sprout className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <span className="text-xl sm:text-2xl font-black tracking-tight text-white font-mono">
+                  KISAN<span className="text-emerald-400">CONNECT</span>
+                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_#34d399]" />
+                  <span className="text-[10px] sm:text-[11px] font-bold tracking-widest text-emerald-300 uppercase font-mono">
+                    SMART AGRICULTURAL SUPPLY NETWORK
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Main Headline */}
+            <h2 className="text-2xl sm:text-4xl lg:text-[42px] font-black leading-[1.18] tracking-tight text-white mt-4 sm:mt-6 mb-4">
+              Connecting Farmers.<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">
+                Powering Better Markets.
+              </span>
+            </h2>
+
+            {/* Supporting Text */}
+            <p className="text-sm sm:text-base text-emerald-100/70 leading-relaxed max-w-lg mb-8 font-medium">
+              {isHi
+                ? 'किसानों को सीधे खरीदारों, पारदर्शी मंडी भाव, संकलन केंद्रों और सुगम आपूर्ति तंत्र से जोड़ें — सब कुछ एक ही मंच पर।'
+                : 'Connect farmers with buyers, aggregation, storage and smarter supply-chain decisions — all in one place.'}
+            </p>
+
+            {/* Compact Feature / Stat Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+              
+              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-900/50 hover:border-emerald-500/40 transition-colors">
+                <div className="flex items-center gap-2.5 mb-1.5 text-emerald-400">
+                  <Users className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    {isHi ? 'सीधा खरीदार संपर्क' : 'Direct Buyer Connections'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-200/60 leading-snug">
+                  {isHi ? 'प्रमाणित खाद्य प्रोसेसर और थोक खरीदारों से सीधा अनुबंध।' : 'Verified food processors, FMCG buyers & retail aggregators.'}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-900/50 hover:border-emerald-500/40 transition-colors">
+                <div className="flex items-center gap-2.5 mb-1.5 text-cyan-400">
+                  <TrendingUp className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    {isHi ? 'पारदर्शी भाव' : 'Transparent Offers'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-200/60 leading-snug">
+                  {isHi ? 'वास्तविक मंडी भाव व परिवहन कटौती के बाद स्पष्ट आय।' : 'Guaranteed mandi rate transparency & net farm-gate earnings.'}
+                </p>
+              </div>
+
+              <div className="sm:col-span-2 p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-900/50 hover:border-emerald-500/40 transition-colors">
+                <div className="flex items-center gap-2.5 mb-1.5 text-emerald-400">
+                  <Boxes className="w-4 h-4" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    {isHi ? 'स्मार्ट आपूर्ति समन्वय' : 'Smart Supply Coordination'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-200/60 leading-snug">
+                  {isHi ? 'गाँव स्तर पर लॉट पूलिंग, कोल्ड स्टोरेज और फ्रेट शेड्यूलिंग।' : 'Hub-level batch aggregation, cold storage booking & optimized transit.'}
+                </p>
+              </div>
+
+            </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-[#1C2B23]">
-            {googleOtpState
-              ? (isHi ? 'Google ईमेल सत्यापन' : 'Google Email Verification')
-              : googleRegisterState
-              ? (isHi ? 'Google से नया खाता बनाएं' : 'Complete Google Sign Up')
-              : loginMode === 'admin'
-              ? (isHi ? 'व्यवस्थापक कंसोल लॉगिन' : 'Admin Portal Login')
-              : (isHi ? 'किसानकनेक्ट में लॉगिन करें' : 'Log In to KisanConnect')}
-          </h1>
-          <p className="text-sm sm:text-base text-[#2B3B32] mt-1 font-medium">
-            {googleOtpState
-              ? (isHi ? `आपके Google ईमेल (${googleOtpState.maskedEmail}) पर भेजा गया सत्यापन कोड दर्ज करें` : `Enter the verification code sent to your Google email (${googleOtpState.maskedEmail})`)
-              : googleRegisterState
-              ? (isHi ? `अपनी भूमिका चुनें और ${googleRegisterState.maskedEmail} पर भेजा गया 6-अंकीय कोड दर्ज करें` : `Select your role and enter the 6-digit code sent to ${googleRegisterState.maskedEmail}`)
-              : loginMode === 'admin'
-              ? (isHi ? 'सुपरएडमिन सत्यापन, ऑडिट एवं सुरक्षा प्रबंधन हेतु प्रवेश करें' : 'Access platform oversight, stakeholder approvals, and audit logs')
-              : (isHi ? 'अपनी भूमिका चुनें और अपने खाते में प्रवेश करें' : 'Select your role and access your account')}
-          </p>
+
+          {/* Bottom Security / Trust Line */}
+          <div className="pt-4 border-t border-emerald-900/40 flex items-center justify-between text-xs text-emerald-300/80 font-medium">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              <span>Farmer-first • Transparent • Data-driven</span>
+            </div>
+            <span className="hidden sm:inline-block text-[11px] text-emerald-400/50 font-mono">v2.4 AgriOS</span>
+          </div>
+
         </div>
 
-        {/* GOOGLE EMAIL OTP VERIFICATION VIEW (EXISTING USER SIGN IN) */}
-        {googleOtpState ? (
-          <form onSubmit={handleGoogleVerifyOtpSubmit} className="space-y-4">
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
-              <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">
-                {isHi ? 'प्रमाणित Google खाता' : 'Verified Google Account'}
-              </p>
-              <p className="text-sm font-black text-emerald-950">
-                {googleOtpState.user?.name || 'User'} ({googleOtpState.maskedEmail})
-              </p>
-            </div>
-
-            {googleOtpState.demoOtp && (
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-black px-2 py-0.5 rounded bg-amber-200 text-amber-950 uppercase tracking-wider">
-                    DEMO OTP
-                  </span>
-                  <span className="text-xs text-amber-900 font-bold">
-                    {isHi ? 'परीक्षण हेतु ईमेल कोड:' : 'Test verification code:'}
-                  </span>
-                </div>
-                <code className="text-base font-black text-amber-950 tracking-widest bg-white px-2.5 py-0.5 rounded border border-amber-300">
-                  {googleOtpState.demoOtp}
-                </code>
+        {/* ========================================================================= */}
+        {/* RIGHT SIDE (~50% width on Desktop): Authentication Form Card              */}
+        {/* ========================================================================= */}
+        <div className="lg:col-span-6 p-6 sm:p-10 lg:p-12 flex flex-col justify-between bg-[#0B1711] relative">
+          
+          <div>
+            {/* Top Row: Language Selector Pill */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                  {isHi ? 'वापसी पर स्वागत है' : 'Welcome back'}
+                </h1>
+                <p className="text-xs sm:text-sm text-emerald-200/60 mt-1 font-medium">
+                  {isHi ? 'अपने किसानकनेक्ट खाते में साइन इन करें' : 'Sign in to your KisanConnect account to continue.'}
+                </p>
               </div>
-            )}
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs sm:text-sm font-black text-[#1C2B23] uppercase tracking-wider">
-                  {isHi ? 'Google ईमेल पर भेजा गया 6-अंकीय कोड' : '6-Digit Email Verification Code'}
-                </label>
+              {/* Language Switcher Pill */}
+              <div className="inline-flex items-center p-1 rounded-full bg-[#08150E] border border-emerald-900/60 text-xs font-bold">
                 <button
                   type="button"
-                  onClick={handleResendGoogleEmailOtp}
-                  disabled={resendCooldown > 0}
-                  className="text-xs font-bold text-[#1E3A2B] hover:underline disabled:opacity-50"
-                >
-                  {resendCooldown > 0
-                    ? `${isHi ? 'पुनः भेजें' : 'Resend in'} ${resendCooldown}s`
-                    : (isHi ? 'कोड दोबारा भेजें' : 'Resend Code')}
-                </button>
-              </div>
-              <input
-                type="text"
-                maxLength={6}
-                value={googleOtpCode}
-                onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="123456"
-                className="w-full min-h-[48px] px-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-black text-lg text-center tracking-widest text-[#1C2B23] outline-none transition-colors"
-                required
-              />
-              <p className="text-[11px] text-[#5A6860] mt-1 font-medium text-center">
-                {isHi ? 'Google लॉगिन पूरा करने के लिए ईमेल पर भेजा गया कोड सत्यापित करें।' : 'Enter the code sent to your Google email to verify and complete sign-in.'}
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || googleOtpCode.length !== 6}
-              className="w-full min-h-[48px] py-3 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-base shadow-sm transition-all hover:shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <span>{loading ? (isHi ? 'जांच जारी...' : 'Verifying...') : (isHi ? 'ईमेल सत्यापित करें और प्रवेश करें' : 'Verify Email & Enter')}</span>
-              <ArrowRight className="w-5 h-5 text-emerald-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setGoogleOtpState(null);
-                setErrorMsg(null);
-                setSuccessMsg(null);
-              }}
-              className="w-full py-2 text-xs font-bold text-stone-500 hover:text-stone-800 text-center"
-            >
-              {isHi ? '← वापस सामान्य लॉगिन पर जाएं' : '← Back to Standard Login'}
-            </button>
-          </form>
-        ) : googleRegisterState ? (
-          /* GOOGLE EMAIL OTP REGISTRATION VIEW (NEW USER SIGN UP) */
-          <form onSubmit={handleGoogleRegisterSubmit} className="space-y-4">
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center">
-              <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">
-                {isHi ? 'नया Google खाता लिंक हो रहा है' : 'Linking New Google Account'}
-              </p>
-              <p className="text-sm font-black text-emerald-950">
-                {googleRegisterState.googleProfile?.name || 'User'} ({googleRegisterState.maskedEmail})
-              </p>
-            </div>
-
-            {googleRegisterState.demoOtp && (
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-black px-2 py-0.5 rounded bg-amber-200 text-amber-950 uppercase tracking-wider">
-                    DEMO OTP
-                  </span>
-                  <span className="text-xs text-amber-900 font-bold">
-                    {isHi ? 'परीक्षण हेतु ईमेल कोड:' : 'Test verification code:'}
-                  </span>
-                </div>
-                <code className="text-base font-black text-amber-950 tracking-widest bg-white px-2.5 py-0.5 rounded border border-amber-300">
-                  {googleRegisterState.demoOtp}
-                </code>
-              </div>
-            )}
-
-            {/* Role Selection */}
-            <div>
-              <label className="block text-xs sm:text-sm font-black text-[#1C2B23] uppercase tracking-wider mb-2">
-                {isHi ? 'अपनी भूमिका चुनें' : 'Select Your Role'}
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setGoogleRegisterRole('farmer')}
-                  className={`py-2.5 px-2 rounded-xl text-xs sm:text-sm font-black border-2 transition-all cursor-pointer ${
-                    googleRegisterRole === 'farmer'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
+                  onClick={() => setLanguage('en')}
+                  className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                    language === 'en'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-emerald-300/60 hover:text-white'
                   }`}
                 >
-                  🌾 {isHi ? 'किसान' : 'Farmer'}
+                  English
                 </button>
                 <button
                   type="button"
-                  onClick={() => setGoogleRegisterRole('aggregator')}
-                  className={`py-2.5 px-2 rounded-xl text-xs sm:text-sm font-black border-2 transition-all cursor-pointer ${
-                    googleRegisterRole === 'aggregator'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
+                  onClick={() => setLanguage('hi')}
+                  className={`px-2.5 py-1 rounded-full transition-all cursor-pointer ${
+                    language === 'hi'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-emerald-300/60 hover:text-white'
                   }`}
                 >
-                  🏢 {isHi ? 'एग्रीगेटर' : 'Aggregator'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGoogleRegisterRole('dealer')}
-                  className={`py-2.5 px-2 rounded-xl text-xs sm:text-sm font-black border-2 transition-all cursor-pointer ${
-                    googleRegisterRole === 'dealer'
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-                  }`}
-                >
-                  🏪 {isHi ? 'व्यापारी' : 'Dealer'}
+                  हिंदी
                 </button>
               </div>
             </div>
 
-            {/* 6-Digit Email OTP Input */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs sm:text-sm font-black text-[#1C2B23] uppercase tracking-wider">
-                  {isHi ? 'Google ईमेल पर भेजा गया 6-अंकीय कोड' : '6-Digit Email Verification Code'}
-                </label>
-                <button
-                  type="button"
-                  onClick={handleResendGoogleEmailOtp}
-                  disabled={resendCooldown > 0}
-                  className="text-xs font-bold text-[#1E3A2B] hover:underline disabled:opacity-50"
-                >
-                  {resendCooldown > 0
-                    ? `${isHi ? 'पुनः भेजें' : 'Resend in'} ${resendCooldown}s`
-                    : (isHi ? 'कोड दोबारा भेजें' : 'Resend Code')}
-                </button>
-              </div>
-              <input
-                type="text"
-                maxLength={6}
-                value={googleOtpCode}
-                onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="123456"
-                className="w-full min-h-[48px] px-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-black text-lg text-center tracking-widest text-[#1C2B23] outline-none transition-colors"
-                required
-              />
-              <p className="text-[11px] text-[#5A6860] mt-1 font-medium text-center">
-                {isHi ? 'खाता सक्रिय करने के लिए ईमेल पर प्राप्त कोड दर्ज करें।' : 'Enter the code received on your Google email to activate your account.'}
-              </p>
-            </div>
-
-            {/* Optional Password for Direct Login */}
-            <div>
-              <label className="block text-xs sm:text-sm font-black text-[#1C2B23] uppercase tracking-wider mb-1.5">
-                {isHi ? 'पासवर्ड बनाएं (वैकल्पिक)' : 'Create Password (Optional)'}
-              </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  value={googleRegisterPassword}
-                  onChange={(e) => setGoogleRegisterPassword(e.target.value)}
-                  placeholder={isHi ? 'भविष्य में पासवर्ड से लॉगिन करने हेतु' : 'For direct password login without Google'}
-                  className="w-full min-h-[48px] px-3.5 pl-10 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white text-sm text-[#1C2B23] outline-none transition-colors"
-                />
-                <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              </div>
-              <p className="text-[11px] text-[#5A6860] mt-1">
-                {isHi ? 'पासवर्ड सेट करने पर आप ईमेल/पासवर्ड से भी सीधे लॉगिन कर सकेंगे।' : 'Setting a password allows you to log in with email/password directly without Google.'}
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || googleOtpCode.length !== 6}
-              className="w-full min-h-[48px] py-3 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-base shadow-sm transition-all hover:shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <span>{loading ? (isHi ? 'पंजीकरण जारी...' : 'Registering...') : (isHi ? 'ईमेल सत्यापित करें और खाता बनाएं' : 'Verify Email & Create Account')}</span>
-              <ArrowRight className="w-5 h-5 text-emerald-400" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setGoogleRegisterState(null);
-                setErrorMsg(null);
-                setSuccessMsg(null);
-              }}
-              className="w-full py-2 text-xs font-bold text-stone-500 hover:text-stone-800 text-center"
-            >
-              {isHi ? '← वापस सामान्य लॉगिन पर जाएं' : '← Back to Standard Login'}
-            </button>
-          </form>
-        ) : (
-          <>
-            {/* Top Primary Mode Toggle: User Login vs Admin Login */}
-            <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#FAF9F5] rounded-2xl border border-[#D8D2C4] mb-6 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMode('user');
-                  setErrorMsg(null);
-                  setSuccessMsg(null);
-                }}
-                className={`min-h-[46px] py-2 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  loginMode === 'user'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-[#4A5750] hover:text-[#26332C] hover:bg-white'
-                }`}
-              >
-                <User className={`w-4 h-4 ${loginMode === 'user' ? 'text-emerald-400' : 'text-[#4A5750]'}`} />
-                <span>{isHi ? 'उपयोगकर्ता लॉगिन' : 'User Login'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginMode('admin');
-                  setErrorMsg(null);
-                  setSuccessMsg(null);
-                  setAdminIdentifier('godevil344@gmail.com');
-                  setAdminPassword('Aryan@123');
-                }}
-                className={`min-h-[46px] py-2 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  loginMode === 'admin'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'text-[#4A5750] hover:text-[#26332C] hover:bg-white'
-                }`}
-              >
-                <ShieldCheck className={`w-4 h-4 ${loginMode === 'admin' ? 'text-emerald-400' : 'text-[#4A5750]'}`} />
-                <span>{isHi ? 'व्यवस्थापक (Admin)' : 'Admin Login'}</span>
-                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-900 font-black">
-                  PORTAL
-                </span>
-              </button>
-            </div>
-
-            {/* Error / Alert Banner */}
+            {/* Error & Success Notification Banners */}
             {errorMsg && (
-              <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border-2 border-rose-200 text-rose-900 text-xs sm:text-sm font-bold flex items-start gap-2.5 animate-in fade-in duration-150">
-                <AlertCircle className="w-5 h-5 shrink-0 text-rose-700 mt-0.5" />
-                <div>
-                  <span>{errorMsg}</span>
-                  {errorMsg.includes('Admin') && loginMode !== 'admin' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginMode('admin');
-                        setErrorMsg(null);
-                      }}
-                      className="block mt-1 text-xs underline font-extrabold text-slate-900 cursor-pointer"
-                    >
-                      {isHi ? 'व्यवस्थापक (Admin) लॉगिन पर जाएं →' : 'Switch to Admin Login →'}
-                    </button>
-                  )}
-                  {errorMsg.includes('Farmer') && (loginMode !== 'user' || activeTab !== 'farmer') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginMode('user');
-                        handleTabChange('farmer');
-                      }}
-                      className="block mt-1 text-xs underline font-extrabold text-[#1E3A2B] cursor-pointer"
-                    >
-                      {isHi ? 'किसान टैब पर जाएं →' : 'Switch to Farmer tab →'}
-                    </button>
-                  )}
-                  {errorMsg.includes('Aggregator') && (loginMode !== 'user' || activeTab !== 'aggregator') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginMode('user');
-                        handleTabChange('aggregator');
-                      }}
-                      className="block mt-1 text-xs underline font-extrabold text-[#1E3A2B] cursor-pointer"
-                    >
-                      {isHi ? 'एग्रीगेटर टैब पर जाएं →' : 'Switch to Aggregator tab →'}
-                    </button>
-                  )}
-                  {(errorMsg.includes('Big Dealer') || errorMsg.includes('Dealer') || errorMsg.includes('Buyer')) && (loginMode !== 'user' || activeTab !== 'dealer') && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginMode('user');
-                        handleTabChange('dealer');
-                      }}
-                      className="block mt-1 text-xs underline font-extrabold text-[#1E3A2B] cursor-pointer"
-                    >
-                      {isHi ? 'खरीदार (Buyer) टैब पर जाएं →' : 'Switch to Buyer tab →'}
-                    </button>
-                  )}
-                </div>
+              <div className="mb-5 p-3.5 rounded-xl bg-rose-950/70 border border-rose-800/80 text-rose-200 text-xs sm:text-sm font-medium flex items-start gap-2.5 animate-in fade-in duration-150">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                <span>{errorMsg}</span>
               </div>
             )}
 
-            {/* Success Banner */}
             {successMsg && !errorMsg && (
-              <div className="mb-5 p-3 rounded-xl bg-[#EEF5F2] border border-[#C5DDD2] text-[#1E3A2B] text-xs sm:text-sm font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-[#1E3A2B]" />
+              <div className="mb-5 p-3 rounded-xl bg-emerald-950/70 border border-emerald-800/80 text-emerald-200 text-xs sm:text-sm font-medium flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
                 <span>{successMsg}</span>
               </div>
             )}
 
-            {/* MODE 1: USER LOGIN (FARMER / AGGREGATOR / BUYER) */}
-            {loginMode === 'user' ? (
-              <>
-                {/* 3 User Role Tabs (Farmer / Aggregator / Buyer) */}
-                <div className="grid grid-cols-3 gap-1.5 p-1.5 bg-[#FAF9F5] rounded-2xl border border-[#D8D2C4] mb-6">
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange('farmer')}
-                    className={`min-h-[48px] py-2.5 px-2 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
-                      activeTab === 'farmer'
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'text-[#2B3B32] hover:bg-white'
-                    }`}
-                  >
-                    <span>🌾</span>
-                    <span>{isHi ? 'किसान' : 'Farmer'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange('aggregator')}
-                    className={`min-h-[48px] py-2.5 px-2 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
-                      activeTab === 'aggregator'
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'text-[#2B3B32] hover:bg-white'
-                    }`}
-                  >
-                    <span>📦</span>
-                    <span>{isHi ? 'एग्रीगेटर' : 'Aggregator'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange('dealer')}
-                    className={`min-h-[48px] py-2.5 px-2 rounded-xl text-xs sm:text-sm font-black transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
-                      activeTab === 'dealer'
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'text-[#2B3B32] hover:bg-white'
-                    }`}
-                  >
-                    <span>🏢</span>
-                    <span>{isHi ? 'खरीदार (Buyer)' : 'Buyer'}</span>
-                  </button>
+            {/* GOOGLE EMAIL OTP VERIFICATION SUB-VIEWS (WHEN GOOGLE 2FA IS TRIGGERED) */}
+            {googleOtpState ? (
+              <form onSubmit={handleGoogleVerifyOtpSubmit} className="space-y-4">
+                <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-center">
+                  <p className="text-xs font-semibold text-emerald-300 uppercase tracking-wider mb-1">
+                    {isHi ? 'प्रमाणित Google खाता' : 'Verified Google Account'}
+                  </p>
+                  <p className="text-sm font-bold text-white">
+                    {googleOtpState.user?.name || 'User'} ({googleOtpState.maskedEmail})
+                  </p>
                 </div>
 
-                {/* TAB 1: FARMER (Allows Mobile OTP OR Password Login) */}
-                {activeTab === 'farmer' && (
-                  <div>
-                    {/* Farmer Auth Toggle (Mobile OTP vs Password) */}
-                    <div className="flex rounded-xl bg-stone-100 p-1 mb-4 border border-stone-200">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFarmerAuthMode('otp');
-                          setErrorMsg(null);
-                        }}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                          farmerAuthMode === 'otp' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-600 hover:text-stone-900'
-                        }`}
-                      >
-                        📱 {isHi ? 'मोबाइल OTP से लॉगिन' : 'Mobile OTP'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFarmerAuthMode('password');
-                          setErrorMsg(null);
-                        }}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                          farmerAuthMode === 'password' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-600 hover:text-stone-900'
-                        }`}
-                      >
-                        🔒 {isHi ? 'पासवर्ड से लॉगिन' : 'Password Login'}
-                      </button>
-                    </div>
-
-                    {farmerAuthMode === 'otp' ? (
-                      <form onSubmit={handleFarmerLogin} className="space-y-4">
-                        <div>
-                          <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                            {isHi ? 'मोबाइल नंबर (10 अंक)' : 'Mobile Number (10 digits)'}
-                          </label>
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A6860]">
-                                <Phone className="w-4 h-4" />
-                              </div>
-                              <input
-                                type="tel"
-                                maxLength={10}
-                                value={phone}
-                                onChange={(e) => {
-                                  setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
-                                  setErrorMsg(null);
-                                }}
-                                placeholder="9876543210"
-                                className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-extrabold text-base text-[#1C2B23] outline-none transition-colors"
-                                required
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleSendOtp()}
-                              disabled={loading || phone.length !== 10}
-                              className="min-h-[48px] px-4 rounded-xl bg-[#EEF5F2] hover:bg-[#1E3A2B] text-[#1E3A2B] hover:text-white border border-[#C5DDD2] font-black text-xs sm:text-sm transition-colors cursor-pointer disabled:opacity-50"
-                            >
-                              {otpSent ? (isHi ? 'पुनः भेजें' : 'Resend OTP') : (isHi ? 'ओटीपी भेजें' : 'Send OTP')}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Clear DEMO OTP helper chip */}
-                        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-black px-2 py-0.5 rounded bg-amber-200 text-amber-950 uppercase tracking-wider">
-                              DEMO OTP
-                            </span>
-                            <span className="text-xs text-amber-900 font-bold">
-                              {isHi ? 'परीक्षण हेतु कोड:' : 'Fixed test code:'}
-                            </span>
-                          </div>
-                          <code className="text-base font-black text-amber-950 tracking-widest bg-white px-2.5 py-0.5 rounded border border-amber-300">
-                            123456
-                          </code>
-                        </div>
-
-                        {/* OTP Input */}
-                        <div>
-                          <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                            {isHi ? 'ओटीपी कोड (6 अंक)' : 'Enter 6-Digit OTP'}
-                          </label>
-                          <input
-                            type="text"
-                            maxLength={6}
-                            value={otpCode}
-                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                            placeholder="123456"
-                            className="w-full min-h-[48px] px-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-black text-lg text-center tracking-widest text-[#1C2B23] outline-none transition-colors"
-                            required
-                          />
-                          <p className="text-[11px] text-[#5A6860] mt-1 font-medium">
-                            {isHi ? 'ओटीपी 5 मिनट के लिए वैध है (अधिकतम 5 प्रयास)।' : 'Valid for 5 minutes (max 5 attempts).'}
-                          </p>
-                        </div>
-
-                        {/* Verify & Login Button */}
-                        <button
-                          type="submit"
-                          disabled={loading || otpCode.length !== 6}
-                          className="w-full min-h-[48px] py-3 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-base shadow-sm transition-all hover:shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                        >
-                          <span>{loading ? (isHi ? 'जांच जारी...' : 'Verifying...') : (isHi ? 'सत्यापित करें व लॉगिन करें' : 'Verify & Log In')}</span>
-                          <ArrowRight className="w-5 h-5 text-emerald-400" />
-                        </button>
-                      </form>
-                    ) : (
-                      <form onSubmit={handleFarmerPasswordLogin} className="space-y-4">
-                        <div>
-                          <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                            {isHi ? 'पंजीकृत मोबाइल नंबर' : 'Registered Mobile Number'}
-                          </label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A6860]">
-                              <Phone className="w-4 h-4" />
-                            </div>
-                            <input
-                              type="tel"
-                              maxLength={10}
-                              value={phone}
-                              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                              placeholder="9876543210"
-                              className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-extrabold text-sm sm:text-base text-[#1C2B23] outline-none transition-colors"
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                            {isHi ? 'साइनअप पर बनाया गया पासवर्ड' : 'Password created during Sign Up'}
-                          </label>
-                          <div className="relative">
-                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A6860]">
-                              <Lock className="w-4 h-4" />
-                            </div>
-                            <input
-                              type="password"
-                              value={farmerPassword}
-                              onChange={(e) => setFarmerPassword(e.target.value)}
-                              placeholder="••••••••"
-                              className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-extrabold text-sm sm:text-base text-[#1C2B23] outline-none transition-colors"
-                              required
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={loading || !farmerPassword || phone.length !== 10}
-                          className="w-full min-h-[48px] py-3 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-base shadow-sm transition-all hover:shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                        >
-                          <span>{loading ? (isHi ? 'लॉगिन जारी...' : 'Logging In...') : (isHi ? 'पासवर्ड से लॉगिन करें' : 'Log In with Password')}</span>
-                          <ArrowRight className="w-5 h-5 text-emerald-400" />
-                        </button>
-                      </form>
-                    )}
+                {googleOtpState.demoOtp && (
+                  <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/50 flex items-center justify-between text-xs text-amber-200">
+                    <span>{isHi ? 'डेमो ईमेल कोड:' : 'Demo verification code:'}</span>
+                    <code className="bg-amber-900/60 px-2 py-0.5 rounded font-mono font-bold text-amber-300">{googleOtpState.demoOtp}</code>
                   </div>
                 )}
 
-                {/* TAB 2 & 3: AGGREGATOR / BIG DEALER (BUYER) (Password Login) */}
-                {(activeTab === 'aggregator' || activeTab === 'dealer') && (
-                  <form onSubmit={handleBusinessLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-1.5">
+                    {isHi ? '6-अंकीय सत्यापन कोड' : '6-Digit Verification Code'}
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={googleOtpCode}
+                    onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456"
+                    className="w-full min-h-[48px] px-3.5 rounded-xl border border-emerald-900/60 focus:border-emerald-500 bg-[#08150E] font-black text-lg text-center tracking-widest text-white outline-none"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || googleOtpCode.length !== 6}
+                  className="w-full min-h-[48px] py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  {loading ? (isHi ? 'जांच जारी...' : 'Verifying...') : (isHi ? 'कोड सत्यापित करें' : 'Verify & Continue')}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setGoogleOtpState(null)}
+                  className="w-full py-2 text-xs font-semibold text-emerald-400/60 hover:text-emerald-300 text-center"
+                >
+                  ← {isHi ? 'वापस सामान्य लॉगिन पर जाएं' : 'Back to Standard Login'}
+                </button>
+              </form>
+            ) : googleRegisterState ? (
+              <form onSubmit={handleGoogleRegisterSubmit} className="space-y-4">
+                <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-center">
+                  <p className="text-xs font-semibold text-emerald-300 uppercase tracking-wider mb-1">
+                    {isHi ? 'नया Google खाता लिंक हो रहा है' : 'Linking New Google Account'}
+                  </p>
+                  <p className="text-sm font-bold text-white">
+                    {googleRegisterState.googleProfile?.name} ({googleRegisterState.maskedEmail})
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-2">
+                    {isHi ? 'अपनी भूमिका चुनें' : 'Select Your Role'}
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGoogleRegisterRole('farmer')}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all ${
+                        googleRegisterRole === 'farmer'
+                          ? 'bg-emerald-600 text-white border-emerald-500'
+                          : 'bg-[#08150E] text-emerald-300/70 border-emerald-900/60'
+                      }`}
+                    >
+                      🌾 {isHi ? 'किसान' : 'Farmer'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGoogleRegisterRole('aggregator')}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all ${
+                        googleRegisterRole === 'aggregator'
+                          ? 'bg-emerald-600 text-white border-emerald-500'
+                          : 'bg-[#08150E] text-emerald-300/70 border-emerald-900/60'
+                      }`}
+                    >
+                      📦 {isHi ? 'एग्रीगेटर' : 'Aggregator'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGoogleRegisterRole('dealer')}
+                      className={`py-2 px-2 rounded-xl text-xs font-bold border transition-all ${
+                        googleRegisterRole === 'dealer'
+                          ? 'bg-emerald-600 text-white border-emerald-500'
+                          : 'bg-[#08150E] text-emerald-300/70 border-emerald-900/60'
+                      }`}
+                    >
+                      🏢 {isHi ? 'खरीदार' : 'Buyer'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-1.5">
+                    {isHi ? 'ईमेल सत्यापन कोड' : 'Email Verification Code'}
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={googleOtpCode}
+                    onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456"
+                    className="w-full min-h-[48px] px-3.5 rounded-xl border border-emerald-900/60 focus:border-emerald-500 bg-[#08150E] font-black text-lg text-center tracking-widest text-white outline-none"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || googleOtpCode.length !== 6}
+                  className="w-full min-h-[48px] py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  {loading ? (isHi ? 'खाता बन रहा है...' : 'Creating...') : (isHi ? 'सत्यापित करें और खाता बनाएं' : 'Verify & Create Account')}
+                </button>
+              </form>
+            ) : (
+              <>
+                {/* 1. Continue with Google Button */}
+                <div className="mb-5">
+                  <GoogleAuthButton 
+                    onSuccess={handleGoogleSuccess} 
+                    onError={(err) => setErrorMsg(err)} 
+                  />
+                </div>
+
+                {/* Divider: OR CONTINUE WITH */}
+                <div className="relative flex items-center justify-center mb-6">
+                  <div className="border-t border-emerald-900/60 w-full" />
+                  <span className="bg-[#0B1711] px-3 text-[11px] font-mono tracking-widest text-emerald-300/50 uppercase whitespace-nowrap">
+                    {isHi ? 'या इनके माध्यम से साइन इन करें' : 'OR CONTINUE WITH'}
+                  </span>
+                  <div className="border-t border-emerald-900/60 w-full" />
+                </div>
+
+                {/* 2. Tabs: [ Email Login ] [ Phone / OTP ] */}
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#08150E] rounded-2xl border border-emerald-900/60 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthTab('email');
+                      setErrorMsg(null);
+                    }}
+                    className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      authTab === 'email'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300/70 hover:text-white'
+                    }`}
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>{isHi ? 'ईमेल लॉगिन' : 'Email Login'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthTab('phone');
+                      setErrorMsg(null);
+                    }}
+                    className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      authTab === 'phone'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300/70 hover:text-white'
+                    }`}
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>{isHi ? 'मोबाइल / ओटीपी' : 'Phone / OTP'}</span>
+                  </button>
+                </div>
+
+                {/* 3. Form: EMAIL LOGIN */}
+                {authTab === 'email' && (
+                  <form onSubmit={handleEmailSubmit} className="space-y-4">
                     <div>
-                      <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                        {isHi ? 'ईमेल या मोबाइल नंबर' : 'Email or Mobile Number'}
+                      <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-2">
+                        {isHi ? 'ईमेल या मोबाइल नंबर' : 'EMAIL ADDRESS'}
                       </label>
                       <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A6860]">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-emerald-400/60">
                           <Mail className="w-4 h-4" />
                         </div>
                         <input
                           type="text"
-                          value={identifier}
-                          onChange={(e) => setIdentifier(e.target.value)}
-                          placeholder={activeTab === 'aggregator' ? 'vikram@aggregator.in' : 'dealer@freshbites.in'}
-                          className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-extrabold text-sm sm:text-base text-[#1C2B23] outline-none transition-colors"
+                          value={emailIdentifier}
+                          onChange={(e) => setEmailIdentifier(e.target.value)}
+                          placeholder="citizen@example.com / username"
                           required
+                          autoComplete="username"
+                          className="w-full min-h-[48px] pl-10 pr-4 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl text-sm font-medium text-white placeholder-emerald-900 outline-none transition-all"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                        {isHi ? 'पासवर्ड' : 'Password'}
+                      <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-2">
+                        {isHi ? 'पासवर्ड' : 'PASSWORD'}
                       </label>
                       <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A6860]">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-emerald-400/60">
                           <Lock className="w-4 h-4" />
                         </div>
                         <input
-                          type="password"
+                          type={showPassword ? 'text' : 'password'}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-extrabold text-sm sm:text-base text-[#1C2B23] outline-none transition-colors"
+                          placeholder="••••••••••••"
                           required
+                          autoComplete="current-password"
+                          className="w-full min-h-[48px] pl-10 pr-11 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl text-sm font-medium text-white placeholder-emerald-900 outline-none transition-all"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-emerald-400/60 hover:text-emerald-300 transition-colors cursor-pointer"
+                          title={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
-                    </div>
-
-                    {/* Quick Demo Credential Helper */}
-                    <div className="p-3 rounded-2xl bg-[#FAF9F5] border border-[#D8D2C4] text-xs font-semibold text-[#2B3B32]">
-                      <span className="font-bold text-[#1E3A2B]">{isHi ? 'डेमो खाता:' : 'Demo Account:'}</span>{' '}
-                      {activeTab === 'aggregator' ? 'vikram@aggregator.in / password123' : 'dealer@freshbites.in / password123'}
                     </div>
 
                     <button
                       type="submit"
                       disabled={loading}
-                      className="w-full min-h-[48px] py-3 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-base shadow-sm transition-all hover:shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      className="w-full min-h-[48px] mt-2 py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
                     >
-                      <span>{loading ? (isHi ? 'लॉगिन जारी...' : 'Logging In...') : (isHi ? 'लॉगिन करें' : 'Log In')}</span>
-                      <ArrowRight className="w-5 h-5 text-emerald-400" />
+                      <span>{loading ? (isHi ? 'साइन इन जारी...' : 'Signing in...') : (isHi ? 'साइन इन करें →' : 'Sign In →')}</span>
                     </button>
                   </form>
                 )}
 
-                {/* Google Authentication Divider & Button */}
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-[#D8D2C4]" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white px-3 text-[#5A6860] font-black tracking-wider">
-                      {isHi ? 'या Google से सुरक्षित प्रवेश' : 'Or secure sign-in with Google'}
-                    </span>
-                  </div>
-                </div>
-
-                <GoogleAuthButton
-                  onSuccess={handleGoogleSuccess}
-                  onError={(err) => setErrorMsg(err)}
-                  disabled={loading}
-                />
-              </>
-            ) : (
-              /* MODE 2: ADMIN LOGIN (SEPARATE ADMIN SECTION) */
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between shadow-xs">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center shadow-inner">
-                      <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                    </div>
+                {/* 4. Form: PHONE / OTP LOGIN */}
+                {authTab === 'phone' && (
+                  <form onSubmit={handlePhoneSubmit} className="space-y-4">
                     <div>
-                      <h3 className="text-sm font-black text-white">
-                        {isHi ? 'किसानकनेक्ट व्यवस्थापक पोर्टल' : 'KisanConnect Admin Console'}
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        {isHi ? 'सुपरएडमिन सत्यापन एवं ऑडिट लॉग पहुंच' : 'SuperAdmin verification, audit & stakeholder oversight'}
-                      </p>
+                      <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-2">
+                        {isHi ? '10-अंकीय मोबाइल नंबर' : 'PHONE NUMBER'}
+                      </label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-emerald-400/60">
+                            <Phone className="w-4 h-4" />
+                          </div>
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            placeholder="9876543210"
+                            required
+                            className="w-full min-h-[48px] pl-10 pr-3 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 rounded-xl text-sm font-medium text-white placeholder-emerald-900 outline-none transition-all"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleSendOtp()}
+                          disabled={loading}
+                          className="min-h-[48px] px-4 rounded-xl bg-emerald-900/60 hover:bg-emerald-800/80 text-emerald-300 hover:text-white font-bold text-xs uppercase tracking-wider border border-emerald-700/60 transition-colors shrink-0 cursor-pointer disabled:opacity-50"
+                        >
+                          {otpSent ? (isHi ? 'पुनः भेजें' : 'Resend') : (isHi ? 'ओटीपी भेजें' : 'Send OTP')}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <span className="hidden sm:inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Admin Portal
-                  </span>
-                </div>
 
-                {/* Admin Demo Credential Helper Chip */}
-                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-black px-2 py-0.5 rounded bg-amber-200 text-amber-950 uppercase tracking-wider">
-                      ADMIN DEMO
-                    </span>
-                    <span className="text-xs text-amber-900 font-bold">
-                      {isHi ? 'व्यवस्थापक खाता:' : 'Admin account:'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAdminIdentifier('godevil344@gmail.com');
-                      setAdminPassword('Aryan@123');
-                    }}
-                    className="text-xs font-mono font-black text-amber-950 bg-white px-2.5 py-1 rounded border border-amber-300 hover:bg-amber-100 transition-colors cursor-pointer"
-                    title={isHi ? 'क्रेडेंशियल भरें' : 'Fill credentials'}
-                  >
-                    godevil344@gmail.com
-                  </button>
-                </div>
-
-                <form onSubmit={handleAdminLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                      {isHi ? 'व्यवस्थापक ईमेल' : 'Administrator Email'}
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A6860]">
-                        <Mail className="w-4 h-4" />
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80">
+                          {isHi ? '6-अंकीय ओटीपी कोड' : 'OTP CODE'}
+                        </label>
+                        {demoOtpChip && (
+                          <span className="text-[11px] text-emerald-400 font-mono">
+                            Demo OTP: <strong className="text-white underline">{demoOtpChip}</strong>
+                          </span>
+                        )}
                       </div>
                       <input
-                        type="email"
-                        value={adminIdentifier}
-                        onChange={(e) => setAdminIdentifier(e.target.value)}
-                        placeholder="admin@kisanconnect.in"
-                        className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-slate-800 bg-white font-extrabold text-sm sm:text-base text-[#1C2B23] outline-none transition-colors"
+                        type="text"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="123456"
                         required
+                        className="w-full min-h-[48px] px-3.5 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 rounded-xl text-base font-bold text-center tracking-widest text-white placeholder-emerald-900 outline-none transition-all"
                       />
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                      {isHi ? 'व्यवस्थापक पासवर्ड' : 'Administrator Password'}
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#5A6860]">
-                        <Lock className="w-4 h-4" />
-                      </div>
-                      <input
-                        type="password"
-                        value={adminPassword}
-                        onChange={(e) => setAdminPassword(e.target.value)}
-                        placeholder="••••••••••••"
-                        className="w-full min-h-[48px] pl-10 pr-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-slate-800 bg-white font-extrabold text-sm sm:text-base text-[#1C2B23] outline-none transition-colors"
-                        required
-                      />
-                    </div>
-                  </div>
+                    <button
+                      type="submit"
+                      disabled={loading || otpCode.length !== 6}
+                      className="w-full min-h-[48px] mt-2 py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+                    >
+                      <span>{loading ? (isHi ? 'सत्यापन जारी...' : 'Verifying...') : (isHi ? 'ओटीपी सत्यापित करें और प्रवेश करें →' : 'Verify OTP & Enter →')}</span>
+                    </button>
+                  </form>
+                )}
 
-                  <button
-                    type="submit"
-                    disabled={loading || !adminIdentifier || !adminPassword}
-                    className="w-full min-h-[48px] py-3 px-6 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black text-base shadow-sm transition-all hover:shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                    <span>{loading ? (isHi ? 'प्रमाणीकरण जारी...' : 'Authenticating...') : (isHi ? 'व्यवस्थापक के रूप में लॉगिन करें' : 'Log In as Administrator')}</span>
-                    <ArrowRight className="w-5 h-5 text-emerald-400" />
-                  </button>
-                </form>
-              </div>
+                {/* 5. 1-Click Fast Demo Credentials Pill Assistant */}
+                <div className="mt-5 p-3 rounded-2xl bg-emerald-950/30 border border-emerald-900/40">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-400/80 mb-1.5 flex items-center justify-between">
+                    <span>{isHi ? 'परीक्षण हेतु 1-क्लिक ऑटो-फिल:' : 'Quick Demo Logins (1-Click):'}</span>
+                    <span className="text-emerald-500">Auto-fills credentials</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleAutoFill('farmer')}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-xs font-semibold border border-emerald-800/40 transition-colors cursor-pointer"
+                    >
+                      🌾 Farmer (Ramesh)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAutoFill('aggregator')}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-xs font-semibold border border-emerald-800/40 transition-colors cursor-pointer"
+                    >
+                      📦 Aggregator (Vikram)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAutoFill('buyer')}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-xs font-semibold border border-emerald-800/40 transition-colors cursor-pointer"
+                    >
+                      🏢 Buyer (FreshBites)
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
-          </>
-        )}
+          </div>
 
-        {/* Footer Link: Go to Sign Up / Switch Mode */}
-        <div className="mt-6 pt-5 border-t border-[#EAE5D8] text-center space-y-2">
-          {loginMode === 'user' ? (
-            <>
-              <p className="text-sm font-semibold text-[#2B3B32]">
-                {isHi ? 'नया खाता बनाना चाहते हैं?' : "Don't have an account yet?"}{' '}
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/signup')}
-                  className="text-slate-900 hover:underline font-extrabold cursor-pointer ml-1"
-                >
-                  {isHi ? 'साइन अप करें →' : 'Sign Up →'}
-                </button>
-              </p>
-              <p className="text-xs text-[#5A6860]">
-                {isHi ? 'प्रशासनिक पहुंच के लिए:' : 'For platform administrators:'}{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoginMode('admin');
-                    setErrorMsg(null);
-                  }}
-                  className="text-slate-800 font-extrabold underline hover:text-black cursor-pointer"
-                >
-                  {isHi ? 'व्यवस्थापक लॉगिन पोर्टल →' : 'Admin Login Portal →'}
-                </button>
-              </p>
-            </>
-          ) : (
-            <p className="text-sm font-semibold text-[#2B3B32]">
-              {isHi ? 'सामान्य उपयोगकर्ता हैं?' : 'Looking for standard user account?'}{' '}
+          {/* ========================================================================= */}
+          {/* BOTTOM ACTIONS: Create Account + OFFICIAL ACCESS LINK                      */}
+          {/* ========================================================================= */}
+          <div className="mt-8 pt-5 border-t border-emerald-900/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            
+            {/* New to KisanConnect? Create Account */}
+            <div className="text-emerald-200/70">
+              <span>{isHi ? 'नया खाता बनाना चाहते हैं?' : 'New to KisanConnect?'} </span>
               <button
                 type="button"
-                onClick={() => {
-                  setLoginMode('user');
-                  setErrorMsg(null);
-                }}
-                className="text-slate-900 hover:underline font-extrabold cursor-pointer ml-1"
+                onClick={() => onNavigate('/signup')}
+                className="text-emerald-400 hover:text-emerald-300 font-extrabold underline cursor-pointer ml-1"
               >
-                {isHi ? '← उपयोगकर्ता लॉगिन पर जाएं' : '← Switch to User Login'}
+                {isHi ? 'खाता बनाएं' : 'Create account'}
               </button>
-            </p>
-          )}
+            </div>
+
+            {/* PART 3: Subtle OFFICIAL ACCESS Link */}
+            <button
+              type="button"
+              onClick={() => onNavigate('/admin-login')}
+              className="text-[11px] font-mono tracking-wider uppercase text-emerald-400/60 hover:text-emerald-300 transition-colors cursor-pointer flex items-center gap-1.5 py-1 px-2 rounded-lg hover:bg-emerald-950/40"
+              title="Restricted platform governance and administrative oversight"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-emerald-400/70" />
+              <span>OFFICIAL ACCESS</span>
+            </button>
+
+          </div>
+
         </div>
 
       </div>
-
     </div>
   );
 };
+
+export default LoginPage;

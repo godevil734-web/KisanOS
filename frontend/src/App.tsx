@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { LoginPage } from './components/LoginPage';
+import { AdminLoginPage } from './components/AdminLoginPage';
 import { SignUpPage } from './components/SignUpPage';
 import { NotificationModal } from './components/NotificationModal';
 import { RoleSelectModal } from './components/RoleSelectModal';
@@ -68,8 +69,16 @@ const MainApp: React.FC = () => {
         navigate('/login?next=/aggregator');
       } else if (pathname === '/dealer') {
         navigate('/login?next=/dealer');
-      } else if (pathname === '/admin') {
-        navigate('/login?next=/admin');
+      } else if (pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) {
+        navigate('/admin-login');
+      }
+    } else if (!loading && user) {
+      // Non-admin attempting to access admin routes
+      if ((pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) && user.role !== 'admin') {
+        if (user.role === 'farmer') navigate('/dashboard');
+        else if (user.role === 'aggregator') navigate('/aggregator');
+        else if (user.role === 'buyer' || user.role === 'dealer') navigate('/buyer');
+        else navigate('/');
       }
     }
   }, [loading, user, pathname]);
@@ -98,6 +107,7 @@ const MainApp: React.FC = () => {
   // Derive currentTab from pathname
   let currentTab = 'landing';
   if (pathname === '/login') currentTab = 'login';
+  else if (pathname === '/admin-login') currentTab = 'admin-login';
   else if (pathname === '/signup') currentTab = 'signup';
   else if (pathname === '/list-crop' || pathname === '/farmer' || pathname === '/dashboard') currentTab = 'farmer';
   else if (pathname === '/aggregator') currentTab = 'aggregator';
@@ -105,7 +115,7 @@ const MainApp: React.FC = () => {
   else if (pathname === '/storage') currentTab = 'storage';
   else if (pathname === '/transport') currentTab = 'transport';
   else if (pathname === '/intelligence') currentTab = 'intelligence';
-  else if (pathname === '/admin') currentTab = 'admin';
+  else if (pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) currentTab = 'admin';
   else if (pathname === '/how-it-works') currentTab = 'how-it-works';
   else currentTab = 'landing';
 
@@ -114,8 +124,8 @@ const MainApp: React.FC = () => {
     else navigate(`/${tab}`);
   };
 
-  const isPublicView = pathname === '/' || pathname === '/how-it-works' || pathname === '/login' || pathname === '/signup';
-  const isAuthPage = pathname === '/login' || pathname === '/signup';
+  const isPublicView = pathname === '/' || pathname === '/how-it-works' || pathname === '/login' || pathname === '/signup' || pathname === '/admin-login';
+  const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/admin-login';
 
   return (
     <div className={`min-h-screen flex flex-col bg-[#F7F5EF] font-sans text-[#26332C] overflow-x-hidden ${isAuthPage ? 'watermark-farm-landscape' : 'watermark-india-map'}`}>
@@ -152,6 +162,12 @@ const MainApp: React.FC = () => {
                 onNavigate={navigate} 
               />
             )}
+            {pathname === '/admin-login' && (
+              <AdminLoginPage 
+                onSuccess={(target) => navigate(target)} 
+                onNavigate={navigate} 
+              />
+            )}
             {pathname === '/signup' && (
               <SignUpPage 
                 onSuccess={(target) => navigate(target)} 
@@ -161,7 +177,7 @@ const MainApp: React.FC = () => {
             {pathname === '/' && (
               <LandingPage 
                 onSelectTab={handleSetCurrentTab} 
-                onOpenGetStarted={handleOpenGetStarted}
+                onOpenGetStarted={handleOpenGetStarted} 
                 onNavigate={navigate}
               />
             )}
@@ -179,7 +195,16 @@ const MainApp: React.FC = () => {
             {pathname === '/storage' && <ColdStorageDashboard />}
             {pathname === '/transport' && <TransporterDashboard />}
             {pathname === '/intelligence' && <MarketIntelligenceDashboard />}
-            {pathname === '/admin' && <AdminDashboard />}
+            {(pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) && (
+              user && user.role === 'admin' ? (
+                <AdminDashboard />
+              ) : (
+                <AdminLoginPage 
+                  onSuccess={(target) => navigate(target)} 
+                  onNavigate={navigate} 
+                />
+              )
+            )}
           </>
         )}
       </main>

@@ -236,13 +236,13 @@ export const AdminDashboard: React.FC = () => {
     const q = searchQuery.toLowerCase().trim();
     return list.filter(u => {
       if (!u) return false;
-      const name = (u.name || '').toLowerCase();
-      const location = (u.location || '').toLowerCase();
-      const phone = (revealedPhones[u.id] || u.phoneMasked || u.phone || '').toLowerCase();
-      const email = (u.email || '').toLowerCase();
-      const farmName = (u.farmerProfile?.farmName || '').toLowerCase();
-      const businessName = (u.aggregatorProfile?.businessName || '').toLowerCase();
-      const companyName = (u.buyerProfile?.companyName || '').toLowerCase();
+      const name = String(u.name || '').toLowerCase();
+      const location = String(u.location || (u as any).villageDistrict || '').toLowerCase();
+      const phone = String(revealedPhones[u.id] || (u as any).phoneMasked || u.phone || '').toLowerCase();
+      const email = String(u.email || '').toLowerCase();
+      const farmName = String(u.farmerProfile?.farmName || '').toLowerCase();
+      const businessName = String(u.aggregatorProfile?.businessName || u.buyerProfile?.companyName || (u as any).businessName || '').toLowerCase();
+      const companyName = String(u.buyerProfile?.companyName || '').toLowerCase();
       return (
         name.includes(q) ||
         location.includes(q) ||
@@ -259,19 +259,23 @@ export const AdminDashboard: React.FC = () => {
   const renderPhoneCell = (u: User) => {
     if (!u) return null;
     const revealed = revealedPhones[u.id];
-    const rawPhone = revealed || u.phoneMasked || u.phone;
+    const rawPhone = revealed || (u as any).phoneMasked || u.phone;
     if (!rawPhone) {
       return (
         <span className="font-mono text-[11px] text-slate-400 italic">
-          {u.email || '—'}
+          {u?.email || '—'}
         </span>
       );
     }
-    const isMasked = !revealed && (rawPhone.includes('•') || rawPhone.includes('*'));
+    const phoneStr = String(rawPhone);
+    const isMasked = !revealed && (phoneStr.includes('•') || phoneStr.includes('*'));
+    const displayPhone = revealed 
+      ? phoneStr 
+      : ((u as any).phoneMasked || (phoneStr.length > 4 ? '•••••• ' + phoneStr.slice(-4) : phoneStr));
 
     return (
       <div className="flex items-center gap-1.5 mt-0.5">
-        <span className="font-mono text-[11px] text-slate-600">{rawPhone}</span>
+        <span className="font-mono text-[11px] text-slate-600">{displayPhone}</span>
         {isMasked && (
           <button
             onClick={() => handleRevealPhone(u.id)}

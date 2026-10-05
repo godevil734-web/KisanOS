@@ -201,7 +201,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {/* Logged Out: Dedicated Admin Login Button */}
                 <button
                   type="button"
-                  onClick={() => handleNav('/login?mode=admin')}
+                  onClick={() => handleNav('/admin-login')}
                   className="hidden sm:inline-flex min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-2xs transition-colors items-center gap-1.5 cursor-pointer"
                   title="Admin Portal"
                 >
@@ -510,7 +510,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleNav('/login?mode=admin')}
+                    onClick={() => handleNav('/admin-login')}
                     className="min-h-[48px] py-2.5 px-3 rounded-xl bg-slate-900 text-white font-extrabold text-sm text-center cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                   >
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />

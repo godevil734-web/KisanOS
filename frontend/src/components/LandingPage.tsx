@@ -64,7 +64,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
     : buyersList.filter(b => b.cropId === selectedCropFilter);
 
   return (
-    <div className="bg-[#F7F5EF] text-[#1C2B23] font-sans selection:bg-[#1E3A2B] selection:text-white pb-0 transition-colors duration-150 overflow-x-hidden">
+    <div className="text-[#1C2B23] font-sans selection:bg-[#1E3A2B] selection:text-white pb-0 transition-colors duration-150 overflow-x-hidden relative z-10">
       
       {/* ========================================================================= */}
       {/* 1. HERO SECTION — Farmer-First & Benefit-Driven                           */}

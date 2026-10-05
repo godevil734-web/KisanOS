@@ -358,9 +358,9 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
   };
 
   return (
-    <div className="py-6 sm:py-12 px-3 sm:px-4 max-w-xl mx-auto animate-in fade-in duration-150">
+    <div className="py-6 sm:py-12 px-3 sm:px-4 max-w-xl mx-auto animate-in fade-in duration-150 relative z-10">
       
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 border-2 border-[#D8D2C4] shadow-md">
+      <div className="bg-white/95 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-8 border-2 border-[#D8D2C4] shadow-xl">
         
         {/* Header */}
         <div className="text-center mb-6">

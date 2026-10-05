@@ -115,9 +115,10 @@ const MainApp: React.FC = () => {
   };
 
   const isPublicView = pathname === '/' || pathname === '/how-it-works' || pathname === '/login' || pathname === '/signup';
+  const isAuthPage = pathname === '/login' || pathname === '/signup';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F7F5EF] font-sans text-[#26332C] overflow-x-hidden">
+    <div className={`min-h-screen flex flex-col bg-[#F7F5EF] font-sans text-[#26332C] overflow-x-hidden ${isAuthPage ? 'watermark-farm-landscape' : 'watermark-india-map'}`}>
       {/* Demo Mode Global Banner */}
       <DemoBanner />
 

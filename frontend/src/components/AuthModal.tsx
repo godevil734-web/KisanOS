@@ -154,7 +154,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
       <div 
-        className="relative w-full max-w-md bg-white text-[#26332C] rounded-2xl shadow-xl border border-[#E5E0D5] overflow-hidden flex flex-col max-h-[92vh]"
+        className="relative w-full max-w-md bg-white/95 backdrop-blur-sm text-[#26332C] rounded-2xl shadow-2xl border border-[#E5E0D5] overflow-hidden flex flex-col max-h-[92vh] watermark-farm-landscape"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

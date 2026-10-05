@@ -82,3 +82,49 @@
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);
 }
+
+/* ========================================================================= */
+/* AUTHENTIC AGRICULTURAL WATERMARK BACKGROUNDS                              */
+/* Option 2 (India Map with Farm) for Main Platform & Dashboards             */
+/* Option 1 (Indian Farm Landscape) for Login & Sign Up Authentication Views */
+/* ========================================================================= */
+
+.watermark-india-map {
+  position: relative;
+}
+.watermark-india-map::before {
+  content: '';
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 92vw;
+  height: 92vh;
+  max-width: 860px;
+  max-height: 860px;
+  background-image: url('/india_map_farm_preview.jpg');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: contain;
+  opacity: 0.055;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.watermark-farm-landscape {
+  position: relative;
+}
+.watermark-farm-landscape::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: url('/farm_landscape_preview.jpg');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
+}

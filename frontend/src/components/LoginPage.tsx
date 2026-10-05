@@ -346,7 +346,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
   };
 
   return (
-    <div className="py-6 sm:py-12 px-3 sm:px-4 max-w-xl mx-auto animate-in fade-in duration-150">
+    <div className="py-6 sm:py-12 px-3 sm:px-4 max-w-xl mx-auto animate-in fade-in duration-150 relative z-10">
       
       {/* Return Notice (if coming from "List My Crop" or protected route) */}
       {next === '/list-crop' && (
@@ -364,7 +364,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
       )}
 
       {/* Main Login Card */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 border-2 border-[#D8D2C4] shadow-md">
+      <div className="bg-white/95 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-8 border-2 border-[#D8D2C4] shadow-xl">
         
         {/* Title & Subtitle */}
         <div className="text-center mb-6">

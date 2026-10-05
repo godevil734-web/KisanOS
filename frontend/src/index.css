@@ -33,16 +33,29 @@
 @layer base {
   html {
     color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    overflow-x: hidden;
+    width: 100%;
   }
-  /* Prevent matras and conjuncts squeezing in Hindi (Devanagari) */
+  /* Harmonize typography and prevent matras and conjuncts squeezing */
+  html,
+  body {
+    font-family: 'Noto Sans', 'Noto Sans Devanagari', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    width: 100%;
+  }
   html[lang="hi"],
   html[lang="hi"] * {
     letter-spacing: normal !important;
+    line-height: 1.45;
   }
   body {
     background-color: var(--background);
     color: var(--foreground);
-    @apply font-sans selection:bg-[#315C45] selection:text-white;
+    @apply selection:bg-[#315C45] selection:text-white;
   }
 }
 

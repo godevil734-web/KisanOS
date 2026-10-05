@@ -79,13 +79,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
           </div>
 
           {/* Headline */}
-          <h1 className={`text-3xl sm:text-5xl md:text-6xl font-black text-[#1C2B23] ${headingTracking} leading-[1.15] mb-4`}>
+          <h1 className={`text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-[#1C2B23] ${headingTracking} leading-tight mb-3 sm:mb-4`}>
             {t('landing.heroTitlePart1')}{' '}
             <span className="text-[#315C45]">{t('landing.heroTitleHighlight')}</span>
           </h1>
 
-          {/* Supporting Text — Min 18px */}
-          <p className="text-[18px] sm:text-xl text-[#2B3B32] max-w-2xl mx-auto leading-relaxed mb-6 sm:mb-8 font-medium">
+          {/* Supporting Text */}
+          <p className="text-base sm:text-lg md:text-xl text-[#2B3B32] max-w-2xl mx-auto leading-relaxed mb-6 sm:mb-8 font-medium">
             {t('landing.heroSubtitle')}
           </p>
 
@@ -387,18 +387,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
           </div>
 
           {/* Detailed Crop Cards with Large Crop Icons, Big Numbers & Dedicated 48px Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3.5 sm:gap-4 items-stretch">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4 items-stretch">
             {cropsList.map((crop) => (
               <div 
                 key={crop.id}
                 onClick={() => handleOpenCropBuyers(crop.id)}
+                className="bg-white rounded-2xl p-3.5 sm:p-4 border-2 border-[#D8D2C4] hover:border-[#1E3A2B] transition-all flex flex-col justify-between text-center cursor-pointer shadow-2xs group hover:shadow-sm"
               >
                 <div>
-                  <div className="h-12 flex items-center justify-center text-4xl sm:text-5xl my-2 group-hover:scale-110 transition-transform">
+                  <div className="h-10 sm:h-12 flex items-center justify-center text-3xl sm:text-4xl my-1 sm:my-2 group-hover:scale-110 transition-transform">
                     {crop.icon}
                   </div>
 
-                  <div className="font-black text-[#1C2B23] text-base sm:text-lg leading-tight min-h-[44px] flex items-center justify-center">
+                  <div className="font-black text-[#1C2B23] text-sm sm:text-base leading-tight min-h-[38px] flex items-center justify-center">
                     {t('crops.' + crop.id)}
                   </div>
 

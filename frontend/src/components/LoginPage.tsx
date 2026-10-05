@@ -346,12 +346,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
   };
 
   return (
-    <div className="py-8 sm:py-12 px-4 max-w-xl mx-auto animate-in fade-in duration-150">
+    <div className="py-6 sm:py-12 px-3 sm:px-4 max-w-xl mx-auto animate-in fade-in duration-150">
       
       {/* Return Notice (if coming from "List My Crop" or protected route) */}
       {next === '/list-crop' && (
-        <div className="mb-6 p-4 rounded-2xl bg-[#EEF5F2] border-2 border-[#C5DDD2] text-[#1E3A2B] flex items-center gap-3 shadow-2xs">
-          <Sprout className="w-6 h-6 shrink-0 text-[#1E3A2B]" />
+        <div className="mb-6 p-3.5 sm:p-4 rounded-2xl bg-[#EEF5F2] border-2 border-[#C5DDD2] text-[#1E3A2B] flex items-center gap-3 shadow-2xs">
+          <Sprout className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 text-[#1E3A2B]" />
           <div>
             <div className="font-extrabold text-sm sm:text-base">
               {isHi ? 'अपनी फसल लिस्ट करने के लिए लॉगिन करें' : 'Log in to list your harvest'}
@@ -364,7 +364,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
       )}
 
       {/* Main Login Card */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-[#D8D2C4] shadow-md">
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 border-2 border-[#D8D2C4] shadow-md">
         
         {/* Title & Subtitle */}
         <div className="text-center mb-6">

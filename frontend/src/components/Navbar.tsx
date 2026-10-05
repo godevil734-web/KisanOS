@@ -89,17 +89,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Brand Logo */}
           <div 
             onClick={() => setCurrentTab('landing')}
-            className="flex items-center gap-3 cursor-pointer group select-none"
+            className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group select-none shrink-0"
           >
-            <div className="h-10 w-10 rounded-xl bg-[#315C45] flex items-center justify-center text-white shadow-xs group-hover:bg-[#264A37] transition-colors">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-[#315C45] flex items-center justify-center text-white shadow-xs group-hover:bg-[#264A37] transition-colors shrink-0">
               <Sprout className="h-5 w-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-[#26332C]">
+                <span className="text-lg sm:text-2xl font-black tracking-tight text-[#26332C]">
                   Kisan<span className="text-[#315C45]">Connect</span>
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-wider bg-[#EFECE4] text-[#315C45] px-2 py-0.5 rounded-full border border-[#D8D2C4]">
+                <span className="hidden xs:inline-block text-[10px] uppercase font-bold tracking-wider bg-[#EFECE4] text-[#315C45] px-2 py-0.5 rounded-full border border-[#D8D2C4]">
                   AgriTech
                 </span>
               </div>
@@ -124,14 +124,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Right Action: Language Switcher + Authentication CTA */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             
             {/* Clearly Visible Globe-Icon Language Button in Header */}
             <div className="relative" ref={langMenuRef}>
               <button
                 type="button"
                 onClick={() => setLangMenuOpen(!langMenuOpen)}
-                className="min-h-[44px] sm:min-h-[48px] px-3 sm:px-4 py-2 rounded-xl bg-white hover:bg-[#EFECE4] text-[#26332C] font-black text-xs sm:text-sm border-2 border-[#D8D2C4] shadow-2xs flex items-center gap-2 cursor-pointer transition-all hover:border-[#315C45]"
+                className="min-h-[40px] sm:min-h-[46px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-white hover:bg-[#EFECE4] text-[#26332C] font-black text-xs sm:text-sm border-2 border-[#D8D2C4] shadow-2xs flex items-center gap-1.5 sm:gap-2 cursor-pointer transition-all hover:border-[#315C45]"
                 aria-label={t('common.language')}
                 aria-expanded={langMenuOpen}
               >
@@ -193,7 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleNav('/login')}
-                  className="min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl text-[#26332C] hover:text-[#315C45] hover:bg-[#EFECE4] font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
+                  className="hidden md:inline-flex min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl text-[#26332C] hover:text-[#315C45] hover:bg-[#EFECE4] font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
                 >
                   {t('navbar.login')}
                 </button>
@@ -202,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleNav('/login?mode=admin')}
-                  className="min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="hidden sm:inline-flex min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-2xs transition-colors items-center gap-1.5 cursor-pointer"
                   title="Admin Portal"
                 >
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -213,7 +213,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleNav('/signup')}
-                  className="min-h-[44px] px-4 sm:px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-700/60"
+                  className="hidden sm:inline-flex min-h-[42px] px-3.5 sm:px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors items-center gap-1.5 cursor-pointer border border-slate-700/60"
                 >
                   <UserPlus className="w-4 h-4 text-emerald-400" />
                   <span>{t('navbar.signup')}</span>
@@ -226,7 +226,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <button
                     type="button"
                     onClick={onOpenNotifications}
-                    className="relative min-h-[44px] min-w-[44px] p-2 flex items-center justify-center rounded-xl text-[#4A5750] hover:text-[#26332C] hover:bg-[#EFECE4] border border-[#E0DBD0] transition-colors cursor-pointer"
+                    className="relative min-h-[40px] min-w-[40px] sm:min-h-[44px] sm:min-w-[44px] p-2 flex items-center justify-center rounded-xl text-[#4A5750] hover:text-[#26332C] hover:bg-[#EFECE4] border border-[#E0DBD0] transition-colors cursor-pointer"
                     aria-label="Notifications"
                     title={t('navbar.notifications')}
                   >

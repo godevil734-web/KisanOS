@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
-import { FarmerListing, RequirementMatch, Order, Offer, Crop, BuyerRequirement } from '../types';
+import { FarmerListing, RequirementMatch, Order, Offer, Crop, BuyerRequirement, FarmActivity } from '../types';
 import { 
   Sprout, 
   Plus, 
@@ -14,7 +15,7 @@ import {
   HelpCircle, 
   ChevronRight, 
   ChevronLeft,
-  ChevronDown,
+  ChevronDown, 
   FileCheck, 
   AlertCircle,
   Calendar,
@@ -34,26 +35,44 @@ import {
   Building2,
   Coins,
   X,
-  Check
+  Check,
+  Activity,
+  FileText,
+  Droplets,
+  Tractor,
+  FlaskConical,
+  ShieldAlert
 } from 'lucide-react';
+import { VoiceListenButton } from './VoiceListenButton';
+import { VoiceSearchInput } from './VoiceSearchInput';
+import { FarmTraceabilityModal } from './FarmTraceabilityModal';
+import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
 
 type Lang = 'hi' | 'hinglish' | 'en';
 
 export const FarmerDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { language, setLanguage: setGlobalLang } = useLanguage();
 
-  // Language System: 'hi' (Default), 'hinglish', 'en'
+  // Language System: synchronized with global language, allows 'hinglish' locally
   const [lang, setLang] = useState<Lang>(() => {
-    return (localStorage.getItem('kc_farmer_lang') as Lang) || 'hi';
+    return language === 'hi' ? 'hi' : 'en';
   });
+
+  useEffect(() => {
+    setLang(language === 'hi' ? 'hi' : 'en');
+  }, [language]);
 
   const handleLangChange = (newLang: Lang) => {
     setLang(newLang);
     localStorage.setItem('kc_farmer_lang', newLang);
+    if (newLang === 'hi' || newLang === 'en') {
+      setGlobalLang(newLang);
+    }
   };
 
-  // Farmer Navigation Tabs: 'home' | 'listings' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info'
-  const [activeTab, setActiveTab] = useState<'home' | 'listings' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info'>('home');
+  // Farmer Navigation Tabs: 'home' | 'listings' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'
+  const [activeTab, setActiveTab] = useState<'home' | 'listings' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'>('home');
 
   // Backend Data
   const [listings, setListings] = useState<FarmerListing[]>([]);
@@ -61,7 +80,12 @@ export const FarmerDashboard: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [storageFacilities, setStorageFacilities] = useState<any[]>([]);
+  const [activities, setActivities] = useState<FarmActivity[]>([]);
+  const [selectedListingForTraceability, setSelectedListingForTraceability] = useState<FarmerListing | null>(null);
+  const [showTraceabilityModal, setShowTraceabilityModal] = useState(false);
+  const [showActivityLoggerModal, setShowActivityLoggerModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [listingSearchQuery, setListingSearchQuery] = useState('');
 
   // Selected Listing for Buyer Matches
   const [selectedListingForMatches, setSelectedListingForMatches] = useState<FarmerListing | null>(null);
@@ -128,18 +152,20 @@ export const FarmerDashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [listRes, cropRes, ordRes, offRes, storageRes] = await Promise.all([
+      const [listRes, cropRes, ordRes, offRes, storageRes, actRes] = await Promise.all([
         api.getListings({ farmerId: user?.id || '' }),
         api.getCrops(),
         api.getOrders(),
         api.getOffers(),
-        api.getStorageFacilities().catch(() => [])
+        api.getStorageFacilities().catch(() => []),
+        api.getActivities({ farmerId: user?.id || '' }).catch(() => [])
       ]);
       setListings(listRes);
       setCrops(cropRes);
       setOrders(ordRes);
       setOffers(offRes);
       setStorageFacilities(storageRes);
+      setActivities(actRes || []);
 
       if (listRes.length > 0) {
         handleViewMatches(listRes[0]);
@@ -383,6 +409,7 @@ export const FarmerDashboard: React.FC = () => {
         {[
           { id: 'home', label: t.home, icon: Home },
           { id: 'listings', label: `${t.myCrops} (${listings.length})`, icon: Sprout },
+          { id: 'activities', label: lang === 'hi' ? 'खेत डायरी (Fasal Diary)' : 'Farm Diary (Passport)', count: activities.length, icon: Activity },
           { id: 'buyers', label: t.findBuyers, icon: Search },
           { id: 'offers', label: `${t.myOffers}`, count: pendingOffersCount, icon: DollarSign },
           { id: 'orders', label: `${t.myDeals}`, count: activeOrdersCount, icon: Package },
@@ -680,6 +707,17 @@ export const FarmerDashboard: React.FC = () => {
             </button>
           </div>
 
+          {/* Assisted Voice Search Bar */}
+          {listings.length > 0 && (
+            <div className="max-w-md">
+              <VoiceSearchInput 
+                value={listingSearchQuery}
+                onChange={setListingSearchQuery}
+                placeholder={lang === 'hi' ? 'फसल, किस्म या गाँव खोजें (जैसे आलू, गेहूं)...' : 'Search crop, variety or village...'}
+              />
+            </div>
+          )}
+
           {listings.length === 0 ? (
             <div className="text-center py-14 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
               <div className="text-4xl">🌾</div>
@@ -699,7 +737,16 @@ export const FarmerDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {listings.map((list) => {
+              {listings
+                .filter(l => {
+                  if (!listingSearchQuery.trim()) return true;
+                  const q = listingSearchQuery.toLowerCase();
+                  return l.cropName.toLowerCase().includes(q) ||
+                    l.variety.toLowerCase().includes(q) ||
+                    l.farmerLocation.toLowerCase().includes(q) ||
+                    l.grade.toLowerCase().includes(q);
+                })
+                .map((list) => {
                 const isFuture = list.listingType === 'FUTURE_HARVEST';
                 return (
                   <div 
@@ -718,9 +765,16 @@ export const FarmerDashboard: React.FC = () => {
                             {list.cropName} <span className="text-xs font-medium text-slate-500">({list.variety})</span>
                           </h3>
                         </div>
-                        <div className="text-right">
-                          <div className="text-base font-black text-emerald-700">₹{list.expectedPricePerKg}</div>
-                          <span className="text-[10px] text-slate-400">उम्मीद भाव / किलो</span>
+                        <div className="text-right flex flex-col items-end gap-1">
+                          <div>
+                            <div className="text-base font-black text-emerald-700">₹{list.expectedPricePerKg}</div>
+                            <span className="text-[10px] text-slate-400">उम्मीद भाव / किलो</span>
+                          </div>
+                          <VoiceListenButton
+                            size="xs"
+                            textHi={`${list.cropName} (${list.variety}), मात्रा ${list.quantityTons * 10} क्विंटल, उम्मीद भाव ₹${list.expectedPricePerKg} प्रति किलो, ग्रेड ${list.grade}, स्थान ${list.farmerLocation}।`}
+                            textEn={`${list.cropName} ${list.variety}, quantity ${list.quantityTons * 10} quintals, expected price ₹${list.expectedPricePerKg} per kg, grade ${list.grade}, location ${list.farmerLocation}.`}
+                          />
                         </div>
                       </div>
 
@@ -751,16 +805,43 @@ export const FarmerDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        handleViewMatches(list);
-                        setActiveTab('buyers');
-                      }}
-                      className="w-full py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 border border-emerald-200"
-                    >
-                      <Search className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>इसके खरीदार देखें (See Matching Buyers)</span>
-                    </button>
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedListingForTraceability(list);
+                            setShowTraceabilityModal(true);
+                          }}
+                          className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                          <span>{lang === 'hi' ? '📜 फसल प्रमाण पत्र' : '📜 Digital Passport'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedListingForTraceability(list);
+                            setShowActivityLoggerModal(true);
+                          }}
+                          className="py-2 px-2.5 rounded-xl bg-[#FAF9F5] hover:bg-white text-[#1C2B23] border border-[#D8D2C4] font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>{lang === 'hi' ? '✍️ डायरी लिखें' : '✍️ Log Work'}</span>
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          handleViewMatches(list);
+                          setActiveTab('buyers');
+                        }}
+                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 border border-emerald-200 cursor-pointer"
+                      >
+                        <Search className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>इसके खरीदार देखें (See Matching Buyers)</span>
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -858,15 +939,22 @@ export const FarmerDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Match badge */}
-                      <button
-                        onClick={() => setSelectedMatchExplanation(matchItem)}
-                        className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black flex items-center gap-1"
-                        title="विस्तार से देखें"
-                      >
-                        <Sparkles className="h-3 w-3 text-emerald-600" />
-                        <span>{matchItem.matchScore}% अनुकूल</span>
-                      </button>
+                      {/* Match badge & Voice listen button */}
+                      <div className="flex items-center gap-1.5">
+                        <VoiceListenButton
+                          size="xs"
+                          textHi={`${req.buyerCompany} को ${req.quantityTons * 10} क्विंटल ${req.cropName} की आवश्यकता है। कंपनी का ऑफर भाव ₹${nr.buyerPrice.toFixed(0)} प्रति किलो है। खर्च के बाद हाथ में ₹${nr.estimatedNetRealization.toFixed(2)} प्रति किलो बचेगा। मैच स्कोर ${matchItem.matchScore} प्रतिशत है।`}
+                          textEn={`${req.buyerCompany} needs ${req.quantityTons * 10} quintals of ${req.cropName}. Offer rate is ₹${nr.buyerPrice.toFixed(2)} per kg. Net realization in hand is ₹${nr.estimatedNetRealization.toFixed(2)} per kg. Match score is ${matchItem.matchScore} percent.`}
+                        />
+                        <button
+                          onClick={() => setSelectedMatchExplanation(matchItem)}
+                          className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black flex items-center gap-1"
+                          title="विस्तार से देखें"
+                        >
+                          <Sparkles className="h-3 w-3 text-emerald-600" />
+                          <span>{matchItem.matchScore}% अनुकूल</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Simple Price & Net In Hand Box */}
@@ -1518,6 +1606,205 @@ export const FarmerDashboard: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* 🌾 TAB: NALAMKI DIGITAL FIELD RECORD & TRACEABILITY (खेत रिकॉर्ड) */}
+      {/* ========================================================================= */}
+      {activeTab === 'activities' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Header Banner */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-slate-900 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  NaLamKI · ITU-T / FAO Recommendation Annex A.16
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black">
+                {lang === 'hi' ? 'खेत की डायरी एवं फसल प्रमाण पत्र' : 'Farm Field Diary & Digital Passport'}
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1 max-w-xl">
+                {lang === 'hi' 
+                  ? 'अपनी फसल के काम दर्ज करें — मौसम और तारीख अपने आप जुड़ जाएंगे। डायरी पूरी रखने पर खरीदार से ₹50-₹100/क्विंटल तक बेहतर दाम मिल सकता है।'
+                  : 'Log farm operations with 1-tap — weather and dates are auto-recorded. Earn premium prices from verified buyers.'}
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedListingForTraceability(listings[0] || null);
+                  setShowTraceabilityModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-emerald-400" />
+                <span>{lang === 'hi' ? '📜 प्रमाण पत्र देखें' : '📜 View Passport Certificate'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedListingForTraceability(listings[0] || null);
+                  setShowActivityLoggerModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{lang === 'hi' ? '✍️ डायरी लिखें (1-टैप)' : '✍️ Log Work (1-Tap)'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {lang === 'hi' ? 'कुल दर्ज गतिविधियां' : 'Total Activities Logged'}
+              </span>
+              <span className="text-2xl font-black text-[#1C2B23]">{activities.length}</span>
+              <span className="text-[11px] text-emerald-700 font-bold block mt-0.5">✓ 100% NaLamKI Compliant</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {lang === 'hi' ? 'सिंचाई रिकॉर्ड' : 'Irrigation Records'}
+              </span>
+              <span className="text-2xl font-black text-cyan-800">
+                {activities.filter(a => a.typeUri === 'irrigation').length}
+              </span>
+              <span className="text-[11px] text-cyan-700 font-bold block mt-0.5">💧 Micro-Drip Optimized</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {lang === 'hi' ? 'सुरक्षा एवं पोषण' : 'Protection & Nutrition'}
+              </span>
+              <span className="text-2xl font-black text-amber-800">
+                {activities.filter(a => a.typeUri === 'fertilization' || a.typeUri === 'crop_protection').length}
+              </span>
+              <span className="text-[11px] text-amber-700 font-bold block mt-0.5">🛡️ Bio-IPM Protocol</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {lang === 'hi' ? 'कटाई एवं लॉट' : 'Harvested Lots'}
+              </span>
+              <span className="text-2xl font-black text-purple-800">
+                {activities.filter(a => a.typeUri === 'harvesting').length}
+              </span>
+              <span className="text-[11px] text-purple-700 font-bold block mt-0.5">🚜 BBCH 99 Graded</span>
+            </div>
+          </div>
+
+          {/* Activities Timeline */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white border-2 border-[#D8D2C4] shadow-md space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+              <h3 className="text-base font-black text-[#1C2B23] flex items-center gap-2">
+                <Activity className="w-5 h-5 text-emerald-700" />
+                <span>{lang === 'hi' ? 'खेत कार्य समयरेखा (Field Activity Log)' : 'Field Activity Chronological Timeline'}</span>
+              </h3>
+              <span className="text-xs font-bold text-slate-500">
+                {activities.length} {lang === 'hi' ? 'प्रमाणित प्रविष्टियां' : 'Audited Entries'}
+              </span>
+            </div>
+
+            {activities.length === 0 ? (
+              <div className="py-12 text-center text-slate-500 space-y-3">
+                <div className="text-4xl">🌱</div>
+                <h4 className="text-base font-extrabold text-slate-800">
+                  {lang === 'hi' ? 'अभी कोई खेत गतिविधि दर्ज नहीं की गई है' : 'No Field Activities Recorded Yet'}
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {lang === 'hi' 
+                    ? 'अपनी फसल के लिए बुवाई, पानी या खाद की तारीख दर्ज करें।' 
+                    : 'Record your sowing, irrigation, fertilizer, or harvest operations.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowActivityLoggerModal(true)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-black text-xs cursor-pointer"
+                >
+                  + पहली गतिविधि दर्ज करें
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 relative before:absolute before:inset-0 before:left-5 before:w-0.5 before:bg-stone-200">
+                {activities.map((act, idx) => (
+                  <div key={act.id || idx} className="relative pl-11 group">
+                    <div className="absolute left-2.5 top-3.5 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-slate-900 flex items-center justify-center z-10 shadow-xs">
+                      {act.typeUri === 'sowing' ? <Sprout className="w-3.5 h-3.5 text-emerald-600" /> :
+                       act.typeUri === 'irrigation' ? <Droplets className="w-3.5 h-3.5 text-cyan-600" /> :
+                       act.typeUri === 'fertilization' ? <FlaskConical className="w-3.5 h-3.5 text-amber-600" /> :
+                       act.typeUri === 'crop_protection' ? <ShieldAlert className="w-3.5 h-3.5 text-rose-600" /> :
+                       <Tractor className="w-3.5 h-3.5 text-purple-600" />}
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#D8D2C4] shadow-2xs hover:bg-white transition-all space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-slate-900 text-white">
+                            {act.typeLabel || act.typeUri}
+                          </span>
+                          <h4 className="text-sm font-black text-[#1C2B23]">{act.name}</h4>
+                          {act.cropName && (
+                            <span className="text-[11px] font-bold text-stone-600 bg-stone-200 px-2 py-0.5 rounded">
+                              {act.cropName} {act.variety ? `(${act.variety})` : ''}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-stone-500 font-semibold">
+                          <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                          <span>{new Date(act.startsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        </div>
+                      </div>
+
+                      {act.bbchStage && (
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-white inline-flex px-2 py-0.5 rounded border border-slate-200">
+                          🌱 <span>{act.bbchStage}</span>
+                        </div>
+                      )}
+
+                      {act.notes && (
+                        <p className="text-xs text-[#2B3B32] font-medium leading-relaxed">
+                          {act.notes}
+                        </p>
+                      )}
+
+                      {/* Deployed Resources & Input/Output */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-stone-200 text-xs text-stone-600">
+                        {act.resources && act.resources.length > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <Tractor className="w-3.5 h-3.5 text-stone-500" />
+                            <span><strong>{lang === 'hi' ? 'उपकरण:' : 'Resource:'}</strong> {act.resources.map(r => r.name).join(', ')}</span>
+                          </div>
+                        )}
+                        {act.inputsOutputs && act.inputsOutputs.length > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-stone-500" />
+                            <span><strong>{lang === 'hi' ? 'इनपुट/आउटपुट:' : 'Input/Output:'}</strong> {act.inputsOutputs.map(io => `${io.item} (${io.quantity})`).join(', ')}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Microclimate */}
+                      {act.conditions && (
+                        <div className="flex items-center gap-3 pt-1 text-[11px] text-stone-500 flex-wrap">
+                          <span className="font-bold text-stone-700 uppercase">{lang === 'hi' ? 'खेत मौसम:' : 'Microclimate:'}</span>
+                          <span>🌡️ {act.conditions.temperature}°C</span>
+                          <span>💧 {act.conditions.humidity}% RH</span>
+                          <span>🌱 {act.conditions.soilMoisture}% Moisture</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* 4. MOBILE BOTTOM NAVIGATION BAR (Fixed at bottom on phones) */}
       {/* ========================================================================= */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-2 py-1 flex items-center justify-around">
@@ -2126,6 +2413,28 @@ export const FarmerDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* NaLamKI Farm Traceability Modal */}
+      <FarmTraceabilityModal
+        isOpen={showTraceabilityModal}
+        onClose={() => {
+          setShowTraceabilityModal(false);
+          setSelectedListingForTraceability(null);
+        }}
+        listingId={selectedListingForTraceability?.id}
+        initialListing={selectedListingForTraceability || undefined}
+        farmerId={user?.id}
+        language={lang === 'hi' ? 'hi' : 'en'}
+      />
+
+      {/* Field Activity Logger Modal */}
+      <FieldActivityLoggerModal
+        isOpen={showActivityLoggerModal}
+        onClose={() => setShowActivityLoggerModal(false)}
+        listings={listings}
+        onActivityCreated={() => fetchData()}
+        language={lang === 'hi' ? 'hi' : 'en'}
+      />
 
     </div>
   );

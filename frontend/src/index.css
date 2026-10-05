@@ -2,49 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========================================================================= */
+/* KISANCONNECT DESIGN SYSTEM TOKENS                                         */
+/* Human-designed, restrained agricultural palette                           */
+/* ========================================================================= */
+
+:root {
+  --background: #F7F5EF;       /* Warm ivory / off-white */
+  --foreground: #26332C;       /* Dark charcoal */
+  --card: #FFFFFF;             /* Crisp clean white */
+  --card-foreground: #26332C;
+  --card-border: #E5E0D5;      /* Warm subtle border */
+  --muted: #EFECE4;            /* Soft warm neutral */
+  --muted-foreground: #637067; /* Muted slate/sage charcoal */
+  --border: #E5E0D5;
+  --input-bg: #FFFFFF;
+  --input-border: #D8D2C4;
+  --input-focus: #315C45;
+  --primary: #315C45;          /* Deep muted forest green */
+  --primary-hover: #264A37;
+  --primary-foreground: #FFFFFF;
+  --secondary: #71856B;        /* Olive / sage */
+  --accent: #C58B4E;           /* Earthy amber / copper */
+  --navbar-bg: rgba(247, 245, 239, 0.96);
+  --navbar-border: #E5E0D5;
+  --table-header: #EFECE4;
+  --table-stripe: #F9F8F5;
+}
+
 @layer base {
+  html {
+    color-scheme: light;
+  }
+  /* Prevent matras and conjuncts squeezing in Hindi (Devanagari) */
+  html[lang="hi"],
+  html[lang="hi"] * {
+    letter-spacing: normal !important;
+  }
   body {
-    @apply bg-slate-50 text-slate-800 font-sans selection:bg-agri-500 selection:text-white;
+    background-color: var(--background);
+    color: var(--foreground);
+    @apply font-sans selection:bg-[#315C45] selection:text-white;
   }
 }
 
-/* Custom scrollbars */
+/* Custom subtle scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--muted);
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #D8D2C4;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #B5AD9C;
 }
 
-/* Glassmorphism helpers */
+/* Subtle glassmorphism helper */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-}
-
-.glass-dark {
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.5);
-}
-
-/* Pulse animation for live indicators */
-@keyframes subtle-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.02); }
-}
-
-.animate-subtle {
-  animation: subtle-pulse 3s infinite ease-in-out;
+  background: var(--navbar-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
 }

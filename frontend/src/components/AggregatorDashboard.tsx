@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 import { 
   AggregationBatch, 
@@ -30,6 +31,7 @@ import {
 
 export const AggregatorDashboard: React.FC = () => {
   const { user, refreshUser } = useAuth();
+  const { t } = useLanguage();
   const [batches, setBatches] = useState<AggregationBatch[]>([]);
   const [farmerListings, setFarmerListings] = useState<FarmerListing[]>([]);
   const [buyerReqs, setBuyerReqs] = useState<BuyerRequirement[]>([]);
@@ -97,6 +99,10 @@ export const AggregatorDashboard: React.FC = () => {
   };
 
   const handleOpenBatchBuilder = (req: BuyerRequirement) => {
+    if (user?.status === 'pending') {
+      alert('Account pending admin approval. You can browse, but cannot create batches / make offers until verified.');
+      return;
+    }
     if (!isSubscribed) {
       alert('Active Aggregator Subscription required to create aggregation batches. Please activate a plan.');
       setShowSubscriptionModal(true);
@@ -121,6 +127,10 @@ export const AggregatorDashboard: React.FC = () => {
 
   const handleCreateBatch = async () => {
     if (!selectedReqForBatch) return;
+    if (user?.status === 'pending') {
+      alert('Account pending admin approval. You can browse, but cannot create batches / make offers until verified.');
+      return;
+    }
 
     try {
       const farmersPayload = selectedFarmerListings.map(f => ({
@@ -182,11 +192,11 @@ export const AggregatorDashboard: React.FC = () => {
                   : 'bg-rose-100 text-rose-800 border-rose-200'
               }`}>
                 {isSubscribed ? <CheckCircle2 className="h-3 w-3 text-emerald-600" /> : <Lock className="h-3 w-3 text-rose-600" />}
-                {isSubscribed ? 'Active Subscription (Pro)' : 'Subscription Inactive'}
+                {isSubscribed ? `${t('common.active')} (${profile?.subscribedPlanId?.replace('plan-', '').toUpperCase() || 'PRO'})` : t('common.pending')}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Operating Zone: <strong className="text-slate-700">{profile?.operatingRegion || 'Agra - Mathura Belt'} (0-50 km radius)</strong> • Max Capacity: {profile?.maxAggregationCapacityTons || 150} Tonnes
+              {t('aggregator.operatingZone')}: <strong className="text-slate-700">{profile?.operatingRegion || 'Agra - Mathura Belt'} (0-50 km)</strong> • Max: {profile?.maxAggregationCapacityTons || 150} {t('common.ton')}
             </p>
           </div>
         </div>
@@ -201,7 +211,7 @@ export const AggregatorDashboard: React.FC = () => {
             }`}
           >
             <CreditCard className="h-4 w-4" />
-            <span>{isSubscribed ? 'Manage Subscription' : 'Subscribe to Aggregate'}</span>
+            <span>{isSubscribed ? t('aggregator.subscribe') : t('aggregator.subscriptionPlans')}</span>
           </button>
         </div>
       </div>
@@ -209,7 +219,7 @@ export const AggregatorDashboard: React.FC = () => {
       {/* Aggregator Overview KPI Cards (Section 9) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-xs font-semibold text-slate-400 block">Active Batches</span>
+          <span className="text-xs font-semibold text-slate-400 block">{t('aggregator.activeBatches')}</span>
           <div className="text-2xl font-extrabold text-amber-700 mt-1">{batches.length}</div>
           <span className="text-[10px] text-slate-500">Toward bulk demand</span>
         </div>
@@ -405,10 +415,16 @@ export const AggregatorDashboard: React.FC = () => {
 
               <button
                 onClick={() => handleOpenBatchBuilder(req)}
-                className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+                disabled={user?.status === 'pending'}
+                title={user?.status === 'pending' ? 'Account pending approval' : 'Build Aggregation Batch for this Contract'}
+                className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-xs ${
+                  user?.status === 'pending'
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                    : 'bg-amber-600 hover:bg-amber-700 text-white'
+                }`}
               >
                 <Layers className="h-4 w-4" />
-                <span>Build Aggregation Batch for this Contract</span>
+                <span>{user?.status === 'pending' ? 'Account Pending Approval' : 'Build Aggregation Batch for this Contract'}</span>
               </button>
             </div>
           ))}

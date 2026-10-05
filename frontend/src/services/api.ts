@@ -1,4 +1,4 @@
-const API_BASE = '/api';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api';
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('kc_token');
@@ -13,13 +13,16 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   };
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
+    credentials: 'include',
     ...options,
     headers
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(errorData.error || `HTTP ${response.status}`);
+    const err: any = new Error(errorData.message || errorData.error || `HTTP ${response.status}`);
+    err.code = errorData.error;
+    throw err;
   }
 
   return response.json();
@@ -27,8 +30,23 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   // Auth
-  register: (data: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  sendOtp: (phone: string) => request<any>('/auth/otp/send', { method: 'POST', body: JSON.stringify({ phone }) }),
+  verifyOtp: (data: { phone: string; code: string; expectedRole?: string }) => 
+    request<any>('/auth/otp/verify', { method: 'POST', body: JSON.stringify(data) }),
+  signupFarmer: (data: { name: string; phone: string; villageDistrict: string; mainCrops: string[]; password?: string }) =>
+    request<any>('/auth/signup/farmer', { method: 'POST', body: JSON.stringify(data) }),
+  signupBusiness: (data: { role: string; businessName: string; contactPerson: string; mobile: string; email: string; city: string; password: string }) =>
+    request<any>('/auth/signup/business', { method: 'POST', body: JSON.stringify(data) }),
+  googleInit: (data: { credential?: string; googleUser?: any }) =>
+    request<any>('/auth/google/init', { method: 'POST', body: JSON.stringify(data) }),
+  googleVerifyOtp: (data: { tempToken: string; code: string }) =>
+    request<any>('/auth/google/verify-otp', { method: 'POST', body: JSON.stringify(data) }),
+  googleRegister: (data: any) =>
+    request<any>('/auth/google/register', { method: 'POST', body: JSON.stringify(data) }),
+  googleResendOtp: (email: string) =>
+    request<any>('/auth/google/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }),
   login: (data: any) => request<any>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  logout: () => request<any>('/auth/logout', { method: 'POST' }),
   demoSwitch: (role: string) => request<any>('/auth/demo-switch', { method: 'POST', body: JSON.stringify({ role }) }),
   getMe: () => request<any>('/auth/me'),
 
@@ -105,9 +123,38 @@ export const api = {
   toggleUserVerify: (userId: string) => request<any>(`/admin/users/${userId}/verify`, { method: 'PUT' }),
   getSubscriptionPlans: () => request<any[]>('/admin/plans'),
   updateSubscriptionPlan: (id: string, data: any) => request<any>(`/admin/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  resetDemoData: () => request<any>('/admin/reset-demo', { method: 'POST' }),
+  resetDemoData: () => request<any>('/admin/reset-demo', { method: 'POST', body: JSON.stringify({ confirm: 'RESET_DEMO' }) }),
+  getPendingApprovals: () => request<any[]>('/admin/pending-approvals'),
+  approveUser: (userId: string) => request<any>(`/admin/users/${userId}/approve`, { method: 'POST' }),
+  rejectUser: (userId: string, reason?: string) => request<any>(`/admin/users/${userId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  blockUser: (userId: string) => request<any>(`/admin/users/${userId}/block`, { method: 'POST' }),
+  unblockUser: (userId: string) => request<any>(`/admin/users/${userId}/unblock`, { method: 'POST' }),
+  makeUserAdmin: (userId: string) => request<any>(`/admin/users/${userId}/make-admin`, { method: 'POST' }),
+  deleteUser: (userId: string) => request<any>(`/admin/users/${userId}`, { method: 'DELETE' }),
+  updateUserRole: (userId: string, role: string) => request<any>(`/admin/users/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
+  revealUserPhone: (userId: string) => request<{ id: string; phone: string }>(`/admin/users/${userId}/reveal-phone`, { method: 'POST' }),
+  getAuditLogs: (params: { action?: string; limit?: number | string; offset?: number | string } = {}) => {
+    const cleanParams: Record<string, string> = {};
+    if (params.action) cleanParams.action = params.action;
+    if (params.limit !== undefined) cleanParams.limit = String(params.limit);
+    if (params.offset !== undefined) cleanParams.offset = String(params.offset);
+    const query = new URLSearchParams(cleanParams).toString();
+    return request<any[]>(`/admin/audit-logs${query ? `?${query}` : ''}`);
+  },
 
   // Notifications
   getNotifications: () => request<any[]>('/notifications'),
-  markNotificationRead: (id: string) => request<any>(`/notifications/${id}/read`, { method: 'PUT' })
+  markNotificationRead: (id: string) => request<any>(`/notifications/${id}/read`, { method: 'PUT' }),
+
+  // NaLamKI / ITU-T Digital Farm Activity & Traceability (Annex A.16)
+  getActivities: (params: Record<string, string> = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request<any[]>(`/activities${query ? `?${query}` : ''}`);
+  },
+  getActivityById: (id: string) => request<any>(`/activities/${id}`),
+  createActivity: (data: any) => request<any>('/activities', { method: 'POST', body: JSON.stringify(data) }),
+  updateActivity: (id: string, data: any) => request<any>(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteActivity: (id: string) => request<any>(`/activities/${id}`, { method: 'DELETE' }),
+  getListingTraceability: (listingId: string) => request<any>(`/listings/${listingId}/traceability`),
+  getNaLamKIManifest: () => request<any>('/activities/standards/nalamki-manifest')
 };

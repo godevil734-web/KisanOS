@@ -48,17 +48,20 @@ KisanConnect is a multi-sided agricultural marketplace and supply chain platform
 
 ---
 
-## ⚡ Quick Demo Persona Switcher
+## ⚡ Quick Demo Persona Switcher (Local Development & Evaluator Demo Only)
 
-The application includes a sticky quick-switch bar in the top navigation allowing evaluators to switch personas with one click:
-* **🌾 Farmer**: Ramesh Kumar (`ramesh@kisan.in`)
+The application includes a persona switch bar in the top navigation allowing evaluators to preview roles with one click in development mode:
+* **🌾 Farmer**: Ramesh Kumar (`ramesh@kisan.in` / `9876543210`) — Logs in via Mobile + OTP (`123456` when DEMO_MODE=true)
 * **📦 Aggregator**: Vikram Singh (`vikram@aggregator.in`)
 * **🏭 Buyer**: FreshBites Foods Pvt Ltd (`pooja@freshbites.com`)
 * **❄️ Cold Storage**: Agra Imperial Cold Logistics (`harish@agracold.in`)
 * **🚚 Transporter**: Kisan Express Freight (`manoj@kisanexpress.in`)
 * **⚙️ Admin**: Platform Administrator (`admin@kisanconnect.in`)
 
-*All test accounts default to password:* `password123` *(Admin:* `admin123`*)*
+> **Security Advisory**: 
+> - **Demo Mode (`DEMO_MODE=true`)**: Demo accounts (`password123`), persona switching (`/api/auth/demo-switch`), database resetting (`/api/admin/reset-demo`), and fixed demo OTP (`123456`) are strictly controlled by `DEMO_MODE=true`. By default (`DEMO_MODE=false`), none of these work in any environment.
+> - **Demo OTP Scope (`DEMO_PHONES`)**: The fixed demo OTP `123456` is scoped exclusively to authorized demo phone numbers listed in `DEMO_PHONES`. Real users can never be accessed with the demo OTP.
+> - **Admin Password (`ADMIN_PASSWORD`)**: There is **no default admin password** in the codebase. You **must** provide `ADMIN_PASSWORD` in your `.env` file; if missing, admin initialization and seeding will fail with a fatal error in all environments.
 
 ---
 

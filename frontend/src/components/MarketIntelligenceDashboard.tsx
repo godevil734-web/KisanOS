@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 import { MarketPrice, RegionalSupplyForecast } from '../types';
 import { 
@@ -17,8 +18,10 @@ import {
   Camera,
   CheckCircle2
 } from 'lucide-react';
+import { VoiceListenButton } from './VoiceListenButton';
 
 export const MarketIntelligenceDashboard: React.FC = () => {
+  const { t } = useLanguage();
   const [prices, setPrices] = useState<MarketPrice[]>([]);
   const [forecasts, setForecasts] = useState<RegionalSupplyForecast[]>([]);
   const [activeIntelTab, setActiveIntelTab] = useState<'prices' | 'regional_gap' | 'ai_yield' | 'cv_vision'>('prices');
@@ -117,10 +120,10 @@ export const MarketIntelligenceDashboard: React.FC = () => {
       {/* Tabs */}
       <div className="flex border-b border-slate-200 space-x-1 overflow-x-auto scrollbar-none">
         {[
-          { id: 'prices', label: 'APMC Mandi Spot Prices', icon: BarChart3 },
-          { id: 'regional_gap', label: 'Regional Supply-Demand Balance', icon: Layers },
-          { id: 'ai_yield', label: 'AI Agronomic Yield Predictor', icon: Sparkles },
-          { id: 'cv_vision', label: 'Computer Vision Produce Grader', icon: Scan }
+          { id: 'prices', label: t('intelligence.mandiSpotRates'), icon: BarChart3 },
+          { id: 'regional_gap', label: t('intelligence.supplyDemandGap'), icon: Layers },
+          { id: 'ai_yield', label: t('intelligence.aiYieldPredictor'), icon: Sparkles },
+          { id: 'cv_vision', label: t('intelligence.cvProduceGrader'), icon: Scan }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeIntelTab === tab.id;
@@ -169,14 +172,21 @@ export const MarketIntelligenceDashboard: React.FC = () => {
                         {p.cropName} <span className="text-xs text-slate-500 font-normal">({p.variety})</span>
                       </h4>
                     </div>
-                    <span className={`flex items-center gap-1 text-xs font-extrabold px-2 py-0.5 rounded-full ${
-                      isUp ? 'bg-emerald-100 text-emerald-800' : isDown ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {isUp && <TrendingUp className="h-3 w-3" />}
-                      {isDown && <TrendingDown className="h-3 w-3" />}
-                      {!isUp && !isDown && <Minus className="h-3 w-3" />}
-                      {p.trend}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <VoiceListenButton 
+                        size="xs"
+                        textHi={`${p.mandi} मंडी में ${p.cropName} (${p.variety}) का मॉडल भाव ${p.modalPrice.toFixed(0)} रुपये प्रति किलो है। न्यूनतम भाव ${p.minPrice} और अधिकतम ${p.maxPrice} रुपये है। बाजार रुख ${p.trend === 'UP' ? 'बढ़त' : p.trend === 'DOWN' ? 'गिरावट' : 'स्थिर'} पर है।`}
+                        textEn={`In ${p.mandi} mandi, modal rate for ${p.cropName} ${p.variety} is ₹${p.modalPrice.toFixed(2)} per kg. Minimum is ₹${p.minPrice} and maximum is ₹${p.maxPrice}. Trend is ${p.trend}.`}
+                      />
+                      <span className={`flex items-center gap-1 text-xs font-extrabold px-2 py-0.5 rounded-full ${
+                        isUp ? 'bg-emerald-100 text-emerald-800' : isDown ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                      }`}>
+                        {isUp && <TrendingUp className="h-3 w-3" />}
+                        {isDown && <TrendingDown className="h-3 w-3" />}
+                        {!isUp && !isDown && <Minus className="h-3 w-3" />}
+                        {p.trend}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex items-center justify-between">
@@ -236,13 +246,20 @@ export const MarketIntelligenceDashboard: React.FC = () => {
                       </span>
                     </div>
 
-                    <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${
-                      isSurplus 
-                        ? 'bg-emerald-100 text-emerald-800' 
-                        : 'bg-amber-100 text-amber-800'
-                    }`}>
-                      {isSurplus ? `+${f.potentialBalance.toLocaleString()}T SURPLUS` : `${f.potentialBalance.toLocaleString()}T DEFICIT`}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <VoiceListenButton
+                        size="xs"
+                        textHi={`${f.region} क्षेत्र में ${f.crop} फसल की स्थिति: आपूर्ति ${f.estimatedSupplyTons.toLocaleString()} टन और मांग ${f.estimatedDemandTons.toLocaleString()} टन है। संतुलन ${f.balanceType === 'SURPLUS' ? 'अधिशेष' : 'कमी'} ${f.potentialBalance.toLocaleString()} टन। सलाह: ${f.recommendation}`}
+                        textEn={`${f.region} forecast for ${f.crop}: Projected supply ${f.estimatedSupplyTons.toLocaleString()} tonnes, demand ${f.estimatedDemandTons.toLocaleString()} tonnes. Advisory: ${f.recommendation}`}
+                      />
+                      <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${
+                        isSurplus 
+                          ? 'bg-emerald-100 text-emerald-800' 
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {isSurplus ? `+${f.potentialBalance.toLocaleString()}T SURPLUS` : `${f.potentialBalance.toLocaleString()}T DEFICIT`}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100 text-center text-xs">

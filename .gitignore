@@ -1,0 +1,20 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Production builds
+dist/
+dist-ssr/
+.vercel/
+
+# Database storage
+backend/data/db.json
+
+# Logs & temporary files
+*.log
+logs/
+.DS_Store

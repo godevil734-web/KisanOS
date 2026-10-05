@@ -7,7 +7,16 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
-  register: (data: any) => Promise<void>;
+  register: (userData: any) => Promise<void>;
+  loginWithPassword: (identifier: string, pass: string, expectedRole?: string) => Promise<any>;
+  loginWithOtp: (phone: string, code: string, expectedRole?: string) => Promise<any>;
+  sendOtp: (phone: string) => Promise<any>;
+  signupFarmer: (data: { name: string; phone: string; villageDistrict: string; mainCrops: string[]; password?: string }) => Promise<any>;
+  signupBusiness: (data: any) => Promise<any>;
+  googleInit: (data: { credential?: string; googleUser?: any }) => Promise<any>;
+  googleVerifyOtp: (tempToken: string, code: string) => Promise<any>;
+  googleRegister: (data: any) => Promise<any>;
+  googleResendOtp: (email: string) => Promise<any>;
   logout: () => void;
   switchRole: (role: UserRole) => Promise<void>;
   notifications: Notification[];
@@ -28,14 +37,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Refresh user data
   const refreshUser = async () => {
     try {
-      if (localStorage.getItem('kc_token')) {
+      const savedToken = localStorage.getItem('kc_token');
+      if (savedToken) {
         const res = await api.getMe();
         setUser(res.user);
+      } else {
+        setUser(null);
       }
     } catch (err) {
-      console.error('Failed to restore session:', err);
-      // Fallback: switch to default demo farmer
-      await switchRole('farmer');
+      console.warn('Session restoration failed:', err);
+      localStorage.removeItem('kc_token');
+      setToken(null);
+      setUser(null);
     }
   };
 
@@ -55,12 +68,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const init = async () => {
       setLoading(true);
       try {
-        if (!token) {
-          // Auto-login as Farmer Ramesh for immediate rich demo experience
-          await switchRole('farmer');
-        } else {
+        if (token) {
           await refreshUser();
           await refreshNotifications();
+        } else {
+          setUser(null);
         }
       } catch (e) {
         console.error('Init error:', e);
@@ -79,15 +91,91 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await refreshNotifications();
   };
 
-  const register = async (data: any) => {
-    const res = await api.register(data);
+  const loginWithPassword = async (identifier: string, pass: string, expectedRole?: string) => {
+    const res = await api.login({ identifier, password: pass, expectedRole });
     localStorage.setItem('kc_token', res.token);
     setToken(res.token);
     setUser(res.user);
     await refreshNotifications();
+    return res.user;
+  };
+
+  const sendOtp = async (phone: string) => {
+    return await api.sendOtp(phone);
+  };
+
+  const loginWithOtp = async (phone: string, code: string, expectedRole?: string) => {
+    const res = await api.verifyOtp({ phone, code, expectedRole });
+    localStorage.setItem('kc_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    await refreshNotifications();
+    return res.user;
+  };
+
+  const signupFarmer = async (data: { name: string; phone: string; villageDistrict: string; mainCrops: string[]; password?: string }) => {
+    return await api.signupFarmer(data);
+  };
+
+  const signupBusiness = async (data: any) => {
+    const res = await api.signupBusiness(data);
+    localStorage.setItem('kc_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    await refreshNotifications();
+    return res;
+  };
+
+  const googleInit = async (data: { credential?: string; googleUser?: any }) => {
+    return await api.googleInit(data);
+  };
+
+  const googleVerifyOtp = async (tempToken: string, code: string) => {
+    const res = await api.googleVerifyOtp({ tempToken, code });
+    localStorage.setItem('kc_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    await refreshNotifications();
+    return res.user;
+  };
+
+  const googleRegister = async (data: any) => {
+    const res = await api.googleRegister(data);
+    localStorage.setItem('kc_token', res.token);
+    setToken(res.token);
+    setUser(res.user);
+    await refreshNotifications();
+    return res;
+  };
+
+  const googleResendOtp = async (email: string) => {
+    return await api.googleResendOtp(email);
+  };
+
+  const register = async (userData: any) => {
+    if (userData.role === 'farmer') {
+      await signupFarmer({
+        name: userData.name,
+        phone: userData.phone,
+        villageDistrict: userData.location || 'Agra, UP',
+        mainCrops: ['potato'],
+        password: userData.password
+      });
+    } else {
+      await signupBusiness({
+        role: userData.role,
+        businessName: userData.aggregatorDetails?.businessName || userData.buyerDetails?.companyName || userData.name,
+        contactPerson: userData.name,
+        mobile: userData.phone,
+        email: userData.email || `${userData.phone}@kisanconnect.in`,
+        city: userData.location || 'Agra, UP',
+        password: userData.password || 'password123'
+      });
+    }
   };
 
   const logout = () => {
+    api.logout().catch(() => {});
     localStorage.removeItem('kc_token');
     setToken(null);
     setUser(null);
@@ -128,6 +216,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         login,
         register,
+        loginWithPassword,
+        loginWithOtp,
+        sendOtp,
+        signupFarmer,
+        signupBusiness,
+        googleInit,
+        googleVerifyOtp,
+        googleRegister,
+        googleResendOtp,
         logout,
         switchRole,
         notifications,

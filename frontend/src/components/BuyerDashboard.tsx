@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 import { BuyerRequirement, FarmerListing, AggregationBatch, Order, Crop } from '../types';
 import { 
@@ -12,20 +13,26 @@ import {
   Clock, 
   DollarSign, 
   Filter, 
-  Sparkles,
+  Sparkles, 
   ArrowRight,
   ShieldCheck,
   Calendar,
   MapPin
 } from 'lucide-react';
+import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 
 export const BuyerDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { t, language } = useLanguage();
   const [requirements, setRequirements] = useState<BuyerRequirement[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<'requirements' | 'supply_discovery' | 'orders'>('requirements');
   const [loading, setLoading] = useState(true);
+
+  // NaLamKI Passport Modal State
+  const [selectedListingForPassport, setSelectedListingForPassport] = useState<FarmerListing | null>(null);
+  const [showPassportModal, setShowPassportModal] = useState(false);
 
   // New Demand Post Modal
   const [showPostModal, setShowPostModal] = useState(false);
@@ -86,6 +93,10 @@ export const BuyerDashboard: React.FC = () => {
 
   const handleCreateRequirement = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (user?.status === 'pending') {
+      alert('Account pending admin approval. You can browse, but cannot create batches / make offers until verified.');
+      return;
+    }
     try {
       await api.createRequirement(newReq);
       setShowPostModal(false);
@@ -147,11 +158,23 @@ export const BuyerDashboard: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowPostModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition-colors"
+            onClick={() => {
+              if (user?.status === 'pending') {
+                alert('Account pending admin approval. You can browse, but cannot create batches / make offers until verified.');
+                return;
+              }
+              setShowPostModal(true);
+            }}
+            disabled={user?.status === 'pending'}
+            title={user?.status === 'pending' ? 'Account pending approval' : t('buyer.postDemand')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs shadow-sm flex items-center gap-1.5 transition-colors ${
+              user?.status === 'pending'
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+            }`}
           >
-            <Plus className="h-4 w-4 text-emerald-400" />
-            <span>Post Bulk Requirement</span>
+            <Plus className="h-4 w-4" />
+            <span>{user?.status === 'pending' ? 'Account Pending Approval' : t('buyer.postDemand')}</span>
           </button>
         </div>
       </div>
@@ -159,9 +182,9 @@ export const BuyerDashboard: React.FC = () => {
       {/* Tabs */}
       <div className="flex border-b border-slate-200 space-x-1 overflow-x-auto scrollbar-none">
         {[
-          { id: 'requirements', label: `My Demand Specifications (${requirements.length})`, icon: ShoppingBag },
-          { id: 'supply_discovery', label: 'Multi-Channel Supply Discovery', icon: Sparkles },
-          { id: 'orders', label: `Procurement Orders (${orders.length})`, icon: Truck },
+          { id: 'requirements', label: `${t('buyer.industrialProcurement')} (${requirements.length})`, icon: ShoppingBag },
+          { id: 'supply_discovery', label: t('buyer.channelDiscovery'), icon: Sparkles },
+          { id: 'orders', label: `${t('buyer.activeContracts')} (${orders.length})`, icon: Truck },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -189,13 +212,15 @@ export const BuyerDashboard: React.FC = () => {
             <h3 className="text-sm font-bold text-slate-800">
               Active Procurement Requirements
             </h3>
-            <button
-              onClick={() => setShowPostModal(true)}
-              className="text-xs text-blue-700 font-bold hover:underline flex items-center gap-1"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Procurement Specification
-            </button>
+            {user?.status !== 'pending' && (
+              <button
+                onClick={() => setShowPostModal(true)}
+                className="text-xs text-blue-700 font-bold hover:underline flex items-center gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New Procurement Specification
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -315,7 +340,23 @@ export const BuyerDashboard: React.FC = () => {
                     </div>
 
                     <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedListingForPassport(m.listing);
+                        setShowPassportModal(true);
+                      }}
+                      className="w-full py-1.5 rounded-lg border border-slate-700 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>NaLamKI Farm Passport & Traceability</span>
+                    </button>
+
+                    <button
                       onClick={async () => {
+                        if (user?.status === 'pending') {
+                          alert('Account pending admin approval. You can browse, but cannot create batches / make offers until verified.');
+                          return;
+                        }
                         try {
                           await api.createOffer({
                             requirementId: selectedReqForDiscovery?.id,
@@ -333,9 +374,15 @@ export const BuyerDashboard: React.FC = () => {
                           alert('Error sending offer: ' + (e as Error).message);
                         }
                       }}
-                      className="w-full py-1.5 rounded-lg bg-agri-600 hover:bg-agri-700 text-white font-bold text-xs transition-colors"
+                      disabled={user?.status === 'pending'}
+                      title={user?.status === 'pending' ? 'Account pending approval' : 'Make Direct Farm Offer'}
+                      className={`w-full py-1.5 rounded-lg font-bold text-xs transition-colors ${
+                        user?.status === 'pending'
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                          : 'bg-agri-600 hover:bg-agri-700 text-white'
+                      }`}
                     >
-                      Make Direct Farm Offer
+                      {user?.status === 'pending' ? 'Account Pending Approval' : 'Make Direct Farm Offer'}
                     </button>
                   </div>
                 ))}
@@ -683,6 +730,18 @@ export const BuyerDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* NaLamKI Farm Passport Modal */}
+      <FarmTraceabilityModal
+        isOpen={showPassportModal}
+        onClose={() => {
+          setShowPassportModal(false);
+          setSelectedListingForPassport(null);
+        }}
+        listingId={selectedListingForPassport?.id}
+        initialListing={selectedListingForPassport || undefined}
+        language={language === 'hi' ? 'hi' : 'en'}
+      />
     </div>
   );
 };

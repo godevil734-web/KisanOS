@@ -1,4 +1,4 @@
-export type UserRole = 'farmer' | 'aggregator' | 'buyer' | 'cold_storage' | 'transporter' | 'admin';
+export type UserRole = 'farmer' | 'aggregator' | 'dealer' | 'buyer' | 'cold_storage' | 'transporter' | 'admin';
 
 export interface User {
   id: string;
@@ -6,6 +6,10 @@ export interface User {
   email: string;
   phone: string;
   role: UserRole;
+  status?: 'active' | 'pending' | 'rejected' | 'blocked';
+  phoneMasked?: string;
+  rejectionReason?: string;
+  isDemo?: boolean;
   location: string;
   rating: number;
   reviewsCount: number;
@@ -346,3 +350,71 @@ export interface Notification {
   read: boolean;
   timestamp: string;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  adminId: string;
+  adminName?: string;
+  action: string;
+  targetUserId: string | null;
+  targetUserName?: string | null;
+  details: any;
+  createdAt: string;
+}
+
+export interface FarmActivity {
+  id: string;
+  name: string;
+  typeUri: 'sowing' | 'irrigation' | 'fertilization' | 'crop_protection' | 'harvesting' | 'sorting_grading' | 'storage_dispatch' | string;
+  typeLabel?: string;
+  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  startsAt: string;
+  endsAt?: string;
+  bbchStage?: string;
+  conditions?: {
+    temperature?: number;
+    humidity?: number;
+    soilMoisture?: number;
+    windSpeedKmh?: number;
+    [key: string]: any;
+  };
+  geometry?: any;
+  farmerId: string;
+  farmerName?: string;
+  listingId?: string;
+  cropName?: string;
+  variety?: string;
+  batchId?: string;
+  resources?: Array<{
+    resourceType: 'MACHINE' | 'WORKER';
+    name: string;
+    role?: string;
+  }>;
+  inputsOutputs?: Array<{
+    type: 'INPUT' | 'OUTPUT';
+    item: string;
+    quantity: string;
+  }>;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface TraceabilityPassport {
+  listing: FarmerListing;
+  passportId: string;
+  standardCompliance: string;
+  activitiesCount: number;
+  activities: FarmActivity[];
+  agronomicSummary: {
+    crop: string;
+    variety: string;
+    grade: string;
+    harvestDate: string;
+    location: string;
+    verificationStatus: string;
+    organicOrIpmpPractices: boolean;
+    waterOptimized: boolean;
+  };
+}
+
+

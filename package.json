@@ -6,7 +6,8 @@
     "start": "node backend/server.js",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
-    "build:frontend": "cd frontend && npm run build"
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:frontend"
   },
   "keywords": [
     "agriculture",
@@ -17,5 +18,13 @@
     "aggregation"
   ],
   "author": "KisanConnect Engineering Team",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.23.1"
+  }
 }

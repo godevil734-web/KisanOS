@@ -7,6 +7,33 @@ export default {
   theme: {
     extend: {
       colors: {
+        forest: {
+          DEFAULT: '#315C45',
+          hover: '#264A37',
+          light: '#EBF2EE',
+          dark: '#4E8767',
+        },
+        sage: {
+          DEFAULT: '#71856B',
+          light: '#F0F3EF',
+          dark: '#8B9E86',
+        },
+        copper: {
+          DEFAULT: '#C58B4E',
+          hover: '#B0783D',
+          light: '#FAF3EB',
+          dark: '#D49B5E',
+        },
+        charcoal: {
+          DEFAULT: '#26332C',
+          muted: '#637067',
+          dark: '#EAECE8',
+        },
+        ivory: {
+          DEFAULT: '#F7F5EF',
+          surface: '#EFECE4',
+          border: '#E5E0D5',
+        },
         agri: {
           50: '#f0fdf4',
           100: '#dcfce7',
@@ -15,27 +42,11 @@ export default {
           400: '#4ade80',
           500: '#22c55e',
           600: '#16a34a',
-          700: '#15803d',
-          800: '#166534',
-          900: '#14532d',
-          950: '#052e16',
+          700: '#315C45', // Realigned to muted forest green
+          800: '#264A37',
+          900: '#1A3326',
+          950: '#0F2018',
         },
-        harvest: {
-          50: '#fffbeb',
-          100: '#fef3c7',
-          200: '#fde68a',
-          300: '#fcd34d',
-          400: '#fbbf24',
-          500: '#f59e0b',
-          600: '#d97706',
-          700: '#b45309',
-          800: '#92400e',
-          900: '#78350f',
-        },
-        earth: {
-          800: '#2c2523',
-          900: '#1c1917',
-        }
       },
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 import { Transporter, TransporterVehicle, Order } from '../types';
 import { 
@@ -18,6 +19,7 @@ import {
 
 export const TransporterDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [transporters, setTransporters] = useState<Transporter[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +104,7 @@ export const TransporterDashboard: React.FC = () => {
       {/* Vehicle Fleet Cards (Section 25) */}
       <div className="space-y-3">
         <h3 className="text-sm font-bold text-slate-800">
-          Commercial Agricultural Vehicles Fleet
+          {t('transport.fleetDirectory')}
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

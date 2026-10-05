@@ -99,7 +99,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
       setName(`अमित सिंघानिया (${timestamp})`);
       setPhone(`+91 98333 ${timestamp}`);
       setLocation('Noida Food Park, UP');
-      setCompanyName('Haldiram Snacks & Purees Pvt Ltd');
+      setCompanyName('Example Foods Pvt Ltd');
       setBusinessType('Industrial Food Processor');
       setAnnualDemandTons(3500);
       setGstNumber(`09AAACH${timestamp}A1Z1`);
@@ -244,8 +244,8 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                   }}
                   className={`p-2.5 rounded-xl border-2 text-center transition-all flex flex-col items-center justify-center min-h-[68px] ${
                     isSelected
-                      ? 'bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-slate-900/20'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      ? 'bg-[#315C45] text-white border-[#315C45] shadow-xs ring-2 ring-[#315C45]/20'
+                      : 'bg-stone-50 border-stone-200 text-[#26332C] hover:bg-stone-100'
                   }`}
                 >
                   <span className="text-xl">{r.icon}</span>
@@ -469,7 +469,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
                   <label className="font-bold text-slate-700 block mb-1">कंपनी / ब्रांड का नाम (Company Name)</label>
                   <input
                     type="text"
-                    placeholder="उदा. Haldiram Snacks Pvt Ltd"
+                    placeholder="उदा. Example Foods Pvt Ltd"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-blue-300 bg-white font-medium"
@@ -583,7 +583,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-sm shadow-md transition-all flex items-center justify-center gap-2 hover:scale-[1.01]"
+              className="w-full py-3 px-4 rounded-xl bg-[#315C45] hover:bg-[#264A37] text-white font-bold text-sm shadow-xs transition-colors flex items-center justify-center gap-2"
             >
               {loading ? (
                 <span>खाता बनाया जा रहा है...</span>

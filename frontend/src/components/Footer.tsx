@@ -1,103 +1,267 @@
-import React from 'react';
-import { Sprout, ShieldCheck, Heart } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sprout, X } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 
 interface FooterProps {
   onSelectTab: (tab: string) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({ onSelectTab }) => {
+  const { t } = useLanguage();
+  const [modalInfo, setModalInfo] = useState<{ title: string; desc: string } | null>(null);
+
+  const navigateToTab = (tab: string) => {
+    onSelectTab(tab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToCropNetwork = () => {
+    onSelectTab('landing');
+    setTimeout(() => {
+      const el = document.getElementById('crop-directory');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 100);
+  };
+
+  const openComingSoon = (title: string, desc: string) => {
+    setModalInfo({ title, desc });
+  };
+
   return (
-    <footer className="bg-slate-900 text-slate-400 text-xs border-t border-slate-800 mt-16">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <footer className="bg-[#EFECE4] text-[#2B3B32] text-sm border-t-2 border-[#D8D2C4] mt-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-white font-bold text-base">
-              <div className="h-7 w-7 rounded-lg bg-agri-600 flex items-center justify-center">
-                <Sprout className="h-4 w-4 text-white" />
+          
+          {/* Brand Info */}
+          <div className="space-y-3.5">
+            <div className="flex items-center gap-2 text-[#1C2B23] font-bold text-lg">
+              <div className="h-8 w-8 rounded-xl bg-[#1E3A2B] flex items-center justify-center text-white shadow-2xs">
+                <Sprout className="h-5 w-5 text-white" />
               </div>
-              <span>KisanConnect</span>
+              <span className="font-black tracking-tight text-xl">KisanConnect</span>
             </div>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              Full-stack multi-sided agricultural supply chain platform. Digitize and coordinate useful functions performed by farmers, aggregators, cold storage operators, and transporters.
+            <p className="text-[#2B3B32] text-sm leading-relaxed max-w-xs font-medium">
+              {t('footer.description')}
             </p>
-            <div className="text-[11px] text-agri-400 font-bold uppercase tracking-wider">
-              "Connect. Aggregate. Store. Move. Sell."
+            <div className="text-xs font-black text-[#1E3A2B] tracking-wide">
+              {t('footer.tagline')}
             </div>
           </div>
 
+          {/* Column 1: Platform — Real Pages */}
           <div>
-            <h4 className="text-white font-bold text-xs uppercase tracking-wider mb-3">Stakeholder Gateways</h4>
-            <ul className="space-y-2 text-xs">
+            <h4 className="text-[#1C2B23] font-black text-sm uppercase tracking-wider mb-3.5">
+              {t('footer.platformTitle')}
+            </h4>
+            <ul className="space-y-2.5 text-sm font-semibold">
               <li>
-                <button onClick={() => onSelectTab('farmer')} className="hover:text-white transition-colors">
-                  Farmer Hub & Net Realization
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('how-it-works')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.howItWorks')}
                 </button>
               </li>
               <li>
-                <button onClick={() => onSelectTab('aggregator')} className="hover:text-white transition-colors">
-                  Local Aggregator Subscriptions & Batches
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('farmer')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.forFarmers')}
                 </button>
               </li>
               <li>
-                <button onClick={() => onSelectTab('buyer')} className="hover:text-white transition-colors">
-                  Buyer Industrial Procurement
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('aggregator')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.forAggregators')}
                 </button>
               </li>
               <li>
-                <button onClick={() => onSelectTab('storage')} className="hover:text-white transition-colors">
-                  Cold Storage Capacity & Release
-                </button>
-              </li>
-              <li>
-                <button onClick={() => onSelectTab('transport')} className="hover:text-white transition-colors">
-                  Rural Logistics Route Planner
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('buyer')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.forBuyers')}
                 </button>
               </li>
             </ul>
           </div>
 
+          {/* Column 2: Network — Real Pages */}
           <div>
-            <h4 className="text-white font-bold text-xs uppercase tracking-wider mb-3">Intelligence & Governance</h4>
-            <ul className="space-y-2 text-xs">
+            <h4 className="text-[#1C2B23] font-black text-sm uppercase tracking-wider mb-3.5">
+              {t('footer.networkTitle')}
+            </h4>
+            <ul className="space-y-2.5 text-sm font-semibold">
               <li>
-                <button onClick={() => onSelectTab('intelligence')} className="hover:text-white transition-colors">
-                  Mandi Benchmark Prices
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('storage')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.coldStorage')}
                 </button>
               </li>
               <li>
-                <button onClick={() => onSelectTab('intelligence')} className="hover:text-white transition-colors">
-                  Regional Supply vs Demand Gap
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('transport')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.transport')}
                 </button>
               </li>
               <li>
-                <button onClick={() => onSelectTab('intelligence')} className="hover:text-white transition-colors">
-                  AI Yield Prediction & CV Grading
+                <button 
+                  type="button"
+                  onClick={navigateToCropNetwork} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.cropNetwork')}
                 </button>
               </li>
               <li>
-                <button onClick={() => onSelectTab('admin')} className="hover:text-white transition-colors">
-                  Platform Admin & Subscription Config
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('intelligence')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.marketInsights')}
                 </button>
               </li>
             </ul>
           </div>
 
-          <div className="space-y-2">
-            <h4 className="text-white font-bold text-xs uppercase tracking-wider mb-3">Statutory Advisory</h4>
-            <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60 text-[11px] text-slate-400 leading-relaxed">
-              <ShieldCheck className="h-4 w-4 text-emerald-400 mb-1" />
-              Agricultural price realizations and supply forecasts are <strong>indicative model estimates</strong> based on terminal arrivals and distance metrics. No guaranteed futures are implied.
-            </div>
+          {/* Column 3: Company & Information */}
+          <div>
+            <h4 className="text-[#1C2B23] font-black text-sm uppercase tracking-wider mb-3.5">
+              {t('footer.companyTitle')}
+            </h4>
+            <ul className="space-y-2.5 text-sm font-semibold">
+              <li>
+                <button 
+                  type="button"
+                  onClick={() => navigateToTab('how-it-works')} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.about')}
+                </button>
+              </li>
+              <li>
+                <button 
+                  type="button"
+                  onClick={() => openComingSoon(t('footer.values'), t('footer.valuesDesc'))} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.values')}
+                </button>
+              </li>
+              <li>
+                <button 
+                  type="button"
+                  onClick={() => openComingSoon(t('footer.contact'), t('footer.contactDesc'))} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.contact')}
+                </button>
+              </li>
+              <li>
+                <button 
+                  type="button"
+                  onClick={() => openComingSoon(t('footer.privacy'), t('footer.privacyDesc'))} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.privacy')}
+                </button>
+              </li>
+              <li>
+                <button 
+                  type="button"
+                  onClick={() => openComingSoon(t('footer.terms'), t('footer.termsDesc'))} 
+                  className="text-[#2B3B32] hover:text-[#1E3A2B] hover:underline transition-colors text-left cursor-pointer min-h-[32px] flex items-center"
+                >
+                  {t('footer.terms')}
+                </button>
+              </li>
+            </ul>
           </div>
+
         </div>
 
-        <div className="border-t border-slate-800/80 mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2">
-          <div>© 2026 KisanConnect Multi-Sided Agricultural Supply Chain Platform.</div>
-          <div className="flex items-center gap-1">
-            <span>Built for Indian Agriculture • Uttar Pradesh Demonstration Hub</span>
+        {/* Footer Bottom Bar */}
+        <div className="border-t-2 border-[#D8D2C4] mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between text-xs sm:text-sm text-[#2B3B32] font-semibold gap-3">
+          <div>{t('footer.copyright')}</div>
+          <div className="flex items-center gap-4">
+            <button 
+              type="button" 
+              onClick={() => openComingSoon(t('footer.privacy'), t('footer.privacyDesc'))}
+              className="hover:text-[#1E3A2B] hover:underline cursor-pointer"
+            >
+              {t('footer.privacy')}
+            </button>
+            <span>•</span>
+            <button 
+              type="button" 
+              onClick={() => openComingSoon(t('footer.terms'), t('footer.termsDesc'))}
+              className="hover:text-[#1E3A2B] hover:underline cursor-pointer"
+            >
+              {t('footer.terms')}
+            </button>
+            <span>•</span>
+            <span>{t('footer.builtFor')}</span>
           </div>
         </div>
       </div>
+
+      {/* Info / Coming Soon Modal for Zero Dead Links */}
+      {modalInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 border-2 border-[#D8D2C4] shadow-2xl text-left">
+            <div className="flex items-center justify-between pb-3.5 border-b border-[#D8D2C4] mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-[#1E3A2B] bg-[#EEF5F2] px-2.5 py-1 rounded-full border border-[#C5DDD2]">
+                  {t('footer.comingSoonBadge')}
+                </span>
+                <h3 className="text-lg font-black text-[#1C2B23]">
+                  {modalInfo.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalInfo(null)}
+                className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-[#2B3B32] hover:bg-[#EFECE4] transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-base text-[#2B3B32] leading-relaxed font-medium mb-6">
+              {modalInfo.desc}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setModalInfo(null)}
+              className="w-full min-h-[48px] py-2.5 px-4 rounded-xl bg-[#1E3A2B] hover:bg-[#15291E] text-white font-black text-base shadow-xs transition-colors flex items-center justify-center cursor-pointer"
+            >
+              <span>OK</span>
+            </button>
+          </div>
+        </div>
+      )}
     </footer>
   );
 };
+
+export default Footer;

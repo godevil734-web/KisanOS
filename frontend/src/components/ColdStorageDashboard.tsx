@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
 import { ColdStorage, StorageBooking } from '../types';
 import { 
@@ -18,6 +19,7 @@ import {
 
 export const ColdStorageDashboard: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [facilities, setFacilities] = useState<ColdStorage[]>([]);
   const [selectedStorage, setSelectedStorage] = useState<ColdStorage | null>(null);
   const [bookings, setBookings] = useState<StorageBooking[]>([]);
@@ -113,7 +115,7 @@ export const ColdStorageDashboard: React.FC = () => {
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs font-semibold text-slate-400 block">Total Capacity</span>
+              <span className="text-xs font-semibold text-slate-400 block">{t('storage.totalCapacity')}</span>
               <div className="text-2xl font-extrabold text-slate-900 mt-1">
                 {selectedStorage.totalCapacityTons.toLocaleString()} T
               </div>
@@ -121,7 +123,7 @@ export const ColdStorageDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs font-semibold text-slate-400 block">Occupied Capacity</span>
+              <span className="text-xs font-semibold text-slate-400 block">{t('storage.occupied')}</span>
               <div className="text-2xl font-extrabold text-cyan-800 mt-1">
                 {selectedStorage.occupiedCapacityTons.toLocaleString()} T
               </div>
@@ -129,7 +131,7 @@ export const ColdStorageDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs font-semibold text-slate-400 block">Available Free Space</span>
+              <span className="text-xs font-semibold text-slate-400 block">{t('storage.available')}</span>
               <div className="text-2xl font-extrabold text-emerald-700 mt-1">
                 {selectedStorage.availableCapacityTons.toLocaleString()} T
               </div>
@@ -137,7 +139,7 @@ export const ColdStorageDashboard: React.FC = () => {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs font-semibold text-slate-400 block">Facility Utilization</span>
+              <span className="text-xs font-semibold text-slate-400 block">{t('storage.capacityTracker')}</span>
               <div className="text-2xl font-extrabold text-purple-700 mt-1">
                 {selectedStorage.utilizationPercent}%
               </div>

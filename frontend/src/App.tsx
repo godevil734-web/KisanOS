@@ -188,10 +188,116 @@ const MainApp: React.FC = () => {
               />
             )}
             {(pathname === '/list-crop' || pathname === '/dashboard' || pathname === '/farmer') && (
-              <FarmerDashboard />
+              user && user.role !== 'farmer' && user.role !== 'admin' ? (
+                <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-amber-200 p-8 shadow-xs text-center space-y-4">
+                  <div className="h-16 w-16 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl">
+                    🌾
+                  </div>
+                  <div>
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                      किसान पोर्टल • Farmer Portal Only
+                    </span>
+                    <h2 className="text-2xl font-black text-slate-900 mt-3">
+                      किसान डैशबोर्ड (Farmer Dashboard)
+                    </h2>
+                    <p className="text-sm text-slate-600 mt-2 max-w-lg mx-auto">
+                      आप वर्तमान में <strong>{user.name} ({user.role === 'buyer' || user.role === 'dealer' ? 'थोक खरीदार / Buyer' : user.role})</strong> के रूप में लॉगिन हैं। यह अनुभाग केवल पंजीकृत किसानों के लिए है।
+                    </p>
+                  </div>
+                  <div className="pt-2 flex flex-wrap justify-center gap-3">
+                    <button
+                      onClick={() => navigate(user.role === 'aggregator' ? '/aggregator' : '/buyer')}
+                      className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-sm shadow-xs transition-colors cursor-pointer"
+                    >
+                      {user.role === 'aggregator' ? '📦 एग्रीगेटर पोर्टल पर जाएं' : '🏢 अपने खरीदार पोर्टल पर जाएं'}
+                    </button>
+                    <button
+                      onClick={() => navigate('/')}
+                      className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors cursor-pointer"
+                    >
+                      होम पेज (Home)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <FarmerDashboard />
+              )
             )}
-            {pathname === '/aggregator' && <AggregatorDashboard />}
-            {(pathname === '/buyer' || pathname === '/dealer') && <BuyerDashboard />}
+
+            {pathname === '/aggregator' && (
+              user && user.role !== 'aggregator' && user.role !== 'admin' ? (
+                <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-amber-200 p-8 shadow-xs text-center space-y-4">
+                  <div className="h-16 w-16 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl">
+                    📦
+                  </div>
+                  <div>
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                      पहुंच प्रतिबंधित • Aggregator Hub Only
+                    </span>
+                    <h2 className="text-2xl font-black text-slate-900 mt-3">
+                      संग्राहक हब (Aggregator Hub)
+                    </h2>
+                    <p className="text-sm text-slate-600 mt-2 max-w-lg mx-auto">
+                      आप <strong>{user.name} ({user.role === 'farmer' ? 'किसान / Farmer' : user.role})</strong> के रूप में लॉगिन हैं। यह पोर्टल केवल स्थानीय संग्रहकर्ताओं व FPO ऑपरेटरों के लिए आरक्षित है।
+                    </p>
+                  </div>
+                  <div className="pt-2 flex flex-wrap justify-center gap-3">
+                    <button
+                      onClick={() => navigate(user.role === 'farmer' ? '/dashboard' : '/buyer')}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-sm shadow-xs transition-colors cursor-pointer"
+                    >
+                      {user.role === 'farmer' ? '🌾 अपने किसान डैशबोर्ड पर जाएं' : '🏢 खरीदार पोर्टल पर जाएं'}
+                    </button>
+                    <button
+                      onClick={() => navigate('/')}
+                      className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors cursor-pointer"
+                    >
+                      होम पेज (Home)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <AggregatorDashboard />
+              )
+            )}
+
+            {(pathname === '/buyer' || pathname === '/dealer') && (
+              user && user.role !== 'buyer' && user.role !== 'dealer' && user.role !== 'admin' ? (
+                <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-rose-200 p-8 shadow-xs text-center space-y-4 animate-fadeIn">
+                  <div className="h-16 w-16 mx-auto rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center text-3xl">
+                    🚫
+                  </div>
+                  <div>
+                    <span className="text-xs font-black uppercase tracking-wider text-rose-700 bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
+                      पहुंच प्रतिबंधित • Access Restricted
+                    </span>
+                    <h2 className="text-2xl font-black text-slate-900 mt-3">
+                      थोक खरीदार पोर्टल (Buyer Portal)
+                    </h2>
+                    <p className="text-sm text-slate-600 mt-2 max-w-lg mx-auto">
+                      आप वर्तमान में <strong>{user.name} ({user.role === 'farmer' ? 'किसान / Farmer' : user.role})</strong> के रूप में लॉगिन हैं। थोक खरीदार व डीलर पोर्टल केवल सत्यापित खरीदारों और खाद्य प्रसंस्करण कंपनियों के लिए उपलब्ध है।
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex flex-wrap justify-center gap-3">
+                    <button
+                      onClick={() => navigate('/dashboard')}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-sm shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>🌾 अपने किसान डैशबोर्ड पर जाएं (Go to Farmer Dashboard)</span>
+                    </button>
+                    <button
+                      onClick={() => navigate('/')}
+                      className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors cursor-pointer"
+                    >
+                      होम पेज (Home)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <BuyerDashboard />
+              )
+            )}
             {pathname === '/storage' && <ColdStorageDashboard />}
             {pathname === '/transport' && <TransporterDashboard />}
             {pathname === '/intelligence' && <MarketIntelligenceDashboard />}

@@ -249,151 +249,134 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
 
-                {/* Role Switcher Menu (Farmer, Aggregator, Buyer, and Admin Separate) */}
-                <div className="relative" ref={roleSwitcherRef}>
-                  <button
-                    type="button"
-                    onClick={() => setRoleSwitcherOpen(!roleSwitcherOpen)}
-                    className={`min-h-[44px] px-3 py-1.5 rounded-xl border flex items-center gap-2 transition-all cursor-pointer shadow-2xs ${
-                      user.role === 'admin'
-                        ? 'bg-slate-900 text-white border-slate-700 hover:bg-slate-800'
-                        : 'bg-white hover:bg-[#FAF9F5] text-[#26332C] border-[#D8D2C4]'
-                    }`}
-                    aria-label="Switch Persona"
-                    title={isHi ? 'भूमिका बदलें' : 'Switch Persona'}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs font-black">
-                      <span>{user.role === 'farmer' ? '🌾' : user.role === 'aggregator' ? '📦' : (user.role === 'buyer' || user.role === 'dealer') ? '🏢' : user.role === 'admin' ? '🛡️' : '👤'}</span>
-                      <span className="capitalize">{t(`roles.${user.role}`) || user.role}</span>
-                    </div>
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${roleSwitcherOpen ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {roleSwitcherOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-white border border-[#E5E0D5] shadow-xl p-2 z-50 animate-in fade-in duration-150">
-                      <div className="px-3 py-1.5 text-[10px] font-black text-[#71856B] uppercase tracking-wider border-b border-[#F0ECE1] mb-1.5 flex items-center justify-between">
-                        <span>{isHi ? 'भूमिका बदलें' : 'Switch Persona'}</span>
-                        <span className="text-[10px] text-stone-600 font-bold uppercase">1-Click</span>
+                {/* Role Indicator: Static Badge for Regular Users, Switcher ONLY for SuperAdmin */}
+                {user.role === 'admin' ? (
+                  <div className="relative" ref={roleSwitcherRef}>
+                    <button
+                      type="button"
+                      onClick={() => setRoleSwitcherOpen(!roleSwitcherOpen)}
+                      className="min-h-[44px] px-3 py-1.5 rounded-xl border flex items-center gap-2 transition-all cursor-pointer shadow-2xs bg-slate-900 text-white border-slate-700 hover:bg-slate-800"
+                      aria-label="Admin Persona Switcher"
+                      title={isHi ? 'व्यवस्थापक स्विच' : 'Admin Persona Switcher'}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-black">
+                        <span>🛡️</span>
+                        <span>Admin</span>
                       </div>
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${roleSwitcherOpen ? 'rotate-180' : ''}`} />
+                    </button>
 
-                      {/* USER ROLES SECTION */}
-                      <div className="space-y-1 mb-2">
-                        <div className="px-3 text-[10px] font-black uppercase text-stone-600">
-                          {isHi ? 'उपयोगकर्ता भूमिकाएं' : 'User Roles'}
-                        </div>
-                        
-                        {/* Farmer */}
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setRoleSwitcherOpen(false);
-                            await switchRole('farmer');
-                            setCurrentTab('dashboard');
-                            handleNav('/dashboard');
-                          }}
-                          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-                            user.role === 'farmer'
-                              ? 'bg-[#EEF5F2] text-[#315C45] font-black'
-                              : 'text-[#26332C] hover:bg-[#FAF9F5]'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">🌾</span>
-                            <div>
-                              <div className="font-extrabold">{isHi ? 'किसान' : 'Farmer'}</div>
-                              <div className="text-[10px] text-stone-600 font-medium">{isHi ? 'फसल लिस्टिंग और मंडी भाव' : 'Crop listings & mandi rates'}</div>
-                            </div>
-                          </div>
-                          {user.role === 'farmer' && <Check className="w-4 h-4 text-[#315C45]" />}
-                        </button>
-
-                        {/* Aggregator */}
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setRoleSwitcherOpen(false);
-                            await switchRole('aggregator');
-                            setCurrentTab('aggregator');
-                            handleNav('/aggregator');
-                          }}
-                          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-                            user.role === 'aggregator'
-                              ? 'bg-[#EEF5F2] text-[#315C45] font-black'
-                              : 'text-[#26332C] hover:bg-[#FAF9F5]'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">📦</span>
-                            <div>
-                              <div className="font-extrabold">{isHi ? 'एग्रीगेटर' : 'Aggregator'}</div>
-                              <div className="text-[10px] text-stone-600 font-medium">{isHi ? 'लॉट पूलिंग और अनुबंध' : 'Batch pooling & dispatch'}</div>
-                            </div>
-                          </div>
-                          {user.role === 'aggregator' && <Check className="w-4 h-4 text-[#315C45]" />}
-                        </button>
-
-                        {/* Buyer / Dealer */}
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setRoleSwitcherOpen(false);
-                            await switchRole('buyer');
-                            setCurrentTab('buyer');
-                            handleNav('/buyer');
-                          }}
-                          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-                            (user.role === 'buyer' || user.role === 'dealer')
-                              ? 'bg-[#EEF5F2] text-[#315C45] font-black'
-                              : 'text-[#26332C] hover:bg-[#FAF9F5]'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-base">🏢</span>
-                            <div>
-                              <div className="font-extrabold">{isHi ? 'खरीदार (Buyer)' : 'Buyer'}</div>
-                              <div className="text-[10px] text-stone-600 font-medium">{isHi ? 'थोक मांग और अनुबंध' : 'Factory supply & orders'}</div>
-                            </div>
-                          </div>
-                          {(user.role === 'buyer' || user.role === 'dealer') && <Check className="w-4 h-4 text-[#315C45]" />}
-                        </button>
-                      </div>
-
-                      {/* SEPARATE ADMIN SECTION */}
-                      <div className="pt-2 border-t border-[#EAE5D8]">
-                        <div className="px-3 mb-1 text-[10px] font-black uppercase text-slate-700 flex items-center justify-between">
-                          <span>{isHi ? 'प्रशासन (Admin Section)' : 'Admin Section'}</span>
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-900 text-emerald-400 font-mono">PORTAL</span>
+                    {roleSwitcherOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-white border border-[#E5E0D5] shadow-xl p-2 z-50 animate-in fade-in duration-150">
+                        <div className="px-3 py-1.5 text-[10px] font-black text-[#71856B] uppercase tracking-wider border-b border-[#F0ECE1] mb-1.5 flex items-center justify-between">
+                          <span>{isHi ? 'भूमिका बदलें' : 'Switch Persona'}</span>
+                          <span className="text-[10px] text-stone-600 font-bold uppercase">Admin Only</span>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setRoleSwitcherOpen(false);
-                            await switchRole('admin');
-                            setCurrentTab('admin');
-                            handleNav('/admin');
-                          }}
-                          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
-                            user.role === 'admin'
-                              ? 'bg-slate-900 text-white font-black shadow-xs'
-                              : 'bg-slate-100 hover:bg-slate-200 text-slate-900'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className={`w-4 h-4 ${user.role === 'admin' ? 'text-emerald-400' : 'text-slate-800'}`} />
-                            <div>
-                              <div className="font-extrabold">{isHi ? 'सुपरएडमिन कंसोल' : 'Admin Console'}</div>
-                              <div className={`text-[10px] ${user.role === 'admin' ? 'text-slate-400' : 'text-slate-700'}`}>
-                                {isHi ? 'स्वीकृति और सुरक्षा ऑडिट' : 'Approvals & security logs'}
+                        {/* USER ROLES SECTION */}
+                        <div className="space-y-1 mb-2">
+                          <div className="px-3 text-[10px] font-black uppercase text-stone-600">
+                            {isHi ? 'उपयोगकर्ता भूमिकाएं' : 'User Roles'}
+                          </div>
+                          
+                          {/* Farmer */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setRoleSwitcherOpen(false);
+                              await switchRole('farmer');
+                              setCurrentTab('dashboard');
+                              handleNav('/dashboard');
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">🌾</span>
+                              <div>
+                                <div className="font-extrabold">{isHi ? 'किसान' : 'Farmer'}</div>
+                                <div className="text-[10px] text-stone-600 font-medium">{isHi ? 'फसल लिस्टिंग और मंडी भाव' : 'Crop listings & mandi rates'}</div>
                               </div>
                             </div>
-                          </div>
-                          {user.role === 'admin' && <Check className="w-4 h-4 text-emerald-400" />}
-                        </button>
+                          </button>
+
+                          {/* Aggregator */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setRoleSwitcherOpen(false);
+                              await switchRole('aggregator');
+                              setCurrentTab('aggregator');
+                              handleNav('/aggregator');
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">📦</span>
+                              <div>
+                                <div className="font-extrabold">{isHi ? 'एग्रीगेटर' : 'Aggregator'}</div>
+                                <div className="text-[10px] text-stone-600 font-medium">{isHi ? 'लॉट पूलिंग और अनुबंध' : 'Batch pooling & dispatch'}</div>
+                              </div>
+                            </div>
+                          </button>
+
+                          {/* Buyer / Dealer */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setRoleSwitcherOpen(false);
+                              await switchRole('buyer');
+                              setCurrentTab('buyer');
+                              handleNav('/buyer');
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">🏢</span>
+                              <div>
+                                <div className="font-extrabold">{isHi ? 'खरीदार (Buyer)' : 'Buyer'}</div>
+                                <div className="text-[10px] text-stone-600 font-medium">{isHi ? 'थोक मांग और अनुबंध' : 'Factory supply & orders'}</div>
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+
+                        {/* SEPARATE ADMIN SECTION */}
+                        <div className="pt-2 border-t border-[#EAE5D8]">
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setRoleSwitcherOpen(false);
+                              await switchRole('admin');
+                              setCurrentTab('admin');
+                              handleNav('/admin');
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between bg-slate-900 text-white font-black shadow-xs cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                              <div>
+                                <div className="font-extrabold">{isHi ? 'सुपरएडमिन कंसोल' : 'Admin Console'}</div>
+                                <div className="text-[10px] text-slate-300 font-medium">{isHi ? 'अनुमोदन और ऑडिट लॉग' : 'Approvals & security logs'}</div>
+                              </div>
+                            </div>
+                            <Check className="w-4 h-4 text-emerald-400" />
+                          </button>
+                        </div>
                       </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Regular Logged-In User: Verified, Static Role Pill (No switching into Buyer/Admin) */
+                  <div 
+                    className="min-h-[44px] px-3.5 py-1.5 rounded-xl border flex items-center gap-2 bg-white text-[#26332C] border-[#D8D2C4] shadow-2xs select-none"
+                    title={isHi ? `सत्यापित खाता: ${t(`roles.${user.role}`) || user.role}` : `Verified Account: ${t(`roles.${user.role}`) || user.role}`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-black">
+                      <span>{user.role === 'farmer' ? '🌾' : user.role === 'aggregator' ? '📦' : (user.role === 'buyer' || user.role === 'dealer') ? '🏢' : '👤'}</span>
+                      <span className="capitalize">{t(`roles.${user.role}`) || user.role}</span>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {/* Logged In: Logout Button */}
                 <button
@@ -525,94 +508,78 @@ export const Navbar: React.FC<NavbarProps> = ({
                   )}
                 </div>
 
-                {/* Mobile Role Switcher (Farmer, Aggregator, Buyer, and Admin Separate) */}
-                <div className="p-3 rounded-2xl bg-[#F7F5EF] border border-[#E5E0D5] space-y-2.5">
-                  <div className="flex items-center justify-between text-xs font-black text-[#26332C]">
-                    <span>{isHi ? 'भूमिका बदलें (Switch Persona)' : 'Switch Persona'}</span>
-                    <span className="text-[10px] font-bold text-stone-600 uppercase">1-Click</span>
-                  </div>
-                  
-                  {/* User Roles */}
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setMobileMenuOpen(false);
-                        await switchRole('farmer');
-                        setCurrentTab('dashboard');
-                        handleNav('/dashboard');
-                      }}
-                      className={`py-2 px-1.5 rounded-xl text-xs font-extrabold flex flex-col items-center gap-1 border transition-all ${
-                        user.role === 'farmer'
-                          ? 'bg-[#315C45] text-white border-[#315C45]'
-                          : 'bg-white text-[#26332C] border-[#D8D2C4]'
-                      }`}
-                    >
-                      <span className="text-base">🌾</span>
-                      <span>{isHi ? 'किसान' : 'Farmer'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setMobileMenuOpen(false);
-                        await switchRole('aggregator');
-                        setCurrentTab('aggregator');
-                        handleNav('/aggregator');
-                      }}
-                      className={`py-2 px-1.5 rounded-xl text-xs font-extrabold flex flex-col items-center gap-1 border transition-all ${
-                        user.role === 'aggregator'
-                          ? 'bg-[#315C45] text-white border-[#315C45]'
-                          : 'bg-white text-[#26332C] border-[#D8D2C4]'
-                      }`}
-                    >
-                      <span className="text-base">📦</span>
-                      <span>{isHi ? 'एग्रीगेटर' : 'Aggregator'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setMobileMenuOpen(false);
-                        await switchRole('buyer');
-                        setCurrentTab('buyer');
-                        handleNav('/buyer');
-                      }}
-                      className={`py-2 px-1.5 rounded-xl text-xs font-extrabold flex flex-col items-center gap-1 border transition-all ${
-                        (user.role === 'buyer' || user.role === 'dealer')
-                          ? 'bg-[#315C45] text-white border-[#315C45]'
-                          : 'bg-white text-[#26332C] border-[#D8D2C4]'
-                      }`}
-                    >
-                      <span className="text-base">🏢</span>
-                      <span>{isHi ? 'खरीदार' : 'Buyer'}</span>
-                    </button>
-                  </div>
-
-                  {/* Admin Section Separate */}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setMobileMenuOpen(false);
-                      await switchRole('admin');
-                      setCurrentTab('admin');
-                      handleNav('/admin');
-                    }}
-                    className={`w-full py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-between border transition-all ${
-                      user.role === 'admin'
-                        ? 'bg-slate-900 text-white border-slate-900'
-                        : 'bg-slate-100 text-slate-900 border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className={`w-4 h-4 ${user.role === 'admin' ? 'text-emerald-400' : 'text-slate-700'}`} />
-                      <span>{isHi ? 'व्यवस्थापक कंसोल (Admin Section)' : 'Admin Console (Admin Section)'}</span>
+                {/* Mobile Admin Section (Admin Only) */}
+                {user.role === 'admin' && (
+                  <div className="p-3 rounded-2xl bg-[#F7F5EF] border border-[#E5E0D5] space-y-2.5">
+                    <div className="flex items-center justify-between text-xs font-black text-[#26332C]">
+                      <span>{isHi ? 'भूमिका बदलें (Switch Persona)' : 'Switch Persona'}</span>
+                      <span className="text-[10px] font-bold text-stone-600 uppercase">Admin Only</span>
                     </div>
-                    <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">
-                      Admin
-                    </span>
-                  </button>
-                </div>
+                    
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setMobileMenuOpen(false);
+                          await switchRole('farmer');
+                          setCurrentTab('dashboard');
+                          handleNav('/dashboard');
+                        }}
+                        className="py-2 px-1.5 rounded-xl text-xs font-extrabold flex flex-col items-center gap-1 border bg-white text-[#26332C] border-[#D8D2C4]"
+                      >
+                        <span className="text-base">🌾</span>
+                        <span>{isHi ? 'किसान' : 'Farmer'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setMobileMenuOpen(false);
+                          await switchRole('aggregator');
+                          setCurrentTab('aggregator');
+                          handleNav('/aggregator');
+                        }}
+                        className="py-2 px-1.5 rounded-xl text-xs font-extrabold flex flex-col items-center gap-1 border bg-white text-[#26332C] border-[#D8D2C4]"
+                      >
+                        <span className="text-base">📦</span>
+                        <span>{isHi ? 'एग्रीगेटर' : 'Aggregator'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setMobileMenuOpen(false);
+                          await switchRole('buyer');
+                          setCurrentTab('buyer');
+                          handleNav('/buyer');
+                        }}
+                        className="py-2 px-1.5 rounded-xl text-xs font-extrabold flex flex-col items-center gap-1 border bg-white text-[#26332C] border-[#D8D2C4]"
+                      >
+                        <span className="text-base">🏢</span>
+                        <span>{isHi ? 'खरीदार' : 'Buyer'}</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setMobileMenuOpen(false);
+                        await switchRole('admin');
+                        setCurrentTab('admin');
+                        handleNav('/admin');
+                      }}
+                      className="w-full py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-between border bg-slate-900 text-white border-slate-900"
+                    >
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        <span>{isHi ? 'व्यवस्थापक कंसोल' : 'Admin Console'}</span>
+                      </div>
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">
+                        Admin
+                      </span>
+                    </button>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <button

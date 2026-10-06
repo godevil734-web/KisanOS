@@ -18,7 +18,8 @@ import {
   Boxes, 
   Globe,
   KeyRound,
-  Shield
+  Shield,
+  Building2
 } from 'lucide-react';
 
 interface LoginPageProps {
@@ -27,14 +28,87 @@ interface LoginPageProps {
   onNavigate: (path: string) => void;
 }
 
+export type StakeholderRole = 'farmer' | 'aggregator' | 'dealer';
 type AuthTab = 'email' | 'phone';
+
+const ROLE_DETAILS: Record<StakeholderRole, {
+  titleEn: string;
+  titleHi: string;
+  icon: string;
+  badgeEn: string;
+  badgeHi: string;
+  descEn: string;
+  descHi: string;
+  emailPlaceholder: string;
+  emailLabelEn: string;
+  emailLabelHi: string;
+  submitEn: string;
+  submitHi: string;
+  defaultTab: AuthTab;
+}> = {
+  farmer: {
+    titleEn: 'Farmer Portal',
+    titleHi: 'किसान पोर्टल',
+    icon: '🌾',
+    badgeEn: 'Direct Mandi Discovery',
+    badgeHi: 'सीधी मंडी खोज',
+    descEn: 'Instant OTP login for crop listings, MSP updates & net mandi payments.',
+    descHi: 'फसल लिस्टिंग, मंडी भाव और त्वरित भुगतान के लिए ओटीपी लॉगिन।',
+    emailPlaceholder: '9876543210 or farmer@example.com',
+    emailLabelEn: 'Mobile Number or Email',
+    emailLabelHi: 'मोबाइल नंबर या ईमेल',
+    submitEn: 'Sign In as Farmer →',
+    submitHi: 'किसान पोर्टल में प्रवेश करें →',
+    defaultTab: 'phone',
+  },
+  aggregator: {
+    titleEn: 'Aggregator Hub',
+    titleHi: 'आढ़ती / संकलन केंद्र',
+    icon: '📦',
+    badgeEn: 'Batch Pooling & Logistics',
+    badgeHi: 'लॉट पूलिंग और लॉजिस्टिक्स',
+    descEn: 'Consolidate farm harvests, book cold storage & dispatch scheduled transit.',
+    descHi: 'गाँव स्तर पर फसल एकत्रीकरण, कोल्ड स्टोरेज व परिवहन समन्वय।',
+    emailPlaceholder: 'aggregator@kisanconnect.in or mobile',
+    emailLabelEn: 'Business Email or Mobile',
+    emailLabelHi: 'बिजनेस ईमेल या मोबाइल नंबर',
+    submitEn: 'Sign In as Aggregator →',
+    submitHi: 'आढ़ती हब में प्रवेश करें →',
+    defaultTab: 'email',
+  },
+  dealer: {
+    titleEn: 'Bulk Dealer & Buyer',
+    titleHi: 'थोक खरीदार व डीलर',
+    icon: '🏢',
+    badgeEn: 'Wholesale Procurement',
+    badgeHi: 'थोक खरीद व अनुबंध',
+    descEn: 'Purchase verified truckload batches directly from collection hubs.',
+    descHi: 'प्रमाणित गुणवत्ता वाली थोक फसलों के अनुबंध व लॉट खरीद।',
+    emailPlaceholder: 'dealer@freshbites.in or mobile',
+    emailLabelEn: 'Company Email or Mobile',
+    emailLabelHi: 'कंपनी ईमेल या मोबाइल नंबर',
+    submitEn: 'Sign In as Bulk Dealer →',
+    submitHi: 'थोक डीलर के रूप में लॉगिन करें →',
+    defaultTab: 'email',
+  },
+};
 
 export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigate }) => {
   const { loginWithOtp, sendOtp, loginWithPassword, googleInit, googleVerifyOtp, googleRegister, googleResendOtp } = useAuth();
   const { t, language, setLanguage } = useLanguage();
   const isHi = language === 'hi';
 
-  const [authTab, setAuthTab] = useState<AuthTab>('email');
+  // Read URL params for role pre-selection (?role=farmer|aggregator|dealer|buyer)
+  const queryParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const initialRoleParam = queryParams?.get('role') || queryParams?.get('tab');
+  const initialRole: StakeholderRole = initialRoleParam === 'aggregator'
+    ? 'aggregator'
+    : (initialRoleParam === 'dealer' || initialRoleParam === 'buyer')
+      ? 'dealer'
+      : 'farmer';
+
+  const [selectedRole, setSelectedRole] = useState<StakeholderRole>(initialRole);
+  const [authTab, setAuthTab] = useState<AuthTab>(ROLE_DETAILS[initialRole].defaultTab);
 
   // Email form state
   const [emailIdentifier, setEmailIdentifier] = useState('');
@@ -62,7 +136,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     maskedEmail: string;
     demoOtp?: string;
   } | null>(null);
-  const [googleRegisterRole, setGoogleRegisterRole] = useState<'farmer' | 'aggregator' | 'dealer'>('farmer');
+  const [googleRegisterRole, setGoogleRegisterRole] = useState<'farmer' | 'aggregator' | 'dealer'>(initialRole);
   const [googleRegisterPassword, setGoogleRegisterPassword] = useState('');
   const [googleOtpCode, setGoogleOtpCode] = useState('123456');
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -79,6 +153,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     if (role === 'dealer' || role === 'buyer') return '/buyer';
     if (role === 'admin') return '/admin';
     return '/dashboard';
+  };
+
+  // Switch stakeholder role and adapt default authentication method
+  const handleRoleSelect = (role: StakeholderRole) => {
+    setSelectedRole(role);
+    setGoogleRegisterRole(role);
+    setAuthTab(ROLE_DETAILS[role].defaultTab);
+    setErrorMsg(null);
+    setSuccessMsg(null);
   };
 
   // Cooldown effect for resend email OTP
@@ -101,13 +184,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     setSuccessMsg(null);
 
     try {
-      // Normal login without hardcoding expectedRole allows Farmer/Buyer/Aggregator
-      const loggedUser = await loginWithPassword(emailIdentifier.trim(), password);
-      onSuccess(getTargetUrl(loggedUser?.role || 'farmer'));
+      // Pass selectedRole so backend validates credentials against the chosen persona
+      const loggedUser = await loginWithPassword(emailIdentifier.trim(), password, selectedRole);
+      onSuccess(getTargetUrl(loggedUser?.role || selectedRole));
     } catch (err: any) {
       console.error('[Login] Error:', err);
       setErrorMsg(
-        err?.message || (isHi ? 'अमान्य ईमेल या पासवर्ड।' : 'Invalid email or password.')
+        err?.message || (isHi ? 'अमान्य क्रेडेंशियल्स।' : 'Invalid credentials.')
       );
     } finally {
       setLoading(false);
@@ -156,8 +239,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     setLoading(true);
     setErrorMsg(null);
     try {
-      const loggedUser = await loginWithOtp(cleanPhone, otpCode.trim());
-      onSuccess(getTargetUrl(loggedUser?.role || 'farmer'));
+      const loggedUser = await loginWithOtp(cleanPhone, otpCode.trim(), selectedRole);
+      onSuccess(getTargetUrl(loggedUser?.role || selectedRole));
     } catch (err: any) {
       setErrorMsg(err.message || (isHi ? 'लॉगिन विफल रहा।' : 'Login failed. Invalid or expired OTP.'));
     } finally {
@@ -408,19 +491,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
         <div className="lg:col-span-6 p-6 sm:p-10 lg:p-12 flex flex-col justify-between bg-[#0B1711] relative">
           
           <div>
-            {/* Top Row: Language Selector Pill */}
-            <div className="flex items-center justify-between mb-6">
+            {/* Top Row: Welcome Header & Language Selector Pill */}
+            <div className="flex items-start justify-between gap-3 mb-5">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                   {isHi ? 'वापसी पर स्वागत है' : 'Welcome back'}
                 </h1>
                 <p className="text-xs sm:text-sm text-emerald-200/60 mt-1 font-medium">
-                  {isHi ? 'अपने किसानकनेक्ट खाते में साइन इन करें' : 'Sign in to your KisanConnect account to continue.'}
+                  {isHi ? 'लॉगिन करने के लिए अपनी भूमिका चुनें' : 'Select your role to sign in to KisanConnect.'}
                 </p>
               </div>
 
               {/* Language Switcher Pill */}
-              <div className="inline-flex items-center p-1 rounded-full bg-[#08150E] border border-emerald-900/60 text-xs font-bold">
+              <div className="inline-flex items-center p-1 rounded-full bg-[#08150E] border border-emerald-900/60 text-xs font-bold shrink-0">
                 <button
                   type="button"
                   onClick={() => setLanguage('en')}
@@ -443,6 +526,93 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                 >
                   हिंदी
                 </button>
+              </div>
+            </div>
+
+            {/* STAKEHOLDER ROLE SELECTOR: Farmer, Aggregator, Bulk Dealer */}
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] sm:text-[11px] font-mono uppercase tracking-wider text-emerald-300/80 font-bold">
+                  {isHi ? 'खाता प्रकार चुनें (भूमिका):' : 'SELECT ACCOUNT ROLE:'}
+                </span>
+                <span className="text-[10px] sm:text-[11px] font-mono text-emerald-400 font-bold">
+                  {isHi ? ROLE_DETAILS[selectedRole].badgeHi : ROLE_DETAILS[selectedRole].badgeEn}
+                </span>
+              </div>
+
+              {/* 3 Role Selection Tabs */}
+              <div className="grid grid-cols-3 gap-2 p-1.5 bg-[#08150E] rounded-2xl border border-emerald-900/60 shadow-inner">
+                
+                {/* Farmer Option */}
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('farmer')}
+                  className={`min-h-[50px] py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
+                    selectedRole === 'farmer'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/80 border border-emerald-400/40 ring-1 ring-emerald-400/30'
+                      : 'text-emerald-300/70 hover:text-white hover:bg-emerald-950/40'
+                  }`}
+                >
+                  <span className="text-base leading-none">🌾</span>
+                  <span className="tracking-tight text-center">{isHi ? 'किसान' : 'Farmer'}</span>
+                  {selectedRole === 'farmer' && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0B1711] shadow-[0_0_8px_#34d399]" />
+                  )}
+                </button>
+
+                {/* Aggregator Option */}
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('aggregator')}
+                  className={`min-h-[50px] py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
+                    selectedRole === 'aggregator'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/80 border border-emerald-400/40 ring-1 ring-emerald-400/30'
+                      : 'text-emerald-300/70 hover:text-white hover:bg-emerald-950/40'
+                  }`}
+                >
+                  <span className="text-base leading-none">📦</span>
+                  <span className="tracking-tight text-center">{isHi ? 'आढ़ती' : 'Aggregator'}</span>
+                  {selectedRole === 'aggregator' && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0B1711] shadow-[0_0_8px_#34d399]" />
+                  )}
+                </button>
+
+                {/* Bulk Dealer Option */}
+                <button
+                  type="button"
+                  onClick={() => handleRoleSelect('dealer')}
+                  className={`min-h-[50px] py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
+                    selectedRole === 'dealer'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/80 border border-emerald-400/40 ring-1 ring-emerald-400/30'
+                      : 'text-emerald-300/70 hover:text-white hover:bg-emerald-950/40'
+                  }`}
+                >
+                  <span className="text-base leading-none">🏢</span>
+                  <span className="tracking-tight text-center">{isHi ? 'थोक डीलर' : 'Bulk Dealer'}</span>
+                  {selectedRole === 'dealer' && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0B1711] shadow-[0_0_8px_#34d399]" />
+                  )}
+                </button>
+
+              </div>
+
+              {/* Context Banner: Explains the selected portal persona */}
+              <div className="mt-2.5 px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-900/60 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-2 text-emerald-200 min-w-0">
+                  <span className="text-sm shrink-0">{ROLE_DETAILS[selectedRole].icon}</span>
+                  <div className="min-w-0">
+                    <span className="font-bold text-white">
+                      {isHi ? ROLE_DETAILS[selectedRole].titleHi : ROLE_DETAILS[selectedRole].titleEn}
+                    </span>
+                    <span className="text-emerald-400/40 mx-1.5 hidden sm:inline">•</span>
+                    <span className="text-emerald-300/70 text-[10px] hidden sm:inline truncate">
+                      {isHi ? ROLE_DETAILS[selectedRole].descHi : ROLE_DETAILS[selectedRole].descEn}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 shrink-0 font-bold bg-emerald-900/40 px-2 py-0.5 rounded-full border border-emerald-800/40 ml-2">
+                  {selectedRole === 'farmer' ? (isHi ? 'ओटीपी अनुशंसित' : 'OTP Preferred') : (isHi ? 'पासवर्ड / ओटीपी' : 'Password / OTP')}
+                </span>
               </div>
             </div>
 
@@ -589,7 +759,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
             ) : (
               <>
                 {/* 1. Continue with Google Button */}
-                <div className="mb-5">
+                <div className="mb-4">
                   <GoogleAuthButton 
                     onSuccess={handleGoogleSuccess} 
                     onError={(err) => setErrorMsg(err)} 
@@ -597,32 +767,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                 </div>
 
                 {/* Divider: OR CONTINUE WITH */}
-                <div className="relative flex items-center justify-center mb-6">
+                <div className="relative flex items-center justify-center mb-5">
                   <div className="border-t border-emerald-900/60 w-full" />
                   <span className="bg-[#0B1711] px-3 text-[11px] font-mono tracking-widest text-emerald-300/50 uppercase whitespace-nowrap">
-                    {isHi ? 'या इनके माध्यम से साइन इन करें' : 'OR CONTINUE WITH'}
+                    {isHi ? 'या क्रेडेंशियल दर्ज करें' : 'OR CONTINUE WITH'}
                   </span>
                   <div className="border-t border-emerald-900/60 w-full" />
                 </div>
 
-                {/* 2. Tabs: [ Email Login ] [ Phone / OTP ] */}
-                <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#08150E] rounded-2xl border border-emerald-900/60 mb-6">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthTab('email');
-                      setErrorMsg(null);
-                    }}
-                    className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                      authTab === 'email'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-emerald-300/70 hover:text-white'
-                    }`}
-                  >
-                    <Mail className="w-4 h-4" />
-                    <span>{isHi ? 'ईमेल लॉगिन' : 'Email Login'}</span>
-                  </button>
-
+                {/* 2. Method Tabs: [ Email Login ] [ Phone / OTP ] */}
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-[#08150E] rounded-2xl border border-emerald-900/60 mb-5">
                   <button
                     type="button"
                     onClick={() => {
@@ -637,15 +791,34 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                   >
                     <Phone className="w-4 h-4" />
                     <span>{isHi ? 'मोबाइल / ओटीपी' : 'Phone / OTP'}</span>
+                    {selectedRole === 'farmer' && (
+                      <span className="text-[9px] font-mono bg-emerald-900/80 text-emerald-200 px-1.5 py-0.5 rounded">FAST</span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthTab('email');
+                      setErrorMsg(null);
+                    }}
+                    className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      authTab === 'email'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-emerald-300/70 hover:text-white'
+                    }`}
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>{isHi ? 'ईमेल व पासवर्ड' : 'Email & Password'}</span>
                   </button>
                 </div>
 
-                {/* 3. Form: EMAIL LOGIN */}
+                {/* 3. Form: EMAIL / PASSWORD LOGIN */}
                 {authTab === 'email' && (
                   <form onSubmit={handleEmailSubmit} className="space-y-4">
                     <div>
                       <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-2">
-                        {isHi ? 'ईमेल या मोबाइल नंबर' : 'EMAIL ADDRESS'}
+                        {isHi ? ROLE_DETAILS[selectedRole].emailLabelHi : ROLE_DETAILS[selectedRole].emailLabelEn}
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-emerald-400/60">
@@ -655,7 +828,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                           type="text"
                           value={emailIdentifier}
                           onChange={(e) => setEmailIdentifier(e.target.value)}
-                          placeholder="citizen@example.com / username"
+                          placeholder={ROLE_DETAILS[selectedRole].emailPlaceholder}
                           required
                           autoComplete="username"
                           className="w-full min-h-[48px] pl-10 pr-4 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl text-sm font-medium text-white placeholder-emerald-900 outline-none transition-all"
@@ -696,7 +869,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                       disabled={loading}
                       className="w-full min-h-[48px] mt-2 py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
                     >
-                      <span>{loading ? (isHi ? 'साइन इन जारी...' : 'Signing in...') : (isHi ? 'साइन इन करें →' : 'Sign In →')}</span>
+                      <span>
+                        {loading 
+                          ? (isHi ? 'साइन इन जारी...' : 'Signing in...') 
+                          : (isHi ? ROLE_DETAILS[selectedRole].submitHi : ROLE_DETAILS[selectedRole].submitEn)}
+                      </span>
                     </button>
                   </form>
                 )}
@@ -706,7 +883,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                   <form onSubmit={handlePhoneSubmit} className="space-y-4">
                     <div>
                       <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-2">
-                        {isHi ? '10-अंकीय मोबाइल नंबर' : 'PHONE NUMBER'}
+                        {isHi ? '10-अंकीय मोबाइल नंबर' : 'REGISTERED MOBILE NUMBER'}
                       </label>
                       <div className="flex gap-2">
                         <div className="relative flex-1">
@@ -761,7 +938,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                       disabled={loading || otpCode.length !== 6}
                       className="w-full min-h-[48px] mt-2 py-3 px-6 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
                     >
-                      <span>{loading ? (isHi ? 'सत्यापन जारी...' : 'Verifying...') : (isHi ? 'ओटीपी सत्यापित करें और प्रवेश करें →' : 'Verify OTP & Enter →')}</span>
+                      <span>
+                        {loading 
+                          ? (isHi ? 'सत्यापन जारी...' : 'Verifying...') 
+                          : (isHi ? `${ROLE_DETAILS[selectedRole].titleHi} में प्रवेश करें →` : `Verify OTP & Enter as ${ROLE_DETAILS[selectedRole].titleEn} →`)}
+                      </span>
                     </button>
                   </form>
                 )}
@@ -775,19 +956,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
           {/* ========================================================================= */}
           <div className="mt-8 pt-5 border-t border-emerald-900/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
             
-            {/* New to KisanConnect? Create Account */}
+            {/* New to KisanConnect? Create Account with selected role pre-populated */}
             <div className="text-emerald-200/70">
               <span>{isHi ? 'नया खाता बनाना चाहते हैं?' : 'New to KisanConnect?'} </span>
               <button
                 type="button"
-                onClick={() => onNavigate('/signup')}
+                onClick={() => onNavigate(`/signup?role=${selectedRole}`)}
                 className="text-emerald-400 hover:text-emerald-300 font-extrabold underline cursor-pointer ml-1"
               >
-                {isHi ? 'खाता बनाएं' : 'Create account'}
+                {isHi ? `${ROLE_DETAILS[selectedRole].titleHi} खाता बनाएं` : `Register as ${ROLE_DETAILS[selectedRole].titleEn}`}
               </button>
             </div>
 
-            {/* PART 3: Subtle OFFICIAL ACCESS Link */}
+            {/* Subtle OFFICIAL ACCESS Link */}
             <button
               type="button"
               onClick={() => onNavigate('/admin-login')}

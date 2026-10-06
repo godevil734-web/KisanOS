@@ -170,21 +170,6 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onSuccess, onNav
           </button>
         </form>
 
-        {/* Quick Demo Credentials Assistant */}
-        <div className="mt-5 p-3 rounded-xl bg-emerald-950/40 border border-emerald-900/40 text-[11px] text-emerald-300/80 flex items-center justify-between">
-          <span>Demo Admin: <code className="text-white font-mono font-bold">godevil344@gmail.com</code></span>
-          <button
-            type="button"
-            onClick={() => {
-              setAdminEmail('godevil344@gmail.com');
-              setAdminPassword('Aryan@123');
-            }}
-            className="text-emerald-400 hover:text-emerald-300 underline font-semibold ml-2 cursor-pointer"
-          >
-            Auto-fill
-          </button>
-        </div>
-
         {/* Return to Normal Portal Link */}
         <div className="mt-6 pt-5 border-t border-emerald-900/40 text-center">
           <button

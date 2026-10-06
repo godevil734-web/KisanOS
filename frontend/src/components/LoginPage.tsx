@@ -283,23 +283,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     }
   };
 
-  // Demo autofill helper
-  const handleAutoFill = (role: 'farmer' | 'aggregator' | 'buyer') => {
-    setErrorMsg(null);
-    if (role === 'farmer') {
-      setAuthTab('phone');
-      setPhone('9876543210');
-      setOtpCode('123456');
-    } else if (role === 'aggregator') {
-      setAuthTab('email');
-      setEmailIdentifier('vikram@aggregator.in');
-      setPassword('password123');
-    } else if (role === 'buyer') {
-      setAuthTab('email');
-      setEmailIdentifier('dealer@freshbites.in');
-      setPassword('password123');
-    }
-  };
 
   return (
     <div className="min-h-[calc(100vh-72px)] w-full flex items-center justify-center p-3 sm:p-6 lg:p-10 bg-[#07120D] text-white relative overflow-hidden">
@@ -783,36 +766,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                   </form>
                 )}
 
-                {/* 5. 1-Click Fast Demo Credentials Pill Assistant */}
-                <div className="mt-5 p-3 rounded-2xl bg-emerald-950/30 border border-emerald-900/40">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-400/80 mb-1.5 flex items-center justify-between">
-                    <span>{isHi ? 'परीक्षण हेतु 1-क्लिक ऑटो-फिल:' : 'Quick Demo Logins (1-Click):'}</span>
-                    <span className="text-emerald-500">Auto-fills credentials</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleAutoFill('farmer')}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-xs font-semibold border border-emerald-800/40 transition-colors cursor-pointer"
-                    >
-                      🌾 Farmer (Ramesh)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAutoFill('aggregator')}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-xs font-semibold border border-emerald-800/40 transition-colors cursor-pointer"
-                    >
-                      📦 Aggregator (Vikram)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAutoFill('buyer')}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-xs font-semibold border border-emerald-800/40 transition-colors cursor-pointer"
-                    >
-                      🏢 Buyer (FreshBites)
-                    </button>
-                  </div>
-                </div>
               </>
             )}
           </div>

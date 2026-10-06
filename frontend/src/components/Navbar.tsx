@@ -193,27 +193,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleNav('/login')}
-                  className="hidden md:inline-flex min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl text-[#26332C] hover:text-[#315C45] hover:bg-[#EFECE4] font-extrabold text-xs sm:text-sm transition-colors cursor-pointer"
+                  className="hidden sm:inline-flex min-h-[40px] sm:min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors items-center gap-1.5 cursor-pointer border border-slate-700/60"
                 >
-                  {t('navbar.login')}
+                  <User className="w-4 h-4 text-emerald-400" />
+                  <span>{t('navbar.login')}</span>
                 </button>
 
-                {/* Logged Out: Dedicated Admin Login Button */}
-                <button
-                  type="button"
-                  onClick={() => handleNav('/admin-login')}
-                  className="hidden sm:inline-flex min-h-[42px] px-3.5 sm:px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-2xs transition-colors items-center gap-1.5 cursor-pointer"
-                  title="Admin Portal"
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Admin</span>
-                </button>
-
-                {/* Logged Out: Sign Up Button (Primary CTA) */}
+                {/* Logged Out: Sign Up Button */}
                 <button
                   type="button"
                   onClick={() => handleNav('/signup')}
-                  className="hidden sm:inline-flex min-h-[42px] px-3.5 sm:px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors items-center gap-1.5 cursor-pointer border border-slate-700/60"
+                  className="hidden sm:inline-flex min-h-[40px] sm:min-h-[42px] px-3.5 sm:px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors items-center gap-1.5 cursor-pointer border border-slate-700/60"
                 >
                   <UserPlus className="w-4 h-4 text-emerald-400" />
                   <span>{t('navbar.signup')}</span>
@@ -498,35 +488,24 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Mobile Auth & Action Drawer */}
           <div className="pt-3 border-t border-[#E5E0D5] space-y-3">
             {!user ? (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleNav('/login')}
-                    className="min-h-[48px] py-2.5 px-3 rounded-xl bg-white hover:bg-[#EFECE4] text-[#26332C] font-extrabold text-sm border-2 border-[#D8D2C4] text-center cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <User className="w-4 h-4" />
-                    <span>{t('navbar.login')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleNav('/admin-login')}
-                    className="min-h-[48px] py-2.5 px-3 rounded-xl bg-slate-900 text-white font-extrabold text-sm text-center cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
-                  >
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Admin Login</span>
-                  </button>
-                </div>
-
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleNav('/login')}
+                  className="min-h-[48px] py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm text-center cursor-pointer flex items-center justify-center gap-1.5 shadow-xs border border-slate-700/60"
+                >
+                  <User className="w-4 h-4 text-emerald-400" />
+                  <span>{t('navbar.login')}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleNav('/signup')}
-                  className="w-full min-h-[48px] py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+                  className="min-h-[48px] py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm text-center cursor-pointer flex items-center justify-center gap-1.5 shadow-xs border border-slate-700/60"
                 >
                   <UserPlus className="w-4 h-4 text-emerald-400" />
                   <span>{t('navbar.signup')}</span>
                 </button>
-              </>
+              </div>
             ) : (
               <>
                 <div className="p-3 rounded-xl bg-[#FAF9F5] border border-[#E5E0D5] flex items-center justify-between">

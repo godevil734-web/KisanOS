@@ -103,6 +103,37 @@ export const api = {
   getAggregatorProfile: () => request<any>('/aggregators/profile'),
   subscribeAggregator: (data: any) => request<any>('/aggregators/subscribe', { method: 'POST', body: JSON.stringify(data) }),
 
+  // Supply Network & Procurement
+  getNearbyBuyers: (params: Record<string, any> = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request<any[]>(`/buyers/nearby${query ? `?${query}` : ''}`);
+  },
+  getNearbyFarmerSupply: (params: Record<string, any> = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request<any[]>(`/farmer-supply/nearby${query ? `?${query}` : ''}`);
+  },
+  getAggregatorDemand: (params: Record<string, any> = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request<any[]>(`/aggregator/demand${query ? `?${query}` : ''}`);
+  },
+  getAggregatorSupply: (params: Record<string, any> = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request<any[]>(`/aggregator/supply${query ? `?${query}` : ''}`);
+  },
+  getProcurementPlans: () => request<any[]>('/aggregator/procurement-plans'),
+  createProcurementPlan: (data: any) => 
+    request<any>('/aggregator/procurement-plans', { method: 'POST', body: JSON.stringify(data) }),
+  updateProcurementPlan: (id: string, data: any) => 
+    request<any>(`/aggregator/procurement-plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  createBatchFromPlan: (id: string, data: any = {}) => 
+    request<any>(`/aggregator/procurement-plans/${id}/create-batch`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // AI Recommendation
+  getAiBuyerRecommendation: (data: any) => 
+    request<any>('/ai/buyer-recommendation', { method: 'POST', body: JSON.stringify(data) }),
+  sendKisanSaathiMessage: (data: { message: string; history?: any[] }) =>
+    request<any>('/ai/kisan-saathi/chat', { method: 'POST', body: JSON.stringify(data) }),
+
   // Batches
   getBatches: () => request<any[]>('/batches'),
   createBatch: (data: any) => request<any>('/batches', { method: 'POST', body: JSON.stringify(data) }),

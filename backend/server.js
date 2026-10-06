@@ -8,11 +8,13 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { db, hashPassword, findUserByIdentifier, findUserByGoogleId, findUserById } = require('./db');
-const { calculateMatch } = require('./services/matchingService');
+const { calculateMatch, evaluateEligibility } = require('./services/matchingService');
 const { calculateNetRealization, calculateStorageScenario } = require('./services/netRealizationService');
 const { predictYield, analyzeProduceQualityCV } = require('./services/forecastService');
 const { otpProvider } = require('./services/otpService');
 const { getHyperlocalWeather } = require('./services/weatherService');
+const { calculateDistanceKm, resolveCoordinates, filterByDistance } = require('./services/locationService');
+const { generateBuyerRecommendation, generateKisanSaathiResponse } = require('./services/geminiService');
 const { createRateLimiter } = require('./middleware/rateLimiter');
 const { 
   JWT_SECRET, 
@@ -52,6 +54,7 @@ const authLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 15, messa
 const otpSendLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 10, message: 'Too many OTP requests. Please wait a few minutes.' });
 const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 15, message: 'Too many login attempts. Please wait.' });
 const publicSimulationLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, message: 'Rate limit exceeded for simulation and calculation APIs. Please try again later.' });
+const aiLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, message: 'Rate limit exceeded for AI advisory requests. Please wait a moment.' });
 
 // Request logger (never logs passwords or OTPs)
 app.use((req, res, next) => {
@@ -1199,12 +1202,17 @@ app.get('/api/listings/:id/traceability', optionalAuth, async (req, res) => {
 });
 
 // ---------------------------------------------
-// 4. BUYER REQUIREMENTS
+// 4. BUYER REQUIREMENTS & PROXIMITY DISCOVERY
 // ---------------------------------------------
 
-app.get('/api/requirements', async (req, res) => {
-  const { crop, buyerId, status } = req.query;
+// Helper to handle requirements list with distance and filters
+async function handleGetRequirements(req, res) {
+  const { crop, buyerId, status, buyerType, radiusKm, lat, lon } = req.query;
   let reqs = await db.find('buyerRequirements');
+
+  const userCoords = (lat && lon) 
+    ? { lat: Number(lat), lon: Number(lon) } 
+    : (req.user ? resolveCoordinates(req.user) : { lat: 26.7410, lon: 83.8890 });
 
   if (crop) {
     reqs = reqs.filter(r => (r.cropName || '').toLowerCase() === crop.toLowerCase());
@@ -1215,22 +1223,72 @@ app.get('/api/requirements', async (req, res) => {
   if (status) {
     reqs = reqs.filter(r => r.status === status);
   }
+  if (buyerType && buyerType !== 'all') {
+    reqs = reqs.filter(r => (r.buyerType || r.buyer_type || 'bulk').toLowerCase() === buyerType.toLowerCase());
+  }
 
-  res.json(reqs);
+  // Calculate distance
+  const mapped = reqs.map(r => {
+    const rCoords = resolveCoordinates(r);
+    const distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lon, rCoords.lat, rCoords.lon);
+    return {
+      ...r,
+      buyerType: r.buyerType || r.buyer_type || 'bulk',
+      requiredQuantityKg: r.requiredQuantityKg ? Number(r.requiredQuantityKg) : Number(r.quantityTons * 1000),
+      minimumDirectFarmerLotKg: r.minimumDirectFarmerLotKg !== undefined ? Number(r.minimumDirectFarmerLotKg) : 0,
+      aggregationAllowed: r.aggregationAllowed !== false && r.aggregation_allowed !== false,
+      distanceKm,
+      deliveryLatitude: rCoords.lat,
+      deliveryLongitude: rCoords.lon
+    };
+  });
+
+  if (radiusKm && !isNaN(Number(radiusKm))) {
+    const maxR = Number(radiusKm);
+    return res.json(mapped.filter(r => r.distanceKm <= maxR).sort((a, b) => a.distanceKm - b.distanceKm));
+  }
+
+  res.json(mapped.sort((a, b) => a.distanceKm - b.distanceKm));
+}
+
+app.get('/api/requirements', optionalAuth, handleGetRequirements);
+app.get('/api/buyer-requirements', optionalAuth, handleGetRequirements);
+
+// Get single requirement
+app.get('/api/buyer-requirements/:id', optionalAuth, async (req, res) => {
+  const reqItem = await db.findById('buyerRequirements', req.params.id);
+  if (!reqItem) return res.status(404).json({ error: 'Requirement not found' });
+  const rCoords = resolveCoordinates(reqItem);
+  res.json({
+    ...reqItem,
+    buyerType: reqItem.buyerType || reqItem.buyer_type || 'bulk',
+    requiredQuantityKg: reqItem.requiredQuantityKg ? Number(reqItem.requiredQuantityKg) : Number(reqItem.quantityTons * 1000),
+    minimumDirectFarmerLotKg: reqItem.minimumDirectFarmerLotKg !== undefined ? Number(reqItem.minimumDirectFarmerLotKg) : 0,
+    aggregationAllowed: reqItem.aggregationAllowed !== false && reqItem.aggregation_allowed !== false,
+    deliveryLatitude: rCoords.lat,
+    deliveryLongitude: rCoords.lon
+  });
 });
 
-app.post('/api/requirements', authMiddleware, requireRole(['dealer', 'buyer', 'admin']), requireActiveStatus, async (req, res) => {
+// Helper to handle requirement creation
+async function handleCreateRequirement(req, res) {
   const {
     cropId,
     cropName,
     variety,
     quantityTons,
+    buyerType,
+    requiredQuantityKg,
+    minimumDirectFarmerLotKg,
+    aggregationAllowed,
     gradeRequired,
     sizeMinMm,
     sizeMaxMm,
     maxMoisture,
     maxDefects,
     location,
+    deliveryLatitude,
+    deliveryLongitude,
     requiredDate,
     offeredPricePerKg,
     deliveryType,
@@ -1241,15 +1299,30 @@ app.post('/api/requirements', authMiddleware, requireRole(['dealer', 'buyer', 'a
     return res.status(400).json({ error: 'Missing crop, quantity, or offered price' });
   }
 
+  const determinedBuyerType = buyerType || (req.user.buyerType || 'bulk');
+  const qtyTons = Number(quantityTons);
+  const qtyKg = requiredQuantityKg ? Number(requiredQuantityKg) : qtyTons * 1000;
+  const minLotKg = minimumDirectFarmerLotKg !== undefined 
+    ? Number(minimumDirectFarmerLotKg) 
+    : (determinedBuyerType === 'local' ? 250 : 5000);
+
+  const coords = (deliveryLatitude && deliveryLongitude)
+    ? { lat: Number(deliveryLatitude), lon: Number(deliveryLongitude) }
+    : resolveCoordinates({ location: location || req.user.location });
+
   const newReq = {
     id: `req-${Date.now()}`,
     buyerId: req.user.id,
     buyerName: req.user.name,
     buyerCompany: req.user.buyerProfile?.companyName || req.user.name,
+    buyerType: determinedBuyerType,
     cropId: cropId || `crop-${cropName.toLowerCase()}`,
     cropName,
     variety: variety || 'All Varieties',
-    quantityTons: Number(quantityTons),
+    quantityTons: qtyTons,
+    requiredQuantityKg: qtyKg,
+    minimumDirectFarmerLotKg: minLotKg,
+    aggregationAllowed: aggregationAllowed !== false,
     unit: 'tonnes',
     gradeRequired: gradeRequired || 'Grade A',
     sizeMinMm: Number(sizeMinMm) || 45,
@@ -1257,6 +1330,8 @@ app.post('/api/requirements', authMiddleware, requireRole(['dealer', 'buyer', 'a
     maxMoisture: Number(maxMoisture) || 19,
     maxDefects: Number(maxDefects) || 3.0,
     location: location || req.user.location,
+    deliveryLatitude: coords.lat,
+    deliveryLongitude: coords.lon,
     requiredDate: requiredDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
     offeredPricePerKg: Number(offeredPricePerKg),
     deliveryType: deliveryType || 'PICKUP_REQUIRED',
@@ -1267,13 +1342,13 @@ app.post('/api/requirements', authMiddleware, requireRole(['dealer', 'buyer', 'a
 
   await db.insert('buyerRequirements', newReq);
 
-  // Notify aggregators & farmers
+  // Notify relevant users
   const farmers = await db.find('users', u => u.role === 'farmer');
   for (const farmer of farmers.slice(0, 5)) {
     await db.insert('notifications', {
       userId: farmer.id,
-      title: `Bulk Buyer Demand: ${quantityTons}T ${cropName}`,
-      message: `${newReq.buyerCompany} is offering ₹${offeredPricePerKg}/kg for ${quantityTons}T ${cropName}.`,
+      title: `${determinedBuyerType === 'local' ? 'Local Buyer' : 'Bulk Buyer'} Demand: ${qtyTons}T ${cropName}`,
+      message: `${newReq.buyerCompany} is offering ₹${offeredPricePerKg}/kg for ${qtyTons}T ${cropName}.`,
       type: 'MATCH',
       read: false,
       timestamp: new Date().toISOString()
@@ -1281,13 +1356,82 @@ app.post('/api/requirements', authMiddleware, requireRole(['dealer', 'buyer', 'a
   }
 
   res.status(201).json(newReq);
+}
+
+app.post('/api/requirements', authMiddleware, requireRole(['dealer', 'buyer', 'admin']), requireActiveStatus, handleCreateRequirement);
+app.post('/api/buyer-requirements', authMiddleware, requireRole(['dealer', 'buyer', 'admin']), requireActiveStatus, handleCreateRequirement);
+
+// GET /api/buyers/nearby - Geolocation query for nearby buyers
+app.get('/api/buyers/nearby', optionalAuth, async (req, res) => {
+  const { lat, lon, crop, buyerType, radiusKm } = req.query;
+  const userCoords = (lat && lon) 
+    ? { lat: Number(lat), lon: Number(lon) } 
+    : (req.user ? resolveCoordinates(req.user) : { lat: 26.7410, lon: 83.8890 });
+
+  const maxRadius = radiusKm ? Number(radiusKm) : 100;
+  const allReqs = await db.find('buyerRequirements', r => r.status === 'OPEN');
+
+  const nearby = allReqs.map(r => {
+    const rCoords = resolveCoordinates(r);
+    const distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lon, rCoords.lat, rCoords.lon);
+    return {
+      ...r,
+      buyerType: r.buyerType || r.buyer_type || 'bulk',
+      requiredQuantityKg: r.requiredQuantityKg ? Number(r.requiredQuantityKg) : Number(r.quantityTons * 1000),
+      minimumDirectFarmerLotKg: r.minimumDirectFarmerLotKg !== undefined ? Number(r.minimumDirectFarmerLotKg) : 0,
+      aggregationAllowed: r.aggregationAllowed !== false && r.aggregation_allowed !== false,
+      distanceKm,
+      deliveryLatitude: rCoords.lat,
+      deliveryLongitude: rCoords.lon
+    };
+  }).filter(r => {
+    if (crop && (r.cropName || '').toLowerCase() !== crop.toLowerCase()) return false;
+    if (buyerType && buyerType !== 'all') {
+      const bType = (r.buyerType || r.buyer_type || 'bulk').toLowerCase();
+      if (bType !== buyerType.toLowerCase()) return false;
+    }
+    if (radiusKm && r.distanceKm > maxRadius) return false;
+    return true;
+  }).sort((a, b) => a.distanceKm - b.distanceKm);
+
+  res.json(nearby);
+});
+
+// GET /api/farmer-supply/nearby - Nearby farmer supply discovery
+app.get('/api/farmer-supply/nearby', optionalAuth, async (req, res) => {
+  const { lat, lon, crop, radiusKm } = req.query;
+  const userCoords = (lat && lon) 
+    ? { lat: Number(lat), lon: Number(lon) } 
+    : (req.user ? resolveCoordinates(req.user) : { lat: 26.7410, lon: 83.8890 });
+
+  const maxRadius = radiusKm ? Number(radiusKm) : 100;
+  const allListings = await db.find('farmerListings', l => l.status === 'ACTIVE');
+
+  const nearby = (await Promise.all(allListings.map(async l => {
+    const lCoords = resolveCoordinates(l);
+    const distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lon, lCoords.lat, lCoords.lon);
+    const sanitized = await sanitizeListing(l, req.user);
+    return {
+      ...sanitized,
+      quantityKg: l.quantityKg ? Number(l.quantityKg) : Number(l.quantityTons * 1000),
+      distanceKm,
+      latitude: lCoords.lat,
+      longitude: lCoords.lon
+    };
+  }))).filter(l => {
+    if (crop && (l.cropName || '').toLowerCase() !== crop.toLowerCase()) return false;
+    if (radiusKm && l.distanceKm > maxRadius) return false;
+    return true;
+  }).sort((a, b) => a.distanceKm - b.distanceKm);
+
+  res.json(nearby);
 });
 
 // ---------------------------------------------
 // 5. MATCHING ENGINE & NET REALIZATION
 // ---------------------------------------------
 
-// Find matching requirements for a farmer listing
+// Find matching requirements for a farmer listing (with Step 1 Eligibility + Step 2 Score)
 app.get('/api/matches/listing/:listingId', optionalAuth, async (req, res) => {
   const listing = await db.findById('farmerListings', req.params.listingId);
   if (!listing) return res.status(404).json({ error: 'Listing not found' });
@@ -1295,54 +1439,80 @@ app.get('/api/matches/listing/:listingId', optionalAuth, async (req, res) => {
   const allReqs = await db.find('buyerRequirements', r => r.status === 'OPEN');
   const matches = allReqs.map(reqItem => {
     const matchResult = calculateMatch(listing, reqItem);
+    const distanceKm = matchResult.distanceKm || 25;
     const netCalc = calculateNetRealization({
       buyerPricePerKg: reqItem.offeredPricePerKg,
-      distanceKm: matchResult.breakdown.find(b => b.factor === 'Location Proximity')?.earned >= 12 ? 35 : 120,
+      distanceKm,
       buyerPicksUp: reqItem.deliveryType === 'PICKUP_REQUIRED',
       storageCostPerKg: listing.storageRequirement === 'COLD_STORAGE' ? 0.45 : 0
     });
 
     return {
-      requirement: reqItem,
+      requirement: {
+        ...reqItem,
+        buyerType: reqItem.buyerType || reqItem.buyer_type || 'bulk',
+        requiredQuantityKg: reqItem.requiredQuantityKg ? Number(reqItem.requiredQuantityKg) : Number(reqItem.quantityTons * 1000),
+        minimumDirectFarmerLotKg: reqItem.minimumDirectFarmerLotKg !== undefined ? Number(reqItem.minimumDirectFarmerLotKg) : 0,
+        aggregationAllowed: reqItem.aggregationAllowed !== false && reqItem.aggregation_allowed !== false
+      },
       matchScore: matchResult.score,
       isViable: matchResult.isViable,
+      eligibility: matchResult.eligibility,
+      distanceKm,
       breakdown: matchResult.breakdown,
       reasons: matchResult.reasons,
       netRealization: netCalc
     };
-  }).filter(m => m.matchScore >= 40)
-    .sort((a, b) => b.matchScore - a.matchScore);
+  })
+  // Part F & Acceptance Test 1 & 4:
+  // Must be visible to farmer (either direct match or aggregator opportunity)
+  .filter(m => m.eligibility.visibleToFarmer === true && m.matchScore >= 40)
+  .sort((a, b) => b.matchScore - a.matchScore);
 
   const sanitized = await sanitizeListing(listing, req.user);
   res.json({ listing: sanitized, matches });
 });
 
-// Find matching supply for a buyer requirement
+// Find multi-channel matching supply for a buyer requirement (Direct, Aggregator, Cold Storage)
 app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
   const requirement = await db.findById('buyerRequirements', req.params.reqId);
   if (!requirement) return res.status(404).json({ error: 'Requirement not found' });
 
-  // 1. Direct Farmer Listings
-  const allListings = await db.find('farmerListings', l => l.status === 'ACTIVE');
-  const matchedFarmers = (await Promise.all(allListings.map(async listing => {
-    const matchResult = calculateMatch(listing, requirement);
-    const netCalc = calculateNetRealization({
-      buyerPricePerKg: requirement.offeredPricePerKg,
-      distanceKm: 40,
-      buyerPicksUp: requirement.deliveryType === 'PICKUP_REQUIRED'
-    });
+  const minDirectLotKg = Number(requirement.minimumDirectFarmerLotKg || 0);
 
-    const sanitized = await sanitizeListing(listing, req.user);
-    return {
-      listing: sanitized,
-      matchScore: matchResult.score,
-      isViable: matchResult.isViable,
-      breakdown: matchResult.breakdown,
-      reasons: matchResult.reasons,
-      netRealization: netCalc
-    };
-  }))).filter(m => m.matchScore >= 40)
-    .sort((a, b) => b.matchScore - a.matchScore);
+  // 1. Direct Farmer Listings & Aggregator Supply Pipeline
+  const allListings = await db.find('farmerListings', l => l.status === 'ACTIVE');
+  const directFarmers = [];
+  const aggregatorSupply = [];
+
+  for (const listing of allListings) {
+    const matchResult = calculateMatch(listing, requirement);
+    if (matchResult.score >= 40 && (listing.cropName || '').toLowerCase() === (requirement.cropName || '').toLowerCase()) {
+      const netCalc = calculateNetRealization({
+        buyerPricePerKg: requirement.offeredPricePerKg,
+        distanceKm: matchResult.distanceKm || 30,
+        buyerPicksUp: requirement.deliveryType === 'PICKUP_REQUIRED'
+      });
+      const sanitized = await sanitizeListing(listing, req.user);
+      const matchObj = {
+        listing: sanitized,
+        matchScore: matchResult.score,
+        isViable: matchResult.isViable,
+        eligibility: matchResult.eligibility,
+        distanceKm: matchResult.distanceKm,
+        breakdown: matchResult.breakdown,
+        reasons: matchResult.reasons,
+        netRealization: netCalc
+      };
+
+      const farmerQtyKg = Number(listing.quantityKg || (listing.quantityTons * 1000)) || 1000;
+      if (minDirectLotKg > 0 && farmerQtyKg < minDirectLotKg) {
+        aggregatorSupply.push(matchObj);
+      } else {
+        directFarmers.push(matchObj);
+      }
+    }
+  }
 
   // 2. Existing Aggregation Batches
   const batches = await db.find('aggregationBatches', b => 
@@ -1353,8 +1523,8 @@ app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
   const coldStores = await db.find('coldStorages');
   const storageMatches = [];
   coldStores.forEach(cs => {
-    cs.inventory.forEach(inv => {
-      if (inv.cropName.toLowerCase() === requirement.cropName.toLowerCase()) {
+    (cs.inventory || []).forEach(inv => {
+      if ((inv.cropName || '').toLowerCase() === requirement.cropName.toLowerCase()) {
         storageMatches.push({
           storageId: cs.id,
           storageName: cs.name,
@@ -1368,12 +1538,407 @@ app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
     });
   });
 
+  // Part O: Channel progress summary
+  const directTons = Number(directFarmers.reduce((sum, f) => sum + (Number(f.listing.quantityTons) || 0), 0).toFixed(1));
+  const batchTons = Number(batches.reduce((sum, b) => sum + (Number(b.currentAggregatedTons) || 0), 0).toFixed(1));
+  const storageTons = Number(storageMatches.reduce((sum, s) => sum + (Number(s.availableQuantityTons) || 0), 0).toFixed(1));
+  const totalAvailableTons = Number((directTons + batchTons + storageTons).toFixed(1));
+  const requiredTons = Number(requirement.quantityTons) || 1;
+  const remainingTons = Math.max(0, Number((requiredTons - totalAvailableTons).toFixed(1)));
+
   res.json({
-    requirement,
-    farmerMatches: matchedFarmers,
+    requirement: {
+      ...requirement,
+      buyerType: requirement.buyerType || requirement.buyer_type || 'bulk',
+      requiredQuantityKg: requirement.requiredQuantityKg ? Number(requirement.requiredQuantityKg) : Number(requirement.quantityTons * 1000),
+      minimumDirectFarmerLotKg: requirement.minimumDirectFarmerLotKg !== undefined ? Number(requirement.minimumDirectFarmerLotKg) : 0,
+      aggregationAllowed: requirement.aggregationAllowed !== false && requirement.aggregation_allowed !== false
+    },
+    farmerMatches: directFarmers.sort((a, b) => b.matchScore - a.matchScore),
+    aggregatorSupply: aggregatorSupply.sort((a, b) => b.matchScore - a.matchScore),
     aggregatorBatches: batches,
-    coldStorageInventory: storageMatches
+    coldStorageInventory: storageMatches,
+    supplySummary: {
+      directFarmersTons: directTons,
+      aggregatorProcurementTons: batchTons,
+      coldStorageTons: storageTons,
+      totalAvailableTons,
+      requiredTons,
+      remainingTons
+    }
   });
+});
+
+// ---------------------------------------------
+// AGGREGATOR DEMAND, SUPPLY & PROCUREMENT PLANS
+// ---------------------------------------------
+
+// GET /api/aggregator/demand - Open buyer demand in aggregator service area
+app.get('/api/aggregator/demand', authMiddleware, requireRole(['aggregator', 'admin']), async (req, res) => {
+  const userCoords = resolveCoordinates(req.user);
+  const radiusKm = Number(req.query.radiusKm) || req.user.aggregatorProfile?.serviceRadiusKm || 50;
+
+  const allReqs = await db.find('buyerRequirements', r => r.status === 'OPEN');
+  const allListings = await db.find('farmerListings', l => l.status === 'ACTIVE');
+  const allBatches = await db.find('aggregationBatches');
+  const allPlans = await db.find('procurementPlans', p => p.aggregatorId === req.user.id);
+
+  const demands = allReqs.map(reqItem => {
+    const reqCoords = resolveCoordinates(reqItem);
+    const distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lon, reqCoords.lat, reqCoords.lon);
+
+    // Compatible farmer listings in aggregator radius
+    const compatibleListings = allListings.filter(l => {
+      const isCrop = (l.cropName || '').toLowerCase() === (reqItem.cropName || '').toLowerCase();
+      if (!isCrop) return false;
+      const fCoords = resolveCoordinates(l);
+      const fDist = calculateDistanceKm(userCoords.lat, userCoords.lon, fCoords.lat, fCoords.lon);
+      return fDist <= radiusKm;
+    });
+
+    const availableSupplyTons = Number(compatibleListings.reduce((sum, l) => sum + (Number(l.quantityTons) || 0), 0).toFixed(1));
+
+    // Committed volumes in plans & batches
+    const relatedPlans = allPlans.filter(p => p.buyerRequirementId === reqItem.id);
+    const committedPlanTons = Number(relatedPlans.reduce((sum, p) => sum + ((Number(p.plannedQuantityKg) || 0) / 1000), 0).toFixed(1));
+    const relatedBatches = allBatches.filter(b => b.buyerRequirementId === reqItem.id);
+    const committedBatchTons = Number(relatedBatches.reduce((sum, b) => sum + (Number(b.currentAggregatedTons) || 0), 0).toFixed(1));
+    const committedTons = Math.max(committedPlanTons, committedBatchTons);
+
+    const targetTons = Number(reqItem.quantityTons) || 1;
+    const remainingTons = Math.max(0, Number((targetTons - committedTons).toFixed(1)));
+
+    return {
+      ...reqItem,
+      buyerType: reqItem.buyerType || reqItem.buyer_type || 'bulk',
+      requiredQuantityKg: reqItem.requiredQuantityKg ? Number(reqItem.requiredQuantityKg) : Number(reqItem.quantityTons * 1000),
+      minimumDirectFarmerLotKg: reqItem.minimumDirectFarmerLotKg !== undefined ? Number(reqItem.minimumDirectFarmerLotKg) : 0,
+      aggregationAllowed: reqItem.aggregationAllowed !== false && reqItem.aggregation_allowed !== false,
+      distanceKm,
+      availableSupplyTons,
+      committedTons,
+      remainingTons,
+      compatibleFarmersCount: compatibleListings.length
+    };
+  }).filter(d => {
+    if (req.query.crop && d.cropName.toLowerCase() !== req.query.crop.toLowerCase()) return false;
+    if (req.query.withinRadius === 'true') return d.distanceKm <= radiusKm;
+    return true;
+  }).sort((a, b) => a.distanceKm - b.distanceKm);
+
+  res.json(demands);
+});
+
+// GET /api/aggregator/supply - Farmer supply within aggregator operating radius
+app.get('/api/aggregator/supply', authMiddleware, requireRole(['aggregator', 'admin']), async (req, res) => {
+  const userCoords = resolveCoordinates(req.user);
+  const radiusKm = Number(req.query.radiusKm) || req.user.aggregatorProfile?.serviceRadiusKm || 50;
+
+  const allListings = await db.find('farmerListings', l => l.status === 'ACTIVE');
+  const cropFilter = req.query.crop;
+
+  const supply = (await Promise.all(allListings.map(async listing => {
+    const fCoords = resolveCoordinates(listing);
+    const distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lon, fCoords.lat, fCoords.lon);
+    const sanitized = await sanitizeListing(listing, req.user);
+    return {
+      ...sanitized,
+      quantityKg: listing.quantityKg ? Number(listing.quantityKg) : Number(listing.quantityTons * 1000),
+      distanceKm,
+      latitude: fCoords.lat,
+      longitude: fCoords.lon
+    };
+  }))).filter(item => {
+    if (cropFilter && cropFilter !== 'All' && item.cropName.toLowerCase() !== cropFilter.toLowerCase()) return false;
+    if (req.query.radiusKm) return item.distanceKm <= radiusKm;
+    return true;
+  }).sort((a, b) => a.distanceKm - b.distanceKm);
+
+  res.json(supply);
+});
+
+// GET /api/aggregator/procurement-plans
+app.get('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggregator', 'admin']), async (req, res) => {
+  const plans = await db.find('procurementPlans', p => p.aggregatorId === req.user.id);
+  res.json(plans);
+});
+
+// POST /api/aggregator/procurement-plans
+app.post('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggregator', 'admin']), requireActiveStatus, async (req, res) => {
+  const {
+    buyerRequirementId,
+    cropName,
+    variety,
+    targetQuantityKg,
+    selectedFarmers = [],
+    notes
+  } = req.body;
+
+  let reqItem = null;
+  if (buyerRequirementId) {
+    reqItem = await db.findById('buyerRequirements', buyerRequirementId);
+  }
+
+  const plannedQtyKg = selectedFarmers.reduce((sum, f) => sum + (Number(f.quantityKg || (f.quantityTons * 1000)) || 0), 0);
+  const estProcCost = selectedFarmers.reduce((sum, f) => {
+    const qty = Number(f.quantityKg || (f.quantityTons * 1000)) || 0;
+    const price = Number(f.expectedPricePerKg || f.purchasePricePerKg) || 18;
+    return sum + (qty * price);
+  }, 0);
+
+  const indicativeBuyerPrice = Number(reqItem?.offeredPricePerKg || req.body.indicativeBuyerPricePerKg || 20);
+  const estLogistics = Number((plannedQtyKg * 1.25).toFixed(2));
+  const indicativeGrossRevenue = plannedQtyKg * indicativeBuyerPrice;
+  const estGrossMargin = Number((indicativeGrossRevenue - estProcCost).toFixed(2));
+  const estNetMargin = Number((estGrossMargin - estLogistics).toFixed(2));
+
+  const plan = {
+    id: `plan-${Date.now()}`,
+    aggregatorId: req.user.id,
+    aggregatorName: req.user.aggregatorProfile?.businessName || req.user.name,
+    buyerRequirementId: reqItem?.id || buyerRequirementId || null,
+    buyerName: reqItem?.buyerName || req.body.buyerName || 'Verified Buyer',
+    buyerCompany: reqItem?.buyerCompany || req.body.buyerCompany || 'Commercial Buyer',
+    cropName: reqItem?.cropName || cropName || 'Potato',
+    variety: reqItem?.variety || variety || 'All Varieties',
+    targetQuantityKg: Number(targetQuantityKg || (reqItem ? reqItem.quantityTons * 1000 : 20000)),
+    plannedQuantityKg: plannedQtyKg,
+    selectedFarmers,
+    estimatedProcurementCost: estProcCost,
+    indicativeBuyerPricePerKg: indicativeBuyerPrice,
+    estimatedLogisticsCost: estLogistics,
+    estimatedGrossMargin: estGrossMargin,
+    estimatedNetMargin: estNetMargin,
+    status: 'DRAFT',
+    notes: notes || '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  await db.insert('procurementPlans', plan);
+  res.status(201).json(plan);
+});
+
+// PUT /api/aggregator/procurement-plans/:id
+app.put('/api/aggregator/procurement-plans/:id', authMiddleware, requireRole(['aggregator', 'admin']), requireActiveStatus, async (req, res) => {
+  const plan = await db.findById('procurementPlans', req.params.id);
+  if (!plan) return res.status(404).json({ error: 'Procurement plan not found' });
+  if (plan.aggregatorId !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const { selectedFarmers, status, notes } = req.body;
+  if (selectedFarmers !== undefined) {
+    plan.selectedFarmers = selectedFarmers;
+    plan.plannedQuantityKg = selectedFarmers.reduce((sum, f) => sum + (Number(f.quantityKg || (f.quantityTons * 1000)) || 0), 0);
+    plan.estimatedProcurementCost = selectedFarmers.reduce((sum, f) => {
+      const qty = Number(f.quantityKg || (f.quantityTons * 1000)) || 0;
+      const price = Number(f.expectedPricePerKg || f.purchasePricePerKg) || 18;
+      return sum + (qty * price);
+    }, 0);
+    const indicativeGrossRevenue = plan.plannedQuantityKg * plan.indicativeBuyerPricePerKg;
+    plan.estimatedLogisticsCost = Number((plan.plannedQuantityKg * 1.25).toFixed(2));
+    plan.estimatedGrossMargin = Number((indicativeGrossRevenue - plan.estimatedProcurementCost).toFixed(2));
+    plan.estimatedNetMargin = Number((plan.estimatedGrossMargin - plan.estimatedLogisticsCost).toFixed(2));
+  }
+  if (status) plan.status = status;
+  if (notes !== undefined) plan.notes = notes;
+  plan.updatedAt = new Date().toISOString();
+
+  await db.update('procurementPlans', plan.id, plan);
+  res.json(plan);
+});
+
+// POST /api/aggregator/procurement-plans/:id/create-batch
+// Part N: Pooling is OPTIONAL. If 1 farmer satisfies demand -> Direct Fulfillment, if multiple -> Aggregated Batch!
+app.post('/api/aggregator/procurement-plans/:id/create-batch', authMiddleware, requireRole(['aggregator', 'admin']), requireActiveStatus, async (req, res) => {
+  const plan = await db.findById('procurementPlans', req.params.id);
+  if (!plan) return res.status(404).json({ error: 'Procurement plan not found' });
+
+  const farmerCount = (plan.selectedFarmers || []).length;
+  if (farmerCount === 0) {
+    return res.status(400).json({ error: 'Cannot create batch with zero selected farmers' });
+  }
+
+  const currentAggregatedTons = Number(((plan.plannedQuantityKg || 0) / 1000).toFixed(2));
+  const targetQuantityTons = Number(((plan.targetQuantityKg || 0) / 1000).toFixed(2));
+
+  const batch = {
+    id: `batch-${Date.now()}`,
+    aggregatorId: plan.aggregatorId,
+    aggregatorName: plan.aggregatorName,
+    buyerRequirementId: plan.buyerRequirementId,
+    buyerName: plan.buyerCompany || plan.buyerName,
+    cropName: plan.cropName,
+    variety: plan.variety,
+    targetQuantityTons,
+    currentAggregatedTons,
+    status: farmerCount === 1 ? 'DIRECT_FULFILLMENT' : 'GATHERING',
+    buyerSalePricePerKg: plan.indicativeBuyerPricePerKg,
+    farmerPurchasePriceAvg: Number((plan.estimatedProcurementCost / (plan.plannedQuantityKg || 1)).toFixed(2)),
+    estimatedLogisticsCostPerKg: 1.25,
+    estimatedGrossMarginPerKg: Number((plan.estimatedGrossMargin / (plan.plannedQuantityKg || 1)).toFixed(2)),
+    farmers: plan.selectedFarmers.map(f => ({
+      listingId: f.listingId || f.id,
+      farmerId: f.farmerId,
+      farmerName: f.farmerName,
+      farmerLocation: f.farmerLocation,
+      quantityTons: f.quantityTons || (f.quantityKg ? f.quantityKg / 1000 : 1),
+      purchasePricePerKg: f.expectedPricePerKg || f.purchasePricePerKg || 18
+    })),
+    createdAt: new Date().toISOString()
+  };
+
+  await db.insert('aggregationBatches', batch);
+
+  plan.batchId = batch.id;
+  plan.status = farmerCount === 1 ? 'DIRECT_FULFILLMENT' : 'AGGREGATED';
+  plan.updatedAt = new Date().toISOString();
+  await db.update('procurementPlans', plan.id, plan);
+
+  res.status(201).json({ plan, batch });
+});
+
+// ---------------------------------------------
+// GEMINI AI RECOMMENDATION ADVISORY
+// ---------------------------------------------
+
+app.post('/api/ai/buyer-recommendation', authMiddleware, aiLimiter, async (req, res) => {
+  try {
+    const { listingId, language = 'hi' } = req.body;
+    let listing = null;
+    if (listingId) {
+      listing = await db.findById('farmerListings', listingId);
+    }
+    if (!listing) {
+      const userListings = await db.find('farmerListings', l => l.farmerId === req.user.id && l.status === 'ACTIVE');
+      listing = userListings[0];
+    }
+
+    if (!listing) {
+      return res.status(400).json({ error: 'No active listing found for AI recommendation' });
+    }
+
+    const allReqs = await db.find('buyerRequirements', r => r.status === 'OPEN');
+    const matches = allReqs.map(reqItem => {
+      const matchResult = calculateMatch(listing, reqItem);
+      return {
+        requirement: reqItem,
+        matchScore: matchResult.score,
+        eligibility: matchResult.eligibility,
+        distanceKm: matchResult.distanceKm
+      };
+    }).filter(m => m.eligibility.visibleToFarmer === true)
+      .sort((a, b) => b.matchScore - a.matchScore);
+
+    const result = await generateBuyerRecommendation({
+      listing,
+      opportunities: matches,
+      language: language === 'en' ? 'en' : 'hi'
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('[AI Recommendation] Error:', err);
+    res.json({
+      available: false,
+      summary: req.body.language === 'en' 
+        ? 'AI recommendation temporarily unavailable. Please review deterministic matches below.' 
+        : 'एआई सिफारिश वर्तमान में अनुपलब्ध है। कृपया नीचे दिए गए सत्यापित खरीदारों की सूची देखें।',
+      recommendations: [],
+      fallbackMessage: req.body.language === 'en' 
+        ? 'AI recommendation temporarily unavailable.' 
+        : 'एआई सिफारिश वर्तमान में अनुपलब्ध है।'
+    });
+  }
+});
+
+// ---------------------------------------------
+// KISAN SAATHI CONVERSATIONAL AI FARMER ASSISTANT
+// ---------------------------------------------
+
+app.post('/api/ai/kisan-saathi/chat', authMiddleware, requireRole(['farmer', 'admin']), aiLimiter, async (req, res) => {
+  try {
+    const { message, history = [] } = req.body;
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'Message text is required' });
+    }
+
+    if (message.length > 1000) {
+      return res.status(400).json({ error: 'Message exceeds maximum length of 1000 characters' });
+    }
+
+    // Authenticated Farmer identity
+    const farmerId = req.user.id;
+    const farmer = await db.findById('users', farmerId) || req.user;
+
+    // Retrieve REAL verified platform data (Gemini NEVER queries DB directly)
+    const farmerListings = await db.find('farmerListings', l => l.farmerId === farmerId && l.status === 'ACTIVE');
+    const openRequirements = await db.find('buyerRequirements', r => r.status === 'OPEN');
+    
+    // Evaluate deterministic distances and eligibilities for open requirements
+    const primaryListing = farmerListings[0];
+    const evaluatedBuyers = openRequirements.map(reqItem => {
+      const dist = calculateDistanceKm(
+        Number(primaryListing?.latitude || farmer?.latitude || 26.740),
+        Number(primaryListing?.longitude || farmer?.longitude || 83.889),
+        Number(reqItem.delivery_latitude || reqItem.deliveryLatitude || 26.740),
+        Number(reqItem.delivery_longitude || reqItem.deliveryLongitude || 83.889)
+      );
+
+      let elig = { eligible: true, routeType: 'direct_local' };
+      if (primaryListing) {
+        elig = evaluateEligibility(primaryListing, reqItem);
+      } else {
+        const bType = (reqItem.buyerType || (reqItem.quantityTons >= 20 ? 'bulk' : 'local')).toLowerCase();
+        elig = {
+          eligible: bType === 'local',
+          routeType: bType === 'local' ? 'direct_local' : 'aggregator_pooled'
+        };
+      }
+
+      return {
+        ...reqItem,
+        distanceKm: dist,
+        routeType: elig.routeType,
+        directEligible: elig.eligible && elig.routeType !== 'aggregator_pooled'
+      };
+    }).sort((a, b) => (a.distanceKm || 999) - (b.distanceKm || 999));
+
+    const farmerOffers = await db.find('offers', o => o.sellerId === farmerId);
+    const storageFacilities = await db.find('coldStorages', s => s.status === 'ACTIVE');
+
+    const verifiedContext = {
+      listings: farmerListings,
+      buyers: evaluatedBuyers,
+      offersCount: farmerOffers.length,
+      storageFacilities
+    };
+
+    const aiResponse = await generateKisanSaathiResponse({
+      farmer,
+      message: message.trim(),
+      history,
+      verifiedContext
+    });
+
+    res.json(aiResponse);
+  } catch (err) {
+    console.error('[Kisan Saathi Chat] Error:', err);
+    res.json({
+      success: true,
+      available: false,
+      reply: 'किसान साथी (AI सहायक) फ़िलहाल अनुपलब्ध है। आप सीधे मुख्य मेनू से अपनी फसल, खरीदार व ऑफर्स देख सकते हैं।',
+      actions: [
+        { label: 'Buyer खोजें', actionType: 'navigate_buyers', tab: 'buyers' },
+        { label: 'मेरी फसल', actionType: 'navigate_crops', tab: 'listings' },
+        { label: 'मेरे Offers', actionType: 'navigate_offers', tab: 'offers' },
+        { label: 'Cold Storage', actionType: 'navigate_storage', tab: 'storage' }
+      ],
+      fallbackMessage: 'AI assistant temporarily unavailable.'
+    });
+  }
 });
 
 // ---------------------------------------------

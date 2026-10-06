@@ -64,6 +64,15 @@ export const BuyerDashboard: React.FC = () => {
     coldStorageInventory: []
   });
   const [loadingDiscovery, setLoadingDiscovery] = useState(false);
+  const [supplySummary, setSupplySummary] = useState<{
+    requiredTons: number;
+    directFarmerTons: number;
+    aggregatorProcurementTons: number;
+    coldStorageTons: number;
+    totalAvailableTons: number;
+    remainingTons: number;
+    fulfillmentPercent: number;
+  } | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -116,6 +125,24 @@ export const BuyerDashboard: React.FC = () => {
         aggregatorBatches: res.aggregatorBatches || [],
         coldStorageInventory: res.coldStorageInventory || []
       });
+
+      if (res.supplySummary) {
+        setSupplySummary(res.supplySummary);
+      } else {
+        const directTons = (res.farmerMatches || []).reduce((sum: number, m: any) => sum + (Number(m.listing?.quantityTons) || 0), 0);
+        const aggTons = (res.aggregatorBatches || []).reduce((sum: number, b: any) => sum + (Number(b.currentAggregatedTons) || 0), 0);
+        const csTons = (res.coldStorageInventory || []).reduce((sum: number, s: any) => sum + (Number(s.availableCapacityTons) || 0), 0);
+        const total = directTons + aggTons + csTons;
+        setSupplySummary({
+          requiredTons: Number(req.quantityTons),
+          directFarmerTons: directTons,
+          aggregatorProcurementTons: aggTons,
+          coldStorageTons: csTons,
+          totalAvailableTons: total,
+          remainingTons: Math.max(0, Number(req.quantityTons) - total),
+          fulfillmentPercent: Math.min(100, Math.round((total / Number(req.quantityTons)) * 100))
+        });
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -307,6 +334,92 @@ export const BuyerDashboard: React.FC = () => {
               ))}
             </select>
           </div>
+
+          {/* Multi-Channel Supply Progress Banner (Part O) */}
+          {supplySummary && (
+            <div className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <span>Multi-Channel Supply Pipeline</span>
+                    <span className="text-[10px] bg-blue-100 text-blue-900 font-black px-2.5 py-0.5 rounded-full uppercase">
+                      Direct + Aggregator + Storage
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Target Requirement: <strong>{supplySummary.requiredTons} Ton {selectedReqForDiscovery?.cropName}</strong> • Min Direct Farmer Lot: <strong>{((selectedReqForDiscovery?.minimumDirectFarmerLotKg || 20000) / 1000)} Ton</strong>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-xl font-black text-emerald-700">
+                    {supplySummary.totalAvailableTons} / {supplySummary.requiredTons} Tonnes
+                  </span>
+                  <span className="text-[10px] text-slate-400 block font-bold">
+                    {supplySummary.remainingTons} Ton Remaining
+                  </span>
+                </div>
+              </div>
+
+              {/* Multi-Segment Color Coded Progress Bar */}
+              <div className="space-y-2">
+                <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden flex border border-slate-200">
+                  {/* Direct Farmers: Emerald */}
+                  <div 
+                    style={{ width: `${Math.min(100, (supplySummary.directFarmerTons / supplySummary.requiredTons) * 100)}%` }}
+                    className="bg-emerald-500 h-full transition-all"
+                    title={`Direct Farmers: ${supplySummary.directFarmerTons}T`}
+                  />
+                  {/* Aggregator: Amber */}
+                  <div 
+                    style={{ width: `${Math.min(100, (supplySummary.aggregatorProcurementTons / supplySummary.requiredTons) * 100)}%` }}
+                    className="bg-amber-500 h-full transition-all"
+                    title={`Aggregator Procurement: ${supplySummary.aggregatorProcurementTons}T`}
+                  />
+                  {/* Cold Storage: Blue */}
+                  <div 
+                    style={{ width: `${Math.min(100, (supplySummary.coldStorageTons / supplySummary.requiredTons) * 100)}%` }}
+                    className="bg-blue-500 h-full transition-all"
+                    title={`Cold Storage: ${supplySummary.coldStorageTons}T`}
+                  />
+                </div>
+
+                {/* 4 Legend Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                  <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-200">
+                    <span className="text-[10px] font-bold text-emerald-800 flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block"></span> Direct Farmers
+                    </span>
+                    <div className="text-base font-black text-emerald-950 mt-1">{supplySummary.directFarmerTons} Ton</div>
+                    <span className="text-[10px] text-emerald-700">Lots $\ge$ min direct threshold</span>
+                  </div>
+
+                  <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                    <span className="text-[10px] font-bold text-amber-800 flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block"></span> Aggregator Sourced
+                    </span>
+                    <div className="text-base font-black text-amber-950 mt-1">{supplySummary.aggregatorProcurementTons} Ton</div>
+                    <span className="text-[10px] text-amber-700">Smallholder pooled lots</span>
+                  </div>
+
+                  <div className="bg-blue-50 p-2.5 rounded-xl border border-blue-200">
+                    <span className="text-[10px] font-bold text-blue-800 flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-full bg-blue-500 inline-block"></span> Cold Storage Hubs
+                    </span>
+                    <div className="text-base font-black text-blue-950 mt-1">{supplySummary.coldStorageTons} Ton</div>
+                    <span className="text-[10px] text-blue-700">Immediate holding buffer</span>
+                  </div>
+
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-600 block">Total Sourced / Balance</span>
+                    <div className="text-base font-black text-slate-900 mt-1">
+                      {supplySummary.totalAvailableTons}T ({Math.min(100, Math.round((supplySummary.totalAvailableTons / supplySummary.requiredTons) * 100))}%)
+                    </div>
+                    <span className="text-[10px] text-rose-600 font-bold">{supplySummary.remainingTons}T remaining</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 3 Channels Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

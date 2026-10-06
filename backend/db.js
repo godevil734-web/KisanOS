@@ -105,7 +105,8 @@ const TABLE_MAP = {
   reviews: 'reviews',
   crops: 'crops',
   farmActivities: 'farm_activities',
-  activities: 'farm_activities'
+  activities: 'farm_activities',
+  procurementPlans: 'procurement_plans'
 };
 
 let tableColumnsCache = null;

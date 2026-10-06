@@ -21,7 +21,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { LanguageGateModal } from './components/LanguageGateModal';
 import { PendingApprovalBanner } from './components/PendingApprovalBanner';
 import { DemoBanner } from './components/DemoBanner';
-import { GuidedHelpWidget } from './components/GuidedHelpWidget';
+import { KisanSaathiWidget } from './components/KisanSaathiWidget';
 
 const MainApp: React.FC = () => {
   const { user, loading } = useAuth();
@@ -246,8 +246,16 @@ const MainApp: React.FC = () => {
       {/* First-Visit Full-Screen Language Gate Picker */}
       <LanguageGateModal />
 
-      {/* Floating Guided Help & Advisory Dialog */}
-      <GuidedHelpWidget onNavigate={navigate} />
+      {/* Floating On-Demand Kisan Saathi AI Farmer Assistant */}
+      <KisanSaathiWidget 
+        onNavigateTab={(tab) => {
+          if (user?.role === 'farmer') {
+            handleSetCurrentTab(tab);
+          } else {
+            navigate(`/${tab}`);
+          }
+        }} 
+      />
 
       {/* Footer */}
       <Footer onSelectTab={handleSetCurrentTab} />

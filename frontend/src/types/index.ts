@@ -6,6 +6,9 @@ export interface User {
   email: string;
   phone: string;
   role: UserRole;
+  buyerType?: 'local' | 'bulk';
+  latitude?: number;
+  longitude?: number;
   status?: 'active' | 'pending' | 'rejected' | 'blocked';
   phoneMasked?: string;
   rejectionReason?: string;
@@ -37,10 +40,11 @@ export interface User {
   };
   buyerProfile?: {
     companyName: string;
-    businessType: string;
-    gstNumber: string;
-    annualDemandTons: number;
-    preferredDelivery: string;
+    businessType?: string;
+    buyerType?: 'local' | 'bulk';
+    gstNumber?: string;
+    annualDemandTons?: number;
+    preferredDelivery?: string;
   };
 }
 
@@ -68,6 +72,9 @@ export interface FarmerListing {
   cropName: string;
   variety: string;
   quantityTons: number;
+  quantityKg?: number;
+  latitude?: number;
+  longitude?: number;
   listingType: 'AVAILABLE_NOW' | 'FUTURE_HARVEST';
   availableDate: string;
   harvestDate?: string;
@@ -91,20 +98,26 @@ export interface BuyerRequirement {
   buyerId: string;
   buyerName: string;
   buyerCompany: string;
+  buyerType?: 'local' | 'bulk';
   cropId: string;
   cropName: string;
   variety: string;
   quantityTons: number;
+  requiredQuantityKg?: number;
+  minimumDirectFarmerLotKg?: number;
+  aggregationAllowed?: boolean;
   unit: string;
   gradeRequired: string;
-  sizeMinMm: number;
-  sizeMaxMm: number;
-  maxMoisture: number;
-  maxDefects: number;
+  sizeMinMm?: number;
+  sizeMaxMm?: number;
+  maxMoisture?: number;
+  maxDefects?: number;
   location: string;
+  deliveryLatitude?: number;
+  deliveryLongitude?: number;
   requiredDate: string;
   offeredPricePerKg: number;
-  deliveryType: 'PICKUP_REQUIRED' | 'DELIVERY_TO_BUYER';
+  deliveryType: 'PICKUP_REQUIRED' | 'DELIVERY_TO_BUYER' | 'DIRECT_FARM';
   status: 'OPEN' | 'MATCHED' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'CANCELLED';
   specialRequirements?: string;
   createdAt?: string;
@@ -133,9 +146,55 @@ export interface RequirementMatch {
   requirement: BuyerRequirement;
   matchScore: number;
   isViable: boolean;
+  distanceKm?: number;
+  eligibility?: {
+    eligible: boolean;
+    routeType: 'direct_local' | 'direct_bulk' | 'aggregator_pooled' | 'ineligible';
+    reason: string;
+    minLotKg?: number;
+    farmerQuantityKg?: number;
+    aggregationAllowed?: boolean;
+  };
+  visibleToFarmer?: boolean;
   breakdown: MatchBreakdown[];
   reasons: string[];
   netRealization: NetRealization;
+}
+
+export interface ProcurementPlanFarmer {
+  listingId: string;
+  farmerId: string;
+  farmerName: string;
+  quantityTons: number;
+  quantityKg?: number;
+  pricePerKg: number;
+  distanceKm?: number;
+  grade?: string;
+  variety?: string;
+  location?: string;
+}
+
+export interface ProcurementPlan {
+  id: string;
+  aggregatorId: string;
+  buyerRequirementId: string;
+  buyerName: string;
+  cropName: string;
+  variety?: string;
+  targetQuantityTons: number;
+  selectedFarmers: ProcurementPlanFarmer[];
+  totalProcuredTons: number;
+  remainingTons: number;
+  buyerOfferedPricePerKg: number;
+  avgFarmerPricePerKg: number;
+  estimatedLogisticsCostPerKg: number;
+  estimatedGrossMarginPerKg: number;
+  estimatedGrossMarginTotal: number;
+  status: 'DRAFT' | 'COMMITTED' | 'BATCH_CREATED' | 'CANCELLED';
+  notes?: string;
+  createdBatchId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AggregationBatchFarmer {
@@ -416,5 +475,37 @@ export interface TraceabilityPassport {
     waterOptimized: boolean;
   };
 }
+
+export interface BuyerRecommendationItem {
+  buyerId: string;
+  buyerName: string;
+  route: 'LOCAL_DIRECT' | 'BULK_DIRECT' | 'AGGREGATOR' | string;
+  reason: string;
+  distanceKm: number;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface BuyerRecommendationResponse {
+  available: boolean;
+  summary: string;
+  recommendations: BuyerRecommendationItem[];
+  fallbackMessage?: string | null;
+}
+
+export interface KisanSaathiAction {
+  label: string;
+  actionType: 'navigate_buyers' | 'navigate_crops' | 'navigate_offers' | 'navigate_storage' | 'navigate_deals' | 'navigate_diary' | 'navigate_aggregator' | string;
+  tab?: 'buyers' | 'listings' | 'offers' | 'storage' | 'orders' | 'activities' | 'aggregator_info' | string;
+}
+
+export interface KisanSaathiMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  actions?: KisanSaathiAction[];
+  isFallback?: boolean;
+}
+
 
 

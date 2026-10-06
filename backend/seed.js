@@ -280,20 +280,25 @@ async function seedDatabase() {
       for (const l of backupData.farmerListings) {
         const harvestDate = l.listingType === 'FUTURE_HARVEST' ? relDate(12) : relDate(-3);
         const createdAt = relTimestamp(-3);
+        const qtyKg = (Number(l.quantityTons) || 0) * 1000;
         await client.query(`
           INSERT INTO farmer_listings (
             id, farmer_id, farmer_name, farmer_phone, crop_id, crop_name, variety,
-            grade, quantity_tons, expected_price_per_kg, harvest_date, location,
-            images, storage_requirement, status, is_demo, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            grade, quantity_tons, quantity_kg, expected_price_per_kg, harvest_date, location,
+            latitude, longitude, images, storage_requirement, status, is_demo, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
           ON CONFLICT (id) DO UPDATE SET
             quantity_tons = EXCLUDED.quantity_tons,
+            quantity_kg = EXCLUDED.quantity_kg,
             expected_price_per_kg = EXCLUDED.expected_price_per_kg,
             harvest_date = EXCLUDED.harvest_date,
+            latitude = EXCLUDED.latitude,
+            longitude = EXCLUDED.longitude,
             status = EXCLUDED.status
         `, [
           l.id, l.farmerId, l.farmerName, l.farmerPhone, l.cropId, l.cropName, l.variety,
-          l.grade, l.quantityTons, l.expectedPricePerKg, harvestDate, l.location,
+          l.grade, l.quantityTons, qtyKg, l.expectedPricePerKg, harvestDate, l.location,
+          l.latitude || null, l.longitude || null,
           JSON.stringify(l.images || []), l.storageRequirement, l.status || 'ACTIVE', true,
           createdAt
         ]);
@@ -306,23 +311,35 @@ async function seedDatabase() {
       for (const r of backupData.buyerRequirements) {
         const requiredDate = relDate(10);
         const createdAt = relTimestamp(-2);
+        const reqQtyKg = r.requiredQuantityKg || (Number(r.quantityTons) || 0) * 1000;
+        const minLotKg = r.minimumDirectFarmerLotKg !== undefined ? r.minimumDirectFarmerLotKg : (r.buyerType === 'bulk' ? 20000 : 250);
         await client.query(`
           INSERT INTO buyer_requirements (
-            id, buyer_id, buyer_name, buyer_company, crop_id, crop_name, variety,
-            quantity_tons, unit, grade_required, size_min_mm, size_max_mm, max_moisture,
-            max_defects, location, required_date, offered_price_per_kg, delivery_type,
+            id, buyer_id, buyer_name, buyer_company, buyer_type, crop_id, crop_name, variety,
+            quantity_tons, required_quantity_kg, minimum_direct_farmer_lot_kg, aggregation_allowed,
+            unit, grade_required, size_min_mm, size_max_mm, max_moisture,
+            max_defects, location, delivery_latitude, delivery_longitude, required_date, offered_price_per_kg, delivery_type,
             status, special_requirements, is_demo, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, true, $27)
           ON CONFLICT (id) DO UPDATE SET
             quantity_tons = EXCLUDED.quantity_tons,
+            required_quantity_kg = EXCLUDED.required_quantity_kg,
+            minimum_direct_farmer_lot_kg = EXCLUDED.minimum_direct_farmer_lot_kg,
+            buyer_type = EXCLUDED.buyer_type,
+            aggregation_allowed = EXCLUDED.aggregation_allowed,
             offered_price_per_kg = EXCLUDED.offered_price_per_kg,
             required_date = EXCLUDED.required_date,
+            delivery_latitude = EXCLUDED.delivery_latitude,
+            delivery_longitude = EXCLUDED.delivery_longitude,
             status = EXCLUDED.status
         `, [
-          r.id, r.buyerId, r.buyerName, r.buyerCompany, r.cropId, r.cropName, r.variety,
-          r.quantityTons, r.unit || 'tonnes', r.gradeRequired, r.sizeMinMm, r.sizeMaxMm,
-          r.maxMoisture, r.maxDefects, r.location, requiredDate, r.offeredPricePerKg,
-          r.deliveryType, r.status || 'OPEN', r.specialRequirements || '', true,
+          r.id, r.buyerId, r.buyerName, r.buyerCompany, r.buyerType || (Number(r.quantityTons) >= 20 ? 'bulk' : 'local'),
+          r.cropId, r.cropName, r.variety,
+          r.quantityTons, reqQtyKg, minLotKg, r.aggregationAllowed !== undefined ? r.aggregationAllowed : true,
+          r.unit || 'tonnes', r.gradeRequired, r.sizeMinMm, r.sizeMaxMm,
+          r.maxMoisture, r.maxDefects, r.location, r.deliveryLatitude || null, r.deliveryLongitude || null,
+          requiredDate, r.offeredPricePerKg,
+          r.deliveryType, r.status || 'OPEN', r.specialRequirements || '',
           createdAt
         ]);
       }

@@ -95,6 +95,21 @@ export const FarmerDashboard: React.FC = () => {
   // Match score explanation modal
   const [selectedMatchExplanation, setSelectedMatchExplanation] = useState<RequirementMatch | null>(null);
 
+  // Find Buyers Filter & Interactive View states
+  const [buyerFilterCrop, setBuyerFilterCrop] = useState<string>('All');
+  const [buyerFilterVariety, setBuyerFilterVariety] = useState<string>('All');
+  const [buyerFilterGrade, setBuyerFilterGrade] = useState<string>('All');
+  const [buyerFilterDistance, setBuyerFilterDistance] = useState<number | null>(50);
+  const [buyerFilterType, setBuyerFilterType] = useState<'all' | 'local' | 'bulk' | 'aggregator'>('all');
+  const [buyerSortBy, setBuyerSortBy] = useState<'best_match' | 'nearest' | 'price' | 'date'>('best_match');
+  const [buyerViewMode, setBuyerViewMode] = useState<'list' | 'map'>('list');
+  const [mapSelectedMatch, setMapSelectedMatch] = useState<RequirementMatch | null>(null);
+
+  // AI Buyer Guide state
+  const [aiRecommendation, setAiRecommendation] = useState<any | null>(null);
+  const [aiLoading, setAiLoading] = useState<boolean>(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   // Storage decision calculator state
   const [scenarioParams, setScenarioParams] = useState({
     currentOfferPrice: 18.0,
@@ -180,6 +195,14 @@ export const FarmerDashboard: React.FC = () => {
   useEffect(() => {
     fetchData();
     runStorageCalculation();
+
+    const handleTabNav = (e: any) => {
+      if (e.detail?.tab) {
+        setActiveTab(e.detail.tab);
+      }
+    };
+    window.addEventListener('farmer-navigate-tab', handleTabNav);
+    return () => window.removeEventListener('farmer-navigate-tab', handleTabNav);
   }, [user]);
 
   const handleViewMatches = async (listing: FarmerListing) => {
@@ -192,6 +215,40 @@ export const FarmerDashboard: React.FC = () => {
       console.error('Error getting matches:', err);
     } finally {
       setLoadingMatches(false);
+    }
+  };
+
+  const handleAskAiBuyerGuide = async () => {
+    const activeListing = selectedListingForMatches || listings[0];
+    if (!activeListing) {
+      alert(lang === 'hi' ? 'कृपया पहले अपनी फसल चुनें।' : 'Please select your produce listing first.');
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await api.getAiBuyerRecommendation({
+        listingId: activeListing.id,
+        cropName: activeListing.cropName,
+        variety: activeListing.variety,
+        quantityTons: activeListing.quantityTons,
+        grade: activeListing.grade,
+        expectedPricePerKg: activeListing.expectedPricePerKg,
+        location: activeListing.farmerLocation || user?.location || 'Kushinagar, UP',
+        latitude: activeListing.latitude || user?.latitude || 26.740,
+        longitude: activeListing.longitude || user?.longitude || 83.889,
+        language: lang === 'en' ? 'en' : 'hi'
+      });
+
+      if (res.available === false && res.fallbackMessage) {
+        setAiError(res.fallbackMessage);
+      }
+      setAiRecommendation(res);
+    } catch (err: any) {
+      setAiError(lang === 'hi' ? 'AI सिफ़ारिश फ़िलहाल उपलब्ध नहीं है।' : 'AI recommendation temporarily unavailable.');
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -853,183 +910,710 @@ export const FarmerDashboard: React.FC = () => {
       {/* ========================================================================= */}
       {/* 🔎 TAB 3: BUYER DISCOVERY (मेरी फसल कौन खरीदेगा?) */}
       {/* ========================================================================= */}
-      {activeTab === 'buyers' && (
-        <div className="space-y-4 animate-fadeIn">
-          
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900">
-                मेरी फसल कौन खरीदेगा? (Kisko Maal Chahiye?)
-              </h2>
-              <p className="text-xs text-slate-500">
-                आपके इलाके के सक्रिय खरीदार और कंपनियां
-              </p>
-            </div>
+      {/* ========================================================================= */}
+      {/* 🔎 TAB 3: BUYER DISCOVERY (मेरी फसल कौन खरीदेगा?) */}
+      {/* ========================================================================= */}
+      {activeTab === 'buyers' && (() => {
+        const activeListing = selectedListingForMatches || listings[0];
+        const farmerQtyTons = activeListing ? Number(activeListing.quantityTons) : 8.0;
+        const farmerQtyKg = farmerQtyTons * 1000;
 
-            {listings.length > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-600">फसल चुनें:</span>
-                <select
-                  value={selectedListingForMatches?.id || ''}
-                  onChange={(e) => {
-                    const found = listings.find(l => l.id === e.target.value);
-                    if (found) handleViewMatches(found);
-                  }}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold bg-white"
-                >
-                  {listings.map(l => (
-                    <option key={l.id} value={l.id}>
-                      {l.cropName} ({l.quantityTons * 10} क्विंटल)
-                    </option>
-                  ))}
-                </select>
+        // Apply filters & sorting
+        const displayedMatches = matchedBuyers.filter(m => {
+          const req = m.requirement;
+          if (buyerFilterCrop !== 'All' && req.cropName.toLowerCase() !== buyerFilterCrop.toLowerCase()) {
+            return false;
+          }
+          if (buyerFilterVariety !== 'All' && req.variety?.toLowerCase() !== buyerFilterVariety.toLowerCase()) {
+            return false;
+          }
+          if (buyerFilterGrade !== 'All' && req.gradeRequired?.toLowerCase() !== buyerFilterGrade.toLowerCase()) {
+            return false;
+          }
+          if (buyerFilterDistance !== null && (m.distanceKm ?? 999) > buyerFilterDistance) {
+            return false;
+          }
+          const bType = req.buyerType || (req.quantityTons >= 20 ? 'bulk' : 'local');
+          if (buyerFilterType === 'local' && bType !== 'local') return false;
+          if (buyerFilterType === 'bulk' && bType !== 'bulk') return false;
+          if (buyerFilterType === 'aggregator') {
+            const isAgg = m.eligibility?.routeType === 'aggregator_pooled' || req.aggregationAllowed === true;
+            if (!isAgg) return false;
+          }
+          return true;
+        }).sort((a, b) => {
+          if (buyerSortBy === 'best_match') return b.matchScore - a.matchScore;
+          if (buyerSortBy === 'nearest') return (a.distanceKm ?? 999) - (b.distanceKm ?? 999);
+          if (buyerSortBy === 'price') return (b.requirement.offeredPricePerKg || 0) - (a.requirement.offeredPricePerKg || 0);
+          if (buyerSortBy === 'date') return new Date(a.requirement.requiredDate || '').getTime() - new Date(b.requirement.requiredDate || '').getTime();
+          return 0;
+        });
+
+        return (
+          <div className="space-y-5 animate-fadeIn">
+            {/* Header & Listing Selection */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                    मेरी फसल कौन खरीदेगा? (Find Buyers)
+                  </h2>
+                  <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    {displayedMatches.length} सक्रिय अवसर
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  स्थानीय आढ़ती (Local Traders), प्रोसेसिंग उद्योग (Bulk Buyers) और संग्राहक नेटवर्क
+                </p>
               </div>
-            )}
-          </div>
 
-          {/* Simple Distance / Net Realization Tip */}
-          <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900">
-            <span className="text-lg">💡</span>
-            <div>
-              <strong className="block">ध्यान दें (Important Advice):</strong>
-              सिर्फ ज्यादा कीमत देखना काफी नहीं है। दूर के खरीदार तक पहुंचाने का भाड़ा खर्च (Transport Cost) भी कटता है। हमारा सिस्टम नीचे आपको दिखाता है कि <strong>"खर्च के बाद आपके हाथ में कितना रुपया बचेगा" (Estimated Net Realization)</strong>।
-            </div>
-          </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {listings.length > 0 && (
+                  <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <span className="text-xs font-bold text-slate-600">आपकी फसल:</span>
+                    <select
+                      value={activeListing?.id || ''}
+                      onChange={(e) => {
+                        const found = listings.find(l => l.id === e.target.value);
+                        if (found) handleViewMatches(found);
+                      }}
+                      className="text-xs font-black text-emerald-800 bg-transparent outline-none cursor-pointer"
+                    >
+                      {listings.map(l => (
+                        <option key={l.id} value={l.id}>
+                          {l.cropName} ({l.quantityTons}T / {l.quantityTons * 10} क्विंटल) - {l.grade || 'Grade A'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-          {loadingMatches ? (
-            <div className="py-12 text-center text-slate-400">
-              <Sparkles className="h-8 w-8 mx-auto animate-spin text-emerald-600 mb-2" />
-              <p className="text-sm font-bold">अनुकूल खरीदार खोजे जा रहे हैं...</p>
-            </div>
-          ) : matchedBuyers.length === 0 ? (
-            <div className="text-center py-14 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
-              <div className="text-4xl">🔍</div>
-              <h3 className="text-base font-bold text-slate-800">अभी कोई सीधा खरीदार नहीं मिला</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                नए खरीदार रोज ऑर्डर डालते हैं। आप अपनी फसल का रेट थोड़ा अपडेट कर सकते हैं या पास के संग्राहक से जुड़ सकते हैं।
-              </p>
-              <button
-                onClick={() => setActiveTab('aggregator_info')}
-                className="mt-2 px-5 py-2.5 rounded-xl bg-amber-600 text-white font-bold text-xs"
-              >
-                संग्राहक के साथ मिलकर बेचें
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {matchedBuyers.map((matchItem, idx) => {
-                const req = matchItem.requirement;
-                const nr = matchItem.netRealization;
-
-                return (
-                  <div 
-                    key={idx}
-                    className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-xs hover:border-emerald-400 transition-all space-y-4"
+                {/* View Mode Toggle: [List View] [Map View] */}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                  <button
+                    onClick={() => setBuyerViewMode('list')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      buyerViewMode === 'list'
+                        ? 'bg-white text-slate-900 shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    <div className="flex items-start justify-between">
+                    📋 List View
+                  </button>
+                  <button
+                    onClick={() => setBuyerViewMode('map')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      buyerViewMode === 'map'
+                        ? 'bg-white text-emerald-800 shadow-xs font-black'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🗺️ Map View
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* AI BUYER GUIDE COMPONENT */}
+            <div className="bg-gradient-to-r from-emerald-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-5 border border-emerald-500/30 shadow-md">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">✨</span>
+                    <h3 className="text-sm font-black text-emerald-300">
+                      AI Buyer Guide — {lang === 'hi' ? 'मेरे लिए सबसे सही खरीदार कौन सा है?' : 'Which buyer is best suited for your crop?'}
+                    </h3>
+                    <span className="text-[10px] uppercase font-bold tracking-wider bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">
+                      Decision Support
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    {activeListing
+                      ? `विश्लेषण: ${activeListing.cropName} (${activeListing.quantityTons} टन / ${activeListing.quantityTons * 10} क्विंटल) • स्थान: ${activeListing.farmerLocation || user?.location || 'कुशीनगर'}`
+                      : 'अपनी फसल के अनुकूल सबसे सही खरीदार व रास्ते की तुरंत सलाह पाएं।'}
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleAskAiBuyerGuide}
+                  disabled={aiLoading}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-2 shrink-0 disabled:opacity-60 cursor-pointer"
+                >
+                  <Sparkles className={`h-4 w-4 ${aiLoading ? 'animate-spin' : ''}`} />
+                  <span>
+                    {aiLoading 
+                      ? (lang === 'hi' ? 'आपकी फसल, दूरी और खरीदार की जरूरत देख रहे हैं...' : 'Analyzing crop, distance, and buyer demand...')
+                      : (lang === 'hi' ? 'मेरे लिए बेहतर खरीदार बताएं' : 'Find my best buyer options')
+                    }
+                  </span>
+                </button>
+              </div>
+
+              {/* AI Guide Result / Graceful Fallback Notice */}
+              {aiError && (
+                <div className="mt-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-xs text-amber-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-amber-300 shrink-0" />
+                    <span>{aiError} सामान्य खरीदार सूची और दूरी के नतीजे पूरी तरह सक्रिय हैं।</span>
+                  </div>
+                  <button onClick={() => setAiError(null)} className="text-amber-400 font-bold hover:underline text-[11px] cursor-pointer">
+                    हटाएं
+                  </button>
+                </div>
+              )}
+
+              {aiRecommendation && (
+                <div className="mt-4 bg-white/10 rounded-2xl p-4 sm:p-5 border border-white/15 space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs border-b border-white/10 pb-2.5">
+                    <span className="font-extrabold text-emerald-300 text-sm">
+                      {aiRecommendation.summaryTitle || (lang === 'hi' ? 'सुझाए गए प्रमुख विकल्प (Recommended Options)' : 'Top Recommended Options')}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      AI-assisted recommendation • {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-line bg-black/20 p-3 rounded-xl border border-white/5">
+                    {aiRecommendation.summary || aiRecommendation.explanation}
+                  </p>
+
+                  {Array.isArray(aiRecommendation.recommendations) && aiRecommendation.recommendations.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                      {aiRecommendation.recommendations.slice(0, 2).map((rec: any, rIdx: number) => {
+                        const isBest = rIdx === 0;
+                        const isAgg = rec.route === 'AGGREGATOR' || rec.recommendedRoute === 'aggregator';
+                        const isLocal = rec.route === 'LOCAL_DIRECT' || rec.recommendedRoute === 'direct';
+
+                        return (
+                          <div 
+                            key={rIdx} 
+                            className={`rounded-2xl p-4 border text-xs flex flex-col justify-between ${
+                              isBest 
+                                ? 'bg-gradient-to-br from-emerald-950/90 to-slate-900 border-emerald-400/40 shadow-lg' 
+                                : 'bg-gradient-to-br from-slate-900/90 to-indigo-950/80 border-slate-700/60 shadow-md'
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              {/* Option Badge */}
+                              <div className="flex items-center justify-between">
+                                <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+                                  isBest 
+                                    ? 'bg-emerald-400 text-emerald-950 font-black' 
+                                    : 'bg-amber-400 text-amber-950 font-black'
+                                }`}>
+                                  {isBest ? 'BEST OPTION' : 'SECOND OPTION'}
+                                </span>
+                                <span className="text-xs font-bold text-emerald-300">
+                                  {rec.distanceKm ? `${rec.distanceKm} km away` : 'Near you'}
+                                </span>
+                              </div>
+
+                              {/* Buyer Name & Supply Match */}
+                              <div>
+                                <h4 className="text-sm font-black text-white">{rec.buyerName}</h4>
+                                <p className="text-[11px] text-slate-300 mt-0.5">
+                                  {activeListing 
+                                    ? (lang === 'hi' ? `आपकी ${activeListing.quantityTons}T फसल के अनुकूल।` : `Suitable for your ${activeListing.quantityTons}T supply.`)
+                                    : 'सत्यापित खरीदार मांग'}
+                                </p>
+                              </div>
+
+                              {/* WHY? Section */}
+                              <div className="bg-black/25 rounded-xl p-2.5 border border-white/5 space-y-1">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
+                                  WHY? (कारण):
+                                </span>
+                                <p className="text-[11px] text-slate-200 leading-snug">
+                                  "{rec.reason}"
+                                </p>
+                              </div>
+
+                              {/* Recommended Route */}
+                              <div className="text-[11px] flex items-center gap-1.5 font-bold pt-1">
+                                <span className="text-slate-400">अनुशंसित मार्ग:</span>
+                                <span className={isAgg ? 'text-amber-300' : 'text-emerald-300'}>
+                                  {isAgg ? 'Aggregator के जरिए' : isLocal ? 'सीधा स्थानीय खरीदार (Direct Local)' : 'सीधा थोक सौदा (Direct Bulk)'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex flex-wrap items-center gap-2 pt-3 mt-3 border-t border-white/10">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Scroll down to the buyer cards list
+                                  window.scrollTo({ top: 800, behavior: 'smooth' });
+                                }}
+                                className="px-3 py-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                              >
+                                [View Buyer]
+                              </button>
+
+                              {isAgg && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveTab('aggregator_info')}
+                                  className="px-3 py-1.5 bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 rounded-lg text-[11px] font-black transition-all cursor-pointer shadow-xs"
+                                >
+                                  [View Aggregator Options]
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-slate-400 italic pt-1">
+                    * AI केवल निर्णय सहायता के लिए है। KisanConnect का सत्यापन इंजन ही वास्तविक पात्रता का अंतिम आधार है।
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* INTERACTIVE FILTERS & DISTANCE SLIDER */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3.5 shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                {/* Buyer Type Tabs */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+                  <span className="text-slate-500 mr-1 text-[11px]">खरीदार प्रकार:</span>
+                  {[
+                    { id: 'all', label: 'All Buyers (सभी)' },
+                    { id: 'local', label: 'Local Buyers (स्थानीय आढ़ती)' },
+                    { id: 'bulk', label: 'Bulk Buyers (थोक खरीदार)' },
+                    { id: 'aggregator', label: 'Aggregator Opportunities (संग्राहक)' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setBuyerFilterType(tab.id as any)}
+                      className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                        buyerFilterType === tab.id
+                          ? 'bg-slate-900 text-white shadow-xs font-extrabold'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sort Option */}
+                <div className="flex items-center gap-1.5 text-xs font-semibold">
+                  <span className="text-slate-500 text-[11px]">क्रमबद्ध करें:</span>
+                  <select
+                    value={buyerSortBy}
+                    onChange={(e) => setBuyerSortBy(e.target.value as any)}
+                    className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl text-slate-800 text-xs font-bold outline-none"
+                  >
+                    <option value="best_match">Best Match (सर्वोत्तम मिलान)</option>
+                    <option value="nearest">Nearest (सबसे पास)</option>
+                    <option value="price">Best Price (अधिकतम भाव)</option>
+                    <option value="date">Soonest (जल्दी तारीख)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Distance Filter Pills (5 km, 10 km, 25 km, 50 km, 100 km, Any) */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-bold text-slate-700 flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 text-rose-500" />
+                  अधिकतम दूरी (Distance):
+                </span>
+                {[
+                  { label: '5 km', val: 5 },
+                  { label: '10 km', val: 10 },
+                  { label: '25 km', val: 25 },
+                  { label: '50 km', val: 50 },
+                  { label: '100 km', val: 100 },
+                  { label: 'Any Distance', val: null }
+                ].map(opt => (
+                  <button
+                    key={String(opt.val)}
+                    onClick={() => setBuyerFilterDistance(opt.val)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                      buyerFilterDistance === opt.val
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* MAIN CONTENT AREA */}
+            {loadingMatches ? (
+              <div className="py-16 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+                <Sparkles className="h-8 w-8 mx-auto animate-spin text-emerald-600 mb-2" />
+                <p className="text-sm font-bold text-slate-700">अनुकूल खरीदार खोजे जा रहे हैं...</p>
+                <p className="text-xs text-slate-400 mt-1">दूरी, गुणवत्ता व मात्रा नियमों की जांच जारी है</p>
+              </div>
+            ) : displayedMatches.length === 0 ? (
+              <div className="text-center py-14 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
+                <div className="text-4xl">🔍</div>
+                <h3 className="text-base font-bold text-slate-800">चुने गए फ़िल्टर पर कोई खरीदार नहीं मिला</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  दूरी सीमा बढ़ाकर <strong>50 km या 100 km</strong> चुनें, या पास के संग्राहक के साथ अपनी फसल पूल करें।
+                </p>
+                <div className="flex justify-center gap-2">
+                  <button
+                    onClick={() => {
+                      setBuyerFilterDistance(null);
+                      setBuyerFilterType('all');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs"
+                  >
+                    फ़िल्टर साफ़ करें (Clear Filters)
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('aggregator_info')}
+                    className="px-4 py-2 rounded-xl bg-amber-600 text-white font-bold text-xs"
+                  >
+                    संग्राहक से जुड़ें
+                  </button>
+                </div>
+              </div>
+            ) : buyerViewMode === 'map' ? (
+              /* MAP VIEW INTERACTIVE CONTAINER */
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                      🗺️ पास के खरीदार व संग्रहण केंद्र (Nearby Buyers Map)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      आपके खेत के चारों ओर सक्रिय मांग केंद्र (दूरी व प्रकार के अनुसार)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-bold">
+                    <span className="flex items-center gap-1 text-blue-700">
+                      <span className="h-2.5 w-2.5 rounded-full bg-blue-500 inline-block"></span> Local Buyer
+                    </span>
+                    <span className="flex items-center gap-1 text-purple-700">
+                      <span className="h-2.5 w-2.5 rounded-full bg-purple-500 inline-block"></span> Bulk Buyer
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-700">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block"></span> Collection Point
+                    </span>
+                  </div>
+                </div>
+
+                {/* Simulated Geolocation Radar Canvas */}
+                <div className="relative w-full h-80 sm:h-96 bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 rounded-2xl border border-slate-700 overflow-hidden flex items-center justify-center p-4">
+                  {/* Radar Circles */}
+                  <div className="absolute h-24 w-24 rounded-full border border-emerald-500/20 pointer-events-none"></div>
+                  <div className="absolute h-48 w-48 rounded-full border border-emerald-500/20 pointer-events-none"></div>
+                  <div className="absolute h-72 w-72 rounded-full border border-emerald-500/20 pointer-events-none"></div>
+                  <span className="absolute bottom-3 left-4 text-[10px] text-slate-400 font-mono">
+                    📍 केंद्र: {user?.location || 'कुशीनगर (Kushinagar)'} • रेंज: {buyerFilterDistance ? `${buyerFilterDistance} km` : '100 km'}
+                  </span>
+
+                  {/* Center Farmer Point */}
+                  <div className="relative z-10 flex flex-col items-center">
+                    <div className="h-5 w-5 rounded-full bg-emerald-500 border-2 border-white shadow-lg animate-ping absolute"></div>
+                    <div className="h-5 w-5 rounded-full bg-emerald-500 border-2 border-white shadow-lg relative z-10 flex items-center justify-center text-[9px] text-white font-black">
+                      🌾
+                    </div>
+                    <span className="mt-1 px-2 py-0.5 rounded bg-slate-900/90 text-emerald-300 font-bold text-[10px] border border-emerald-500/40">
+                      आपका खेत ({farmerQtyTons}T {activeListing?.cropName || 'Potato'})
+                    </span>
+                  </div>
+
+                  {/* Buyer Pins Scattered deterministically around center */}
+                  {displayedMatches.map((m, idx) => {
+                    const req = m.requirement;
+                    const bType = req.buyerType || (req.quantityTons >= 20 ? 'bulk' : 'local');
+                    const dist = m.distanceKm ?? (idx * 15 + 8);
+                    
+                    // Angle and distance translation for map layout
+                    const angle = (idx * (360 / Math.max(displayedMatches.length, 1)) * Math.PI) / 180;
+                    const radius = Math.min(130, Math.max(35, (dist / 100) * 125));
+                    const x = Math.cos(angle) * radius;
+                    const y = Math.sin(angle) * radius;
+
+                    const pinColor = bType === 'local' ? 'bg-blue-500 text-blue-100' : 'bg-purple-600 text-purple-100';
+
+                    return (
+                      <button
+                        key={m.requirement.id}
+                        onClick={() => setMapSelectedMatch(m)}
+                        style={{
+                          transform: `translate(${x}px, ${y}px)`
+                        }}
+                        className={`absolute z-20 flex flex-col items-center group cursor-pointer transition-transform hover:scale-110`}
+                        title={`${req.buyerName} - ${dist} km`}
+                      >
+                        <div className={`px-2 py-0.5 rounded-full text-[10px] font-black border border-white/60 shadow-md flex items-center gap-1 ${pinColor}`}>
+                          <span>{bType === 'local' ? '🏪' : '🏭'}</span>
+                          <span>{dist} km</span>
+                        </div>
+                        <span className="text-[9px] text-slate-300 font-bold bg-slate-950/80 px-1 rounded mt-0.5 max-w-[90px] truncate">
+                          {req.buyerName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Marker Detail Card */}
+                {mapSelectedMatch && (() => {
+                  const m = mapSelectedMatch;
+                  const req = m.requirement;
+                  const nr = m.netRealization;
+                  const bType = req.buyerType || (req.quantityTons >= 20 ? 'bulk' : 'local');
+                  const minLot = (req.minimumDirectFarmerLotKg || 0) / 1000;
+                  const isDirectEligible = bType === 'local' || farmerQtyTons >= minLot;
+
+                  return (
+                    <div className="p-4 bg-slate-50 border-2 border-emerald-400 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-black text-slate-900">{req.buyerCompany}</span>
-                          <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                            {req.deliveryType === 'PICKUP_REQUIRED' ? '🚜 खेत से उठाएंगे' : '🚚 प्लांट तक'}
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                            bType === 'local' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {bType === 'local' ? 'LOCAL BUYER' : 'BULK BUYER'}
                           </span>
+                          <span className="font-extrabold text-slate-900 text-sm">{req.buyerCompany || req.buyerName}</span>
+                          <span className="text-xs text-slate-500">• {m.distanceKm ?? 8} km away</span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          जरूरत: <strong>{req.quantityTons * 10} क्विंटल ({req.quantityTons} टन)</strong> • {req.cropName} ({req.variety})
+                        <div className="text-xs text-slate-600 mt-1">
+                          फसल: <strong>{req.cropName} ({req.variety})</strong> • मांग: <strong>{req.quantityTons} टन</strong> • भाव: <strong>₹{req.offeredPricePerKg}/kg</strong>
                         </div>
+                        {!isDirectEligible && (
+                          <div className="text-[11px] text-amber-700 font-semibold mt-1">
+                            ⚠️ आपकी मात्रा ({farmerQtyTons}T) न्यूनतम सीधे खरीद लॉट ({minLot}T) से कम है। संग्राहक के जरिए आपूर्ति की जा सकती है।
+                          </div>
+                        )}
                       </div>
 
-                      {/* Match badge & Voice listen button */}
-                      <div className="flex items-center gap-1.5">
-                        <VoiceListenButton
-                          size="xs"
-                          textHi={`${req.buyerCompany} को ${req.quantityTons * 10} क्विंटल ${req.cropName} की आवश्यकता है। कंपनी का ऑफर भाव ₹${nr.buyerPrice.toFixed(0)} प्रति किलो है। खर्च के बाद हाथ में ₹${nr.estimatedNetRealization.toFixed(2)} प्रति किलो बचेगा। मैच स्कोर ${matchItem.matchScore} प्रतिशत है।`}
-                          textEn={`${req.buyerCompany} needs ${req.quantityTons * 10} quintals of ${req.cropName}. Offer rate is ₹${nr.buyerPrice.toFixed(2)} per kg. Net realization in hand is ₹${nr.estimatedNetRealization.toFixed(2)} per kg. Match score is ${matchItem.matchScore} percent.`}
-                        />
+                      <div className="flex items-center gap-2">
+                        {isDirectEligible ? (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.createOffer({
+                                  requirementId: req.id,
+                                  listingId: activeListing?.id,
+                                  sellerId: user?.id,
+                                  sellerName: user?.name,
+                                  cropName: activeListing?.cropName,
+                                  variety: activeListing?.variety,
+                                  quantityTons: activeListing?.quantityTons,
+                                  offeredPricePerKg: req.offeredPricePerKg,
+                                  deliveryTerms: req.deliveryType
+                                });
+                                alert(`${req.buyerCompany || req.buyerName} को आपका प्रस्ताव भेज दिया गया है!`);
+                                await fetchData();
+                                setActiveTab('offers');
+                              } catch (e) {
+                                alert((e as Error).message);
+                              }
+                            }}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs"
+                          >
+                            सौदा भेजें (Make Offer)
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setActiveTab('aggregator_info')}
+                            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs"
+                          >
+                            संग्राहक से जुड़ें (Sell Via Aggregator)
+                          </button>
+                        )}
                         <button
-                          onClick={() => setSelectedMatchExplanation(matchItem)}
-                          className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black flex items-center gap-1"
-                          title="विस्तार से देखें"
+                          onClick={() => setMapSelectedMatch(null)}
+                          className="px-2.5 py-2 rounded-xl text-slate-400 hover:text-slate-600 font-bold text-xs"
                         >
-                          <Sparkles className="h-3 w-3 text-emerald-600" />
-                          <span>{matchItem.matchScore}% अनुकूल</span>
+                          बंद करें
                         </button>
                       </div>
                     </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              /* LIST VIEW INTERACTIVE CARDS */
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {displayedMatches.map((matchItem, idx) => {
+                  const req = matchItem.requirement;
+                  const nr = matchItem.netRealization;
+                  const bType = req.buyerType || (req.quantityTons >= 20 ? 'bulk' : 'local');
+                  const minLotTons = req.minimumDirectFarmerLotKg !== undefined 
+                    ? req.minimumDirectFarmerLotKg / 1000 
+                    : (bType === 'bulk' ? 20 : 0.25);
+                  const minLotKg = minLotTons * 1000;
+                  
+                  // Check eligibility
+                  const isBulk = bType === 'bulk';
+                  const isEligibleDirect = !isBulk || farmerQtyTons >= minLotTons;
+                  const isAggregatorOpportunity = isBulk && farmerQtyTons < minLotTons && req.aggregationAllowed !== false;
 
-                    {/* Simple Price & Net In Hand Box */}
-                    <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200 space-y-1.5 text-xs">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-500">कंपनी का ऑफर भाव:</span>
-                        <span className="font-extrabold text-slate-900 text-sm">₹{nr.buyerPrice.toFixed(2)} / किलो</span>
-                      </div>
-                      <div className="flex justify-between items-center text-rose-600">
-                        <span>अनुमानित भाड़ा व खर्च (Deductions):</span>
-                        <span className="font-semibold">- ₹{nr.totalDeductions.toFixed(2)} / किलो</span>
-                      </div>
-                      <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
-                        <div>
-                          <span className="font-bold text-slate-900 block">खर्च काटकर आपके हाथ में (Net In Hand):</span>
-                          <span className="text-[10px] text-slate-400">खेत पर शुद्ध भुगतान</span>
+                  return (
+                    <div
+                      key={req.id || idx}
+                      className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-xs hover:border-emerald-400 transition-all flex flex-col justify-between space-y-4"
+                    >
+                      {/* Card Header */}
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                                isBulk
+                                  ? 'bg-purple-100 text-purple-900 border-purple-200'
+                                  : 'bg-blue-100 text-blue-900 border-blue-200'
+                              }`}>
+                                {isBulk ? 'BULK BUYER' : 'LOCAL BUYER'}
+                              </span>
+                              <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                                {req.deliveryType === 'PICKUP_REQUIRED' ? '🚜 खेत से उठाएंगे' : '🚚 डिलीवरी'}
+                              </span>
+                            </div>
+
+                            <h4 className="text-base font-extrabold text-slate-900 mt-1">
+                              {req.buyerCompany || req.buyerName}
+                            </h4>
+                            <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+                              <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              <span>{req.location || 'स्थानीय मंडी'}</span>
+                              <strong className="text-slate-700 font-extrabold">
+                                • {matchItem.distanceKm ?? 8} km away
+                              </strong>
+                            </div>
+                          </div>
+
+                          {/* Match Score Badge */}
+                          <div className="text-right shrink-0">
+                            <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-black inline-flex items-center gap-1">
+                              <Sparkles className="h-3 w-3 text-emerald-600" />
+                              <span>{matchItem.matchScore}% अनुकूल</span>
+                            </span>
+                            <div className="mt-1">
+                              <VoiceListenButton
+                                size="xs"
+                                textHi={`${req.buyerCompany || req.buyerName} को ${req.quantityTons} टन ${req.cropName} चाहिए। ऑफर भाव ₹${req.offeredPricePerKg} प्रति किलो है।`}
+                                textEn={`${req.buyerCompany || req.buyerName} needs ${req.quantityTons} tons of ${req.cropName}. Offer price is ₹${req.offeredPricePerKg} per kg.`}
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <span className="text-lg font-black text-emerald-700">
-                          ₹{nr.estimatedNetRealization.toFixed(2)} / किलो
-                        </span>
+
+                        {/* Demand Details Strip */}
+                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <span className="text-[11px] text-slate-500 block">फसल व किस्म:</span>
+                            <span className="font-extrabold text-slate-900">{req.cropName} ({req.variety || 'Standard'})</span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-slate-500 block">गुणवत्ता (Grade):</span>
+                            <span className="font-extrabold text-slate-900">{req.gradeRequired || 'Grade A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-slate-500 block">कुल जरूरत (Required):</span>
+                            <span className="font-extrabold text-slate-900">
+                              {req.quantityTons} Ton ({req.quantityTons * 10} क्विंटल)
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-slate-500 block">न्यूनतम सीधा लॉट (Min Lot):</span>
+                            <span className="font-extrabold text-slate-900">
+                              {minLotTons >= 1 ? `${minLotTons} Ton` : `${minLotKg} kg`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Price & Realization Box */}
+                        <div className="bg-emerald-50/70 rounded-xl p-3 border border-emerald-200/80 text-xs flex items-center justify-between">
+                          <div>
+                            <span className="text-[11px] text-slate-600 block">खरीदार का संकेतक भाव:</span>
+                            <span className="text-base font-black text-slate-900">
+                              ₹{req.offeredPricePerKg ? Number(req.offeredPricePerKg).toFixed(2) : '20.00'}/kg
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[11px] text-emerald-800 font-bold block">खर्च बाद हाथ में (Net in hand):</span>
+                            <span className="text-sm font-extrabold text-emerald-700">
+                              ₹{nr?.estimatedNetRealization ? Number(nr.estimatedNetRealization).toFixed(2) : Number(req.offeredPricePerKg - 1.25).toFixed(2)}/kg
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Quantity Eligibility Warning / Status Banner */}
+                        {isBulk && !isEligibleDirect && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-1">
+                            <div className="font-bold flex items-center gap-1.5 text-amber-800">
+                              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+                              <span>सीधे थोक खरीद के लिए मात्रा कम है</span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-amber-800">
+                              आपकी मात्रा: <strong>{farmerQtyTons} Ton</strong> • खरीदार का न्यूनतम नियम: <strong>{minLotTons} Ton</strong>
+                              <br />
+                              "Your quantity is below the buyer's direct procurement minimum."
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card Footer Actions */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+                        <button
+                          onClick={() => setSelectedMatchExplanation(matchItem)}
+                          className="text-xs font-bold text-slate-600 hover:text-slate-900 underline cursor-pointer"
+                        >
+                          हिसाब समझें (Details)
+                        </button>
+
+                        {isEligibleDirect ? (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.createOffer({
+                                  requirementId: req.id,
+                                  listingId: activeListing?.id,
+                                  sellerId: user?.id,
+                                  sellerName: user?.name,
+                                  cropName: activeListing?.cropName,
+                                  variety: activeListing?.variety,
+                                  quantityTons: activeListing?.quantityTons,
+                                  offeredPricePerKg: req.offeredPricePerKg,
+                                  deliveryTerms: req.deliveryType
+                                });
+                                alert(`${req.buyerCompany || req.buyerName} को आपका सौदा प्रस्ताव भेज दिया गया है!`);
+                                await fetchData();
+                                setActiveTab('offers');
+                              } catch (e) {
+                                alert((e as Error).message);
+                              }
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
+                          >
+                            सौदा भेजें (Make Offer)
+                          </button>
+                        ) : isAggregatorOpportunity ? (
+                          <button
+                            onClick={() => {
+                              setActiveTab('aggregator_info');
+                            }}
+                            className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
+                          >
+                            संग्राहक के जरिए बेचें (Sell Through Aggregator)
+                          </button>
+                        ) : (
+                          <span className="text-xs font-bold text-slate-400">मात्रा सीमा लागू</span>
+                        )}
                       </div>
                     </div>
-
-                    {/* Match reasons */}
-                    <div className="flex flex-wrap gap-1.5 text-[11px]">
-                      {matchItem.reasons.slice(0, 2).map((r, i) => (
-                        <span key={i} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
-                          ✓ {r}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="pt-1 flex items-center justify-between gap-3">
-                      <button
-                        onClick={() => setSelectedMatchExplanation(matchItem)}
-                        className="text-xs font-bold text-slate-600 hover:text-slate-900 underline"
-                      >
-                        हिसाब समझें
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          try {
-                            await api.createOffer({
-                              requirementId: req.id,
-                              listingId: selectedListingForMatches?.id,
-                              sellerId: user?.id,
-                              sellerName: user?.name,
-                              cropName: selectedListingForMatches?.cropName,
-                              variety: selectedListingForMatches?.variety,
-                              quantityTons: selectedListingForMatches?.quantityTons,
-                              offeredPricePerKg: req.offeredPricePerKg,
-                              deliveryTerms: req.deliveryType
-                            });
-                            alert(`${req.buyerCompany} को आपका ऑफर भेज दिया गया है! वे जल्द संपर्क करेंगे।`);
-                            await fetchData();
-                            setActiveTab('offers');
-                          } catch (e) {
-                            alert((e as Error).message);
-                          }
-                        }}
-                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors"
-                      >
-                        सौदा भेजें (Send Offer)
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-        </div>
-      )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ========================================================================= */}
       {/* 💰 TAB 4: MY OFFERS (मेरे ऑफर) */}

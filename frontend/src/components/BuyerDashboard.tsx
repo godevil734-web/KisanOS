@@ -17,7 +17,9 @@ import {
   ArrowRight,
   ShieldCheck,
   Calendar,
-  MapPin
+  MapPin,
+  Handshake,
+  Check
 } from 'lucide-react';
 import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 
@@ -27,8 +29,26 @@ export const BuyerDashboard: React.FC = () => {
   const [requirements, setRequirements] = useState<BuyerRequirement[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState<'requirements' | 'supply_discovery' | 'orders'>('requirements');
+  const [offers, setOffers] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'requirements' | 'supply_discovery' | 'offers' | 'orders'>('requirements');
   const [loading, setLoading] = useState(true);
+
+  // Counter Offer Modal State
+  const [counterOfferModal, setCounterOfferModal] = useState<{
+    isOpen: boolean;
+    offer: any | null;
+    counterPricePerKg: number;
+    counterQuantityTons: number;
+    message: string;
+    isSubmitting: boolean;
+  }>({
+    isOpen: false,
+    offer: null,
+    counterPricePerKg: 0,
+    counterQuantityTons: 0,
+    message: '',
+    isSubmitting: false
+  });
 
   // NaLamKI Passport Modal State
   const [selectedListingForPassport, setSelectedListingForPassport] = useState<FarmerListing | null>(null);
@@ -77,14 +97,16 @@ export const BuyerDashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [reqRes, cropRes, ordRes] = await Promise.all([
+      const [reqRes, cropRes, ordRes, offRes] = await Promise.all([
         api.getRequirements({ buyerId: user?.id || '' }),
         api.getCrops(),
-        api.getOrders()
+        api.getOrders(),
+        api.getIncomingOffers().catch(() => api.getOffers())
       ]);
       setRequirements(reqRes);
       setCrops(cropRes);
       setOrders(ordRes);
+      setOffers(offRes || []);
 
       if (reqRes.length > 0) {
         handleDiscoverSupply(reqRes[0]);
@@ -93,6 +115,48 @@ export const BuyerDashboard: React.FC = () => {
       console.error('Error fetching buyer data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAcceptOffer = async (offerId: string) => {
+    try {
+      const res = await api.acceptOffer(offerId);
+      alert(`सौदा पक्का! (Deal Confirmed!)\nDeal ID: ${res.deal?.orderNumber || 'Active'}\nएस्क्रो भुगतान सुरक्षित है और पक्का ऑर्डर बन गया है।`);
+      await fetchData();
+      setActiveTab('orders');
+    } catch (err) {
+      alert('Error accepting offer: ' + (err as Error).message);
+    }
+  };
+
+  const handleRejectOffer = async (offerId: string, reason?: string) => {
+    const finalReason = reason || prompt('कृपया अस्वीकार करने का कारण दर्ज करें (Reason):') || 'Buyer declined';
+    try {
+      await api.rejectOffer(offerId, finalReason);
+      alert('प्रस्ताव अस्वीकृत कर दिया गया। (Offer declined)');
+      await fetchData();
+    } catch (err) {
+      alert('Error rejecting offer: ' + (err as Error).message);
+    }
+  };
+
+  const handleCounterOfferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!counterOfferModal.offer) return;
+    setCounterOfferModal(prev => ({ ...prev, isSubmitting: true }));
+    try {
+      await api.counterOffer(counterOfferModal.offer.id, {
+        counterPricePerKg: counterOfferModal.counterPricePerKg,
+        counterQuantityTons: counterOfferModal.counterQuantityTons,
+        message: counterOfferModal.message
+      });
+      alert('जवाबी प्रस्ताव किसान को भेज दिया गया है! (Counter offer sent to farmer)');
+      setCounterOfferModal(prev => ({ ...prev, isOpen: false }));
+      await fetchData();
+    } catch (err) {
+      alert('Error sending counter offer: ' + (err as Error).message);
+    } finally {
+      setCounterOfferModal(prev => ({ ...prev, isSubmitting: false }));
     }
   };
 
@@ -211,6 +275,7 @@ export const BuyerDashboard: React.FC = () => {
         {[
           { id: 'requirements', label: `${t('buyer.industrialProcurement')} (${requirements.length})`, icon: ShoppingBag },
           { id: 'supply_discovery', label: t('buyer.channelDiscovery'), icon: Sparkles },
+          { id: 'offers', label: `आवक प्रस्ताव / Incoming Offers (${offers.filter(o => o.status === 'PENDING' || o.status === 'COUNTERED').length})`, icon: Handshake },
           { id: 'orders', label: `${t('buyer.activeContracts')} (${orders.length})`, icon: Truck },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -593,7 +658,180 @@ export const BuyerDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: PROCUREMENT ORDERS & ESCROW LIFECYCLE */}
+      {/* TAB 3: INCOMING OFFERS & NEGOTIATION */}
+      {activeTab === 'offers' && (
+        <div className="space-y-4 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-black text-slate-900">
+                किसानों से प्राप्त प्रस्ताव (Incoming Farmer Offers)
+              </h3>
+              <p className="text-xs text-slate-500">
+                किसानों द्वारा आपकी खरीद मांग के लिए सीधे भेजे गए आपूर्ति प्रस्ताव
+              </p>
+            </div>
+            <span className="text-xs bg-blue-100 text-blue-900 font-extrabold px-3 py-1 rounded-full">
+              कुल: {offers.length} प्रस्ताव
+            </span>
+          </div>
+
+          {offers.length === 0 ? (
+            <div className="text-center py-14 bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+              <div className="text-4xl">🤝</div>
+              <h4 className="text-sm font-bold text-slate-800">अभी कोई आवक प्रस्ताव नहीं है</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                जब किसान आपकी खरीद मांग के लिए प्रस्ताव भेजेंगे, तो वे यहाँ समीक्षा और स्वीकृति के लिए दिखाई देंगे।
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {offers.map((off) => {
+                const effectivePrice = (off.status === 'COUNTERED' && off.counterPricePerKg)
+                  ? off.counterPricePerKg
+                  : (off.offeredPricePerKg || off.buyerOfferedPricePerKg || off.farmerExpectedPricePerKg || 0);
+                const effectiveQty = (off.status === 'COUNTERED' && off.counterQuantityTons)
+                  ? off.counterQuantityTons
+                  : off.quantityTons;
+                const totalAmount = Math.round(effectivePrice * effectiveQty * 1000);
+
+                const isFarmerCountered = off.status === 'COUNTERED' && off.counterBy === 'farmer';
+                const isBuyerCountered = off.status === 'COUNTERED' && off.counterBy === 'buyer';
+
+                return (
+                  <div
+                    key={off.id}
+                    className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-slate-900">
+                          {off.sellerName || 'किसान (Farmer)'}
+                        </span>
+                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
+                          {off.sellerRole === 'aggregator' ? 'संग्राहक' : 'किसान (Direct)'}
+                        </span>
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                          off.status === 'ACCEPTED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : off.status === 'REJECTED'
+                            ? 'bg-rose-100 text-rose-800'
+                            : off.status === 'COUNTERED'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {off.status === 'ACCEPTED'
+                            ? '✓ स्वीकृत सौदा (Deal Active)'
+                            : off.status === 'REJECTED'
+                            ? '✕ अस्वीकृत (Declined)'
+                            : off.status === 'COUNTERED'
+                            ? '🔄 जवाबी बातचीत (Countered)'
+                            : '⏳ समीक्षाधीन (Pending Review)'}
+                        </span>
+                      </div>
+
+                      <div className="text-base font-black text-slate-900">
+                        {effectiveQty} टन ({effectiveQty * 10} क्विंटल) • {off.cropName} {off.variety ? `(${off.variety})` : ''}
+                        <span className="text-emerald-700 ml-3">
+                          ₹{effectivePrice}/किग्रा
+                        </span>
+                        <span className="text-xs font-normal text-slate-500 ml-2">
+                          (कुल मूल्य: <strong>₹{totalAmount.toLocaleString()}</strong>)
+                        </span>
+                      </div>
+
+                      {/* Counter terms banner */}
+                      {isFarmerCountered && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950 space-y-1">
+                          <div className="font-extrabold flex items-center gap-1.5 text-amber-900">
+                            <span>⚠️ किसान ने जवाबी भाव प्रस्तावित किया है (Farmer Counter):</span>
+                          </div>
+                          <div className="flex items-center gap-2 font-bold text-slate-800">
+                            <span className="bg-amber-200 px-2 py-0.5 rounded text-amber-950">₹{off.counterPricePerKg}/किग्रा</span>
+                            <span className="bg-amber-200 px-2 py-0.5 rounded text-amber-950">{off.counterQuantityTons} टन</span>
+                          </div>
+                          {off.counterMessage && (
+                            <p className="italic text-slate-600 bg-white p-2 rounded border border-amber-100">
+                              "{off.counterMessage}"
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {isBuyerCountered && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-xs text-blue-900">
+                          ⏳ आपने जवाबी प्रस्ताव भेजा है (₹{off.counterPricePerKg}/kg, {off.counterQuantityTons}T)। किसान के उत्तर की प्रतीक्षा है।
+                        </div>
+                      )}
+
+                      {off.message && !isFarmerCountered && (
+                        <p className="text-xs text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                          "{off.message}"
+                        </p>
+                      )}
+
+                      <div className="text-[10px] text-slate-400">
+                        डिलीवरी: {off.deliveryTerms || 'Farm Gate Pickup'} • दिनांक: {new Date(off.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+                      {/* If PENDING or (COUNTERED by farmer) -> Buyer can Accept, Counter, or Reject */}
+                      {(off.status === 'PENDING' || isFarmerCountered) && (
+                        <>
+                          <button
+                            onClick={() => handleAcceptOffer(off.id)}
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Check className="h-4 w-4" />
+                            <span>स्वीकार करें (Accept Deal)</span>
+                          </button>
+                          <button
+                            onClick={() => setCounterOfferModal({
+                              isOpen: true,
+                              offer: off,
+                              counterPricePerKg: off.counterPricePerKg || effectivePrice,
+                              counterQuantityTons: off.counterQuantityTons || effectiveQty,
+                              message: '',
+                              isSubmitting: false
+                            })}
+                            className="px-3.5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer"
+                          >
+                            जवाबी भाव (Counter)
+                          </button>
+                          <button
+                            onClick={() => handleRejectOffer(off.id)}
+                            className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                          >
+                            अस्वीकार (Reject)
+                          </button>
+                        </>
+                      )}
+
+                      {isBuyerCountered && (
+                        <div className="px-3.5 py-2 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200">
+                          ⏳ किसान के जवाब की प्रतीक्षा है
+                        </div>
+                      )}
+
+                      {off.status === 'ACCEPTED' && (
+                        <button
+                          onClick={() => setActiveTab('orders')}
+                          className="px-4 py-2.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-emerald-300"
+                        >
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          <span>सौदा देखें (View Active Deal)</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 4: PROCUREMENT ORDERS & ESCROW LIFECYCLE */}
       {activeTab === 'orders' && (
         <div className="space-y-4">
           <h3 className="text-sm font-bold text-slate-800">
@@ -837,6 +1075,110 @@ export const BuyerDashboard: React.FC = () => {
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-sm"
                 >
                   Publish Requirement
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BUYER COUNTER OFFER */}
+      {counterOfferModal.isOpen && counterOfferModal.offer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg">
+                  🔄
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    जवाबी भाव प्रस्तावित करें (Propose Counter Terms)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    किसान: <span className="font-bold text-slate-700">{counterOfferModal.offer.sellerName}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCounterOfferModal(prev => ({ ...prev, isOpen: false }))}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCounterOfferSubmit} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    मात्रा (Tons) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    required
+                    value={counterOfferModal.counterQuantityTons}
+                    onChange={(e) => setCounterOfferModal({ ...counterOfferModal, counterQuantityTons: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-extrabold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    जवाबी भाव (₹/kg) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    required
+                    value={counterOfferModal.counterPricePerKg}
+                    onChange={(e) => setCounterOfferModal({ ...counterOfferModal, counterPricePerKg: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-extrabold text-amber-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  संदेश / कारण (Note to Farmer)
+                </label>
+                <textarea
+                  rows={2}
+                  value={counterOfferModal.message}
+                  onChange={(e) => setCounterOfferModal({ ...counterOfferModal, message: e.target.value })}
+                  placeholder="उदा. हमारी गुणवत्ता विनिर्देश के अनुसार अधिकतम ₹21/किलो दे सकते हैं..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="bg-amber-50 rounded-2xl p-3 border border-amber-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-900 block uppercase">
+                    संशोधित कुल सौदा (New Total Value)
+                  </span>
+                  <div className="text-lg font-black text-amber-950">
+                    ₹{Math.round(counterOfferModal.counterQuantityTons * 1000 * counterOfferModal.counterPricePerKg).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCounterOfferModal(prev => ({ ...prev, isOpen: false }))}
+                  className="w-1/3 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={counterOfferModal.isSubmitting}
+                  className="w-2/3 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {counterOfferModal.isSubmitting ? 'भेजा जा रहा है...' : 'जवाबी भाव भेजें (Send Counter)'}
                 </button>
               </div>
             </form>

@@ -15,6 +15,16 @@ const { otpProvider } = require('./services/otpService');
 const { getHyperlocalWeather } = require('./services/weatherService');
 const { calculateDistanceKm, resolveCoordinates, filterByDistance } = require('./services/locationService');
 const { generateBuyerRecommendation, generateKisanSaathiResponse } = require('./services/geminiService');
+const {
+  createOffer,
+  acceptOffer,
+  counterOffer,
+  rejectOffer,
+  getDealsForUser,
+  getDealById,
+  getSentOffers,
+  getIncomingOffers
+} = require('./services/dealService');
 const { createRateLimiter } = require('./middleware/rateLimiter');
 const { 
   JWT_SECRET, 
@@ -1946,141 +1956,143 @@ app.post('/api/ai/kisan-saathi/chat', authMiddleware, requireRole(['farmer', 'ad
 // ---------------------------------------------
 
 app.get('/api/offers', authMiddleware, async (req, res) => {
-  const user = req.user;
-  let offers = [];
-  if (user.role === 'farmer' || user.role === 'aggregator') {
-    offers = await db.find('offers', o => o.sellerId === user.id);
-  } else if (user.role === 'buyer') {
-    offers = await db.find('offers', o => o.buyerId === user.id);
-  } else {
-    offers = await db.find('offers');
+  try {
+    const user = req.user;
+    let offers = [];
+    if (user.role === 'farmer' || user.role === 'aggregator') {
+      offers = await getSentOffers({ user });
+    } else if (user.role === 'buyer' || user.role === 'dealer') {
+      offers = await getIncomingOffers({ user });
+    } else {
+      offers = await getSentOffers({ user });
+    }
+    res.json(offers);
+  } catch (err) {
+    console.error('Error fetching offers:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch offers' });
   }
-  res.json(offers);
 });
 
-app.post('/api/offers', authMiddleware, requireRole(['dealer', 'buyer', 'aggregator', 'admin']), requireActiveStatus, async (req, res) => {
-  const {
-    requirementId,
-    listingId,
-    sellerId,
-    sellerName,
-    cropName,
-    variety,
-    quantityTons,
-    offeredPricePerKg,
-    deliveryTerms,
-    message
-  } = req.body;
+app.get('/api/offers/sent', authMiddleware, async (req, res) => {
+  try {
+    const offers = await getSentOffers({ user: req.user });
+    res.json(offers);
+  } catch (err) {
+    console.error('Error fetching sent offers:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch sent offers' });
+  }
+});
 
-  const newOffer = {
-    id: `off-${Date.now()}`,
-    requirementId,
-    listingId,
-    buyerId: req.user.role === 'buyer' ? req.user.id : (req.body.buyerId || 'usr-buyer-1'),
-    buyerName: req.user.role === 'buyer' ? req.user.name : (req.body.buyerName || 'Buyer'),
-    sellerId: sellerId || req.user.id,
-    sellerName: sellerName || req.user.name,
-    sellerRole: req.user.role === 'aggregator' ? 'aggregator' : 'farmer',
-    cropName: cropName || 'Potato',
-    variety: variety || 'Standard',
-    quantityTons: Number(quantityTons),
-    buyerOfferedPricePerKg: Number(offeredPricePerKg),
-    farmerExpectedPricePerKg: Number(offeredPricePerKg),
-    deliveryTerms: deliveryTerms || 'Farm Gate Pickup',
-    status: 'PENDING',
-    message: message || 'Interested in fulfilling your requirements.',
-    createdAt: new Date().toISOString()
-  };
+app.get('/api/offers/incoming', authMiddleware, async (req, res) => {
+  try {
+    const offers = await getIncomingOffers({ user: req.user });
+    res.json(offers);
+  } catch (err) {
+    console.error('Error fetching incoming offers:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch incoming offers' });
+  }
+});
 
-  await db.insert('offers', newOffer);
+app.post('/api/offers', authMiddleware, requireRole(['farmer', 'aggregator', 'dealer', 'buyer', 'admin']), requireActiveStatus, async (req, res) => {
+  try {
+    const newOffer = await createOffer({ user: req.user, offerData: req.body });
+    res.status(201).json(newOffer);
+  } catch (err) {
+    console.error('Error creating offer:', err);
+    res.status(400).json({ error: err.message || 'Failed to create offer' });
+  }
+});
 
-  // Notify recipient
-  const targetId = req.user.role === 'buyer' ? newOffer.sellerId : newOffer.buyerId;
-  await db.insert('notifications', {
-    userId: targetId,
-    title: `New Offer for ${newOffer.quantityTons}T ${newOffer.cropName}`,
-    message: `${req.user.name} offered ₹${offeredPricePerKg}/kg.`,
-    type: 'OFFER',
-    read: false,
-    timestamp: new Date().toISOString()
-  });
+app.post('/api/offers/:id/accept', authMiddleware, requireActiveStatus, async (req, res) => {
+  try {
+    const result = await acceptOffer({ user: req.user, offerId: req.params.id });
+    res.json(result);
+  } catch (err) {
+    console.error('Error accepting offer:', err);
+    res.status(400).json({ error: err.message || 'Failed to accept offer' });
+  }
+});
 
-  res.status(201).json(newOffer);
+app.post('/api/offers/:id/counter', authMiddleware, requireActiveStatus, async (req, res) => {
+  try {
+    const { counterPricePerKg, counterQuantityTons, message } = req.body;
+    const updatedOffer = await counterOffer({
+      user: req.user,
+      offerId: req.params.id,
+      counterPricePerKg,
+      counterQuantityTons,
+      message
+    });
+    res.json(updatedOffer);
+  } catch (err) {
+    console.error('Error countering offer:', err);
+    res.status(400).json({ error: err.message || 'Failed to counter offer' });
+  }
+});
+
+app.post('/api/offers/:id/reject', authMiddleware, requireActiveStatus, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const updatedOffer = await rejectOffer({
+      user: req.user,
+      offerId: req.params.id,
+      reason
+    });
+    res.json(updatedOffer);
+  } catch (err) {
+    console.error('Error rejecting offer:', err);
+    res.status(400).json({ error: err.message || 'Failed to reject offer' });
+  }
 });
 
 app.put('/api/offers/:id/status', authMiddleware, async (req, res) => {
-  const { status } = req.body; // 'ACCEPTED' or 'REJECTED'
-  const offer = await db.findById('offers', req.params.id);
-  if (!offer) return res.status(404).json({ error: 'Offer not found' });
-
-  // Authorize: only seller, buyer, or admin can update status
-  if (req.user.role !== 'admin' && req.user.id !== offer.sellerId && req.user.id !== offer.buyerId) {
-    return res.status(403).json({ error: 'Unauthorized to update this offer status' });
+  try {
+    const { status, counterPricePerKg, counterQuantityTons, reason, message } = req.body;
+    if (status === 'ACCEPTED') {
+      const result = await acceptOffer({ user: req.user, offerId: req.params.id });
+      return res.json({ offer: { id: req.params.id, status: 'ACCEPTED' }, order: result.deal });
+    }
+    if (status === 'REJECTED') {
+      const updatedOffer = await rejectOffer({ user: req.user, offerId: req.params.id, reason: reason || message });
+      return res.json({ offer: updatedOffer });
+    }
+    if (status === 'COUNTERED') {
+      const updatedOffer = await counterOffer({
+        user: req.user,
+        offerId: req.params.id,
+        counterPricePerKg,
+        counterQuantityTons,
+        message
+      });
+      return res.json({ offer: updatedOffer });
+    }
+    return res.status(400).json({ error: 'Unsupported offer status update' });
+  } catch (err) {
+    console.error('Error updating offer status:', err);
+    res.status(400).json({ error: err.message || 'Failed to update offer' });
   }
+});
 
-  const updatedOffer = await db.updateById('offers', req.params.id, { status });
-
-  // If accepted, automatically generate confirmed Order
-  if (status === 'ACCEPTED') {
-    const produceTotal = Number((offer.quantityTons * 1000 * offer.buyerOfferedPricePerKg).toFixed(0));
-    const logisticsCost = 8500;
-    const platformFee = 2000;
-    const totalAmount = produceTotal + logisticsCost + platformFee;
-
-    const newOrder = {
-      id: `ord-${Date.now()}`,
-      orderNumber: `KC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      buyerId: offer.buyerId,
-      buyerName: offer.buyerName,
-      sellerType: (offer.sellerRole || 'farmer').toUpperCase(),
-      sellerId: offer.sellerId,
-      sellerName: offer.sellerName,
-      cropName: offer.cropName,
-      variety: offer.variety,
-      quantityTons: offer.quantityTons,
-      unitPricePerKg: offer.buyerOfferedPricePerKg,
-      produceTotal,
-      logisticsCost,
-      platformFee,
-      totalAmount,
-      pickupLocation: 'Farm Gate / Collection Point',
-      deliveryLocation: 'Buyer Processing / Mandi Gate',
-      transporterId: 'trp-601',
-      transporterName: 'Kisan Express Agri Freight',
-      status: 'CONFIRMED',
-      paymentStatus: 'ESCROW_LOCKED',
-      createdAt: new Date().toISOString(),
-      estimatedDeliveryDate: new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0],
-      timeline: [
-        { status: 'CREATED', note: 'Offer accepted by seller', timestamp: new Date().toISOString() },
-        { status: 'CONFIRMED', note: 'Order confirmed and locked in escrow', timestamp: new Date().toISOString() }
-      ]
-    };
-
-    await db.insert('orders', newOrder);
-
-    // Notify both
-    await db.insert('notifications', {
-      userId: offer.buyerId,
-      title: `Order ${newOrder.orderNumber} Created`,
-      message: `Your offer for ${offer.quantityTons}T ${offer.cropName} was accepted!`,
-      type: 'ORDER',
-      read: false,
-      timestamp: new Date().toISOString()
-    });
-    await db.insert('notifications', {
-      userId: offer.sellerId,
-      title: `Order ${newOrder.orderNumber} Confirmed`,
-      message: `Payment escrow locked. Prepare produce for pickup.`,
-      type: 'ORDER',
-      read: false,
-      timestamp: new Date().toISOString()
-    });
-
-    return res.json({ offer: updatedOffer, order: newOrder });
+// Dedicated Deals Endpoints (Mirrors / Orders)
+app.get('/api/deals', authMiddleware, async (req, res) => {
+  try {
+    const deals = await getDealsForUser({ user: req.user });
+    res.json(deals);
+  } catch (err) {
+    console.error('Error fetching deals:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch deals' });
   }
+});
 
-  res.json({ offer: updatedOffer });
+app.get('/api/deals/:id', authMiddleware, async (req, res) => {
+  try {
+    const deal = await getDealById({ user: req.user, dealId: req.params.id });
+    if (!deal) return res.status(404).json({ error: 'Deal not found' });
+    res.json(deal);
+  } catch (err) {
+    console.error('Error fetching deal:', err);
+    res.status(400).json({ error: err.message || 'Failed to fetch deal' });
+  }
 });
 
 // ---------------------------------------------

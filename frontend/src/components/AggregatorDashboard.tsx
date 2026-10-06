@@ -34,7 +34,13 @@ import {
   Boxes,
   Warehouse,
   Check,
-  X
+  X,
+  Send,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Calculator,
+  Info
 } from 'lucide-react';
 
 export const AggregatorDashboard: React.FC = () => {
@@ -57,7 +63,39 @@ export const AggregatorDashboard: React.FC = () => {
   const [batches, setBatches] = useState<AggregationBatch[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [sentOffers, setSentOffers] = useState<any[]>([]);
+  const [incomingOffers, setIncomingOffers] = useState<any[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Guide and Economics Simulator UI states
+  const [showHowItWorks, setShowHowItWorks] = useState(true);
+  const [showProfitCalculator, setShowProfitCalculator] = useState(false);
+
+  // Profit calculator interactive inputs
+  const [calcVolumeTons, setCalcVolumeTons] = useState(50);
+  const [calcBuyerPrice, setCalcBuyerPrice] = useState(21.5);
+  const [calcFarmerCost, setCalcFarmerCost] = useState(19.0);
+  const [calcLogisticsCost, setCalcLogisticsCost] = useState(1.15);
+
+  // Aggregator Make Offer to Bulk Buyer modal
+  const [makeOfferModal, setMakeOfferModal] = useState<{
+    isOpen: boolean;
+    requirement: any | null;
+    quantityTons: number;
+    offeredPricePerKg: number;
+    deliveryTerms: string;
+    message: string;
+    isSubmitting: boolean;
+  }>({
+    isOpen: false,
+    requirement: null,
+    quantityTons: 30,
+    offeredPricePerKg: 21.5,
+    deliveryTerms: 'Buyer Warehouse Delivery (Consolidated Truckload)',
+    message: 'हमारे पास ग्रेड-A गुणवत्ता का समेकित (aggregated) बैच तैयार है।',
+    isSubmitting: false
+  });
 
   // Filters
   const [cropFilter, setCropFilter] = useState('All');
@@ -86,13 +124,16 @@ export const AggregatorDashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [demandRes, supplyRes, planRes, batchRes, subPlanRes, ordRes] = await Promise.all([
+      const [demandRes, supplyRes, planRes, batchRes, subPlanRes, ordRes, sentOffRes, incOffRes, dealRes] = await Promise.all([
         api.getAggregatorDemand().catch(() => []),
         api.getAggregatorSupply().catch(() => []),
         api.getProcurementPlans().catch(() => []),
         api.getBatches().catch(() => []),
         api.getSubscriptionPlans().catch(() => []),
-        api.getOrders().catch(() => [])
+        api.getOrders().catch(() => []),
+        api.getSentOffers().catch(() => []),
+        api.getIncomingOffers().catch(() => []),
+        api.getDeals().catch(() => [])
       ]);
 
       setBuyerDemands(demandRes.demands || demandRes || []);
@@ -101,6 +142,9 @@ export const AggregatorDashboard: React.FC = () => {
       setBatches(batchRes || []);
       setPlans(subPlanRes || []);
       setOrders(ordRes || []);
+      setSentOffers(sentOffRes || []);
+      setIncomingOffers(incOffRes || []);
+      setDeals(dealRes || []);
     } catch (err) {
       console.error('Error fetching aggregator data:', err);
     } finally {
@@ -239,6 +283,77 @@ export const AggregatorDashboard: React.FC = () => {
   const draftGrossMarginPerKg = Number((draftBuyerPrice - draftAvgFarmerCost - draftEstLogistics).toFixed(2));
   const draftTotalMargin = Math.round(draftGrossMarginPerKg * draftTotalTons * 1000);
 
+  // Real-time margin calculator values
+  const simTurnover = Math.round(calcVolumeTons * 1000 * calcBuyerPrice);
+  const simFarmerPayout = Math.round(calcVolumeTons * 1000 * calcFarmerCost);
+  const simLogisticsExpense = Math.round(calcVolumeTons * 1000 * calcLogisticsCost);
+  const simGrossMarginPerKg = Number((calcBuyerPrice - calcFarmerCost - calcLogisticsCost).toFixed(2));
+  const simNetProfit = Math.round(simGrossMarginPerKg * calcVolumeTons * 1000);
+
+  // Make Offer to Bulk Buyer handlers
+  const handleOpenMakeOffer = (req: any) => {
+    setMakeOfferModal({
+      isOpen: true,
+      requirement: req,
+      quantityTons: Number(req.quantityTons || 30),
+      offeredPricePerKg: Number(req.offeredPricePerKg || 21.5),
+      deliveryTerms: 'Buyer Warehouse Delivery (Consolidated Truckload)',
+      message: `नमस्ते, हम ${profile?.businessName || user?.name || 'कुशीनगर एग्रीगेटर हब'} से ${req.cropName} का उच्च गुणवत्ता वाला समेकित (aggregated) बैच आपूर्ति करने का प्रस्ताव देते हैं।`,
+      isSubmitting: false
+    });
+  };
+
+  const handleSendOfferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!makeOfferModal.requirement) return;
+    setMakeOfferModal(prev => ({ ...prev, isSubmitting: true }));
+    try {
+      await api.createOffer({
+        requirementId: makeOfferModal.requirement.id,
+        buyerId: makeOfferModal.requirement.buyerId,
+        buyerName: makeOfferModal.requirement.buyerCompany || makeOfferModal.requirement.buyerName,
+        sellerId: user?.id,
+        sellerName: profile?.businessName || user?.name || 'Kushinagar Aggregation Hub',
+        cropName: makeOfferModal.requirement.cropName,
+        variety: makeOfferModal.requirement.variety,
+        quantityTons: makeOfferModal.quantityTons,
+        offeredPricePerKg: makeOfferModal.offeredPricePerKg,
+        deliveryTerms: makeOfferModal.deliveryTerms,
+        message: makeOfferModal.message
+      });
+      alert(`Bulk offer sent successfully to ${makeOfferModal.requirement.buyerCompany || makeOfferModal.requirement.buyerName}!`);
+      setMakeOfferModal(prev => ({ ...prev, isOpen: false }));
+      await fetchData();
+      setActiveTab('transactions');
+    } catch (err) {
+      alert('Failed to send offer: ' + (err as Error).message);
+    } finally {
+      setMakeOfferModal(prev => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
+  const handleAcceptFarmerOffer = async (offerId: string) => {
+    if (!confirm('क्या आप किसान का यह सौदा स्वीकार करना चाहते हैं? इससे आर्डर दर्ज हो जाएगा।')) return;
+    try {
+      await api.acceptOffer(offerId);
+      alert('सौदा स्वीकार कर लिया गया! आर्डर सफलतापूर्वक दर्ज हुआ।');
+      await fetchData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
+  const handleRejectFarmerOffer = async (offerId: string) => {
+    const reason = prompt('अस्वीकार करने का कारण लिखें:') || 'गुणवत्ता या मूल्य असहमति';
+    try {
+      await api.rejectOffer(offerId, reason);
+      alert('सौदा प्रस्ताव अस्वीकार कर दिया गया।');
+      await fetchData();
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner: Aggregator Profile & Subscription */}
@@ -306,6 +421,211 @@ export const AggregatorDashboard: React.FC = () => {
           <div className="text-2xl font-black text-slate-900 mt-1">{batches.length}</div>
           <span className="text-[10px] text-slate-500">Pooled lots in fulfillment</span>
         </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 💡 ARCHITECTURAL GUIDE: HOW AGGREGATOR WORKS IN KISANOS */}
+      {/* ========================================================================= */}
+      <div className="bg-gradient-to-br from-amber-50 via-white to-orange-50/50 rounded-3xl border-2 border-amber-200 p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-lg shadow-xs">
+              💡
+            </div>
+            <div>
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <span>KisanOS Aggregator Architecture</span>
+                <span className="text-[10px] bg-amber-200/80 text-amber-900 font-bold px-2 py-0.5 rounded-full">
+                  ग्रामीण संग्राहक मॉडल
+                </span>
+              </h3>
+              <p className="text-xs text-slate-600">
+                बिना खेत की जमीन के 30–60 टन के कॉर्पोरेट आर्डर पूरे करें और प्रति ट्रक ₹60,000–₹90,000 शुद्ध मुनाफा कमाएं।
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowProfitCalculator(!showProfitCalculator)}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border ${
+                showProfitCalculator 
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs' 
+                  : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+              }`}
+            >
+              <Calculator className="h-3.5 w-3.5" />
+              <span>{showProfitCalculator ? 'कैलकुलेटर छिपाएं' : 'मुनाफा कैलकुलेटर'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowHowItWorks(!showHowItWorks)}
+              className="p-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-amber-100/60 transition-colors cursor-pointer"
+              title="Toggle Guide"
+            >
+              {showHowItWorks ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Architectural Steps */}
+        {showHowItWorks && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2 animate-fadeIn">
+            <div className="bg-white p-4 rounded-2xl border border-amber-200/80 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">चरण 1</span>
+                <span className="text-xl">👨‍🌾</span>
+              </div>
+              <h4 className="text-xs font-black text-slate-900">छोटे किसानों की समस्या</h4>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                86% किसानों के पास केवल 2 से 10 टन उपज होती है। बड़ी औद्योगिक इकाइयां (चिप्स, फूड प्रोसेसिंग) कम से कम 30–60 टन का पूरा ट्रक ही लेती हैं।
+              </p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-amber-200/80 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">चरण 2</span>
+                <span className="text-xl">🤝</span>
+              </div>
+              <h4 className="text-xs font-black text-slate-900">संग्राहक (FPO / Hub)</h4>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                आप अपने 50 किमी दायरे में 5–8 किसानों के छोटे लॉट जोड़ते हैं, गुणवत्ता व नमी जांचते हैं और एक संगठित 60 टन का बैच तैयार करते हैं।
+              </p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-amber-200/80 shadow-2xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md">चरण 3</span>
+                <span className="text-xl">🚚</span>
+              </div>
+              <h4 className="text-xs font-black text-slate-900">समेकित उठान व कोल्ड स्टोरेज</h4>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                एक ही बड़े ट्रक द्वारा गाँव-गाँव से फार्म-गेट उठान कराएं या रीजनल कोल्ड स्टोरेज का सहारा लें, जिससे प्रति किलो ढुलाई लागत ₹1.15 पर सिमट जाती है।
+              </p>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-2xs space-y-2 bg-gradient-to-b from-white to-emerald-50/50">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">चरण 4: मुनाफा</span>
+                <span className="text-xl">💰</span>
+              </div>
+              <h4 className="text-xs font-black text-slate-900">पारदर्शी मार्जिन मॉडल</h4>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                कंपनी से ₹21.50/किग्रा लें, किसान को ₹19.00 दें (मंडी भाव से ₹2 अधिक), ढुलाई ₹1.15 दें। <strong>शुद्ध मार्जिन ₹1.35/किग्रा (60 टन = ₹81,000 बचत)</strong>!
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 📊 INTERACTIVE LIVE MARGIN SIMULATOR */}
+        {showProfitCalculator && (
+          <div className="bg-white rounded-2xl border-2 border-amber-300 p-5 shadow-xs space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h4 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Calculator className="h-4 w-4 text-amber-600" />
+                  <span>लाइव एग्रीगेटर मुनाफा सिम्युलेटर (Live Margin Calculator)</span>
+                </h4>
+                <p className="text-xs text-slate-500">
+                  मात्रा और भाव बदलकर देखें कि समेकन (aggregation) से प्रति बैच कितनी कमाई होगी।
+                </p>
+              </div>
+              <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full">
+                मार्जिन: ₹{simGrossMarginPerKg}/किग्रा
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs">
+              <div className="space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="font-bold text-slate-600">बैच मात्रा (Volume):</span>
+                  <span className="font-black text-amber-800">{calcVolumeTons} टन</span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  step="5"
+                  value={calcVolumeTons}
+                  onChange={(e) => setCalcVolumeTons(Number(e.target.value))}
+                  className="w-full accent-amber-600 cursor-pointer"
+                />
+                <span className="text-[10px] text-slate-400 block">{calcVolumeTons * 10} क्विंटल ({calcVolumeTons * 1000} किग्रा)</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="font-bold text-slate-600">खरीदार भाव (Buyer Price):</span>
+                  <span className="font-black text-purple-700">₹{calcBuyerPrice.toFixed(2)}/किग्रा</span>
+                </div>
+                <input
+                  type="range"
+                  min="18"
+                  max="35"
+                  step="0.5"
+                  value={calcBuyerPrice}
+                  onChange={(e) => setCalcBuyerPrice(Number(e.target.value))}
+                  className="w-full accent-purple-600 cursor-pointer"
+                />
+                <span className="text-[10px] text-slate-400 block">थोक कंपनी से मिलने वाला भाव</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="font-bold text-slate-600">किसान खरीद दर (Farmer Cost):</span>
+                  <span className="font-black text-emerald-700">₹{calcFarmerCost.toFixed(2)}/किग्रा</span>
+                </div>
+                <input
+                  type="range"
+                  min="14"
+                  max="30"
+                  step="0.5"
+                  value={calcFarmerCost}
+                  onChange={(e) => setCalcFarmerCost(Number(e.target.value))}
+                  className="w-full accent-emerald-600 cursor-pointer"
+                />
+                <span className="text-[10px] text-slate-400 block">खेत से सीधा किसान को भुगतान</span>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="font-bold text-slate-600">ढुलाई लागत (Logistics):</span>
+                  <span className="font-black text-slate-700">₹{calcLogisticsCost.toFixed(2)}/किग्रा</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="3.0"
+                  step="0.05"
+                  value={calcLogisticsCost}
+                  onChange={(e) => setCalcLogisticsCost(Number(e.target.value))}
+                  className="w-full accent-slate-600 cursor-pointer"
+                />
+                <span className="text-[10px] text-slate-400 block">ट्रक किराया + लोडिंग/अनलोडिंग</span>
+              </div>
+            </div>
+
+            {/* Calculated Results Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <span className="text-[10px] font-bold text-slate-400 block">कुल टर्नओवर (Revenue)</span>
+                <span className="text-base font-black text-slate-900">₹{simTurnover.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                <span className="text-[10px] font-bold text-emerald-700 block">किसानों को भुगतान (Farmer Payout)</span>
+                <span className="text-base font-black text-emerald-800">₹{simFarmerPayout.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
+                <span className="text-[10px] font-bold text-blue-700 block">लॉजिस्टिक्स व्यय (Transit Cost)</span>
+                <span className="text-base font-black text-blue-800">₹{simLogisticsExpense.toLocaleString('en-IN')}</span>
+              </div>
+              <div className="bg-amber-500 text-white p-3 rounded-xl shadow-xs">
+                <span className="text-[10px] font-black uppercase text-amber-100 block">एग्रीगेटर शुद्ध मुनाफा (Net Profit)</span>
+                <span className="text-lg font-black text-white">₹{simNetProfit.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 6-TIER HIERARCHY NAVIGATION TABS */}
@@ -465,7 +785,7 @@ export const AggregatorDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                         <button
                           onClick={() => {
                             setCropFilter(req.cropName);
@@ -476,13 +796,23 @@ export const AggregatorDashboard: React.FC = () => {
                           Find Farmer Supply →
                         </button>
 
-                        <button
-                          onClick={() => handleStartPlanForDemand(req)}
-                          className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Plus className="h-4 w-4" />
-                          <span>Build Procurement Plan</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenMakeOffer(req)}
+                            className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Send className="h-3.5 w-3.5" />
+                            <span>सौदा भेजें (Make Offer)</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleStartPlanForDemand(req)}
+                            className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span>Build Plan</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -928,38 +1258,204 @@ export const AggregatorDashboard: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 💰 TAB 6: TRANSACTIONS & ESCROW ORDERS */}
+      {/* 💰 TAB 6: TRANSACTIONS & MARKETPLACE DEALS */}
       {/* ========================================================================= */}
       {activeTab === 'transactions' && (
-        <div className="space-y-4 animate-fadeIn">
+        <div className="space-y-6 animate-fadeIn">
           <div>
-            <h2 className="text-lg font-black text-slate-900">Transactions & Orders</h2>
-            <p className="text-xs text-slate-500">Escrow settlement, payment release, and dispatch tracking.</p>
+            <h2 className="text-lg font-black text-slate-900">Transactions & Marketplace Lifecycle</h2>
+            <p className="text-xs text-slate-500">
+              Track incoming farmer pooling requests, outgoing bulk offers to companies, and confirmed escrow orders.
+            </p>
           </div>
 
-          {orders.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 p-6 text-slate-400">
-              <DollarSign className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-              <p className="text-sm font-bold text-slate-700">No transaction orders yet</p>
-              <p className="text-xs text-slate-500 mt-1">Confirmed orders from bulk buyers will appear here.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {orders.map((ord) => (
-                <div key={ord.id} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-slate-900">{ord.orderNumber}</span>
-                    <h4 className="font-black text-slate-900 text-sm">{ord.cropName} ({ord.variety}) • {ord.quantityTons}T</h4>
-                    <span className="text-xs text-slate-500">Buyer: {ord.buyerName}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-sm font-black text-emerald-700">₹{Number(ord.totalAmount).toLocaleString('en-IN')}</span>
-                    <span className="text-[10px] text-slate-400 block font-bold uppercase">{ord.status}</span>
-                  </div>
+          {/* SECTION 1: INCOMING FARMER POOLING REQUESTS */}
+          <div className="bg-white rounded-2xl border-2 border-emerald-200 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs">
+                  👨‍🌾
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    किसानों से प्राप्त पूलिंग अनुरोध (Incoming Farmer Pooling Offers)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    स्थानीय किसानों द्वारा आपके एग्रीगेटर हब को भेजे गए आपूर्ति प्रस्ताव।
+                  </p>
                 </div>
-              ))}
+              </div>
+              <span className="text-xs font-black bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-full">
+                {incomingOffers.length} अनुरोध
+              </span>
             </div>
-          )}
+
+            {incomingOffers.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-xs">
+                <p className="font-bold text-slate-600">कोई नया किसान पूलिंग अनुरोध नहीं है</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  जब किसान "Join Batch" पर क्लिक करके सौदा भेजेंगे, वे यहाँ दिखाई देंगे।
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {incomingOffers.map((offer) => {
+                  const isActionable = offer.status === 'OFFER_MADE' || offer.status === 'COUNTERED';
+                  return (
+                    <div
+                      key={offer.id}
+                      className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-white transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-900 text-sm">{offer.sellerName}</span>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                            offer.status === 'ACCEPTED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : offer.status === 'REJECTED'
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {offer.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600 mt-1">
+                          फसल: <strong>{offer.cropName} ({offer.variety || 'Standard'})</strong> • मात्रा: <strong>{offer.quantityTons} टन</strong> ({offer.quantityTons * 10} क्विंटल)
+                        </div>
+                        <div className="text-xs text-emerald-700 font-bold mt-0.5">
+                          प्रस्तावित भाव: ₹{Number(offer.offeredPricePerKg).toFixed(2)}/किग्रा • डिलीवरी: {offer.deliveryTerms || 'खेत से उठान'}
+                        </div>
+                        {offer.message && (
+                          <p className="text-[11px] text-slate-500 italic mt-1">"{offer.message}"</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isActionable && (
+                          <>
+                            <button
+                              onClick={() => handleAcceptFarmerOffer(offer.id)}
+                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
+                            >
+                              स्वीकार करें (Accept)
+                            </button>
+                            <button
+                              onClick={() => handleRejectFarmerOffer(offer.id)}
+                              className="px-3 py-2 rounded-xl bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 font-bold text-xs transition-colors cursor-pointer"
+                            >
+                              अस्वीकार
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 2: SENT BULK OFFERS TO CORPORATE BUYERS */}
+          <div className="bg-white rounded-2xl border-2 border-purple-200 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-purple-100 text-purple-800 font-bold text-xs">
+                  🏢
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    थोक खरीदारों को भेजे गए सौदे (Sent Bulk Offers to Buyers)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    बड़ी कंपनियों (FreshBites, Balaji आदि) को सीधे भेजे गए समेकित प्रस्ताव।
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-black bg-purple-100 text-purple-900 px-2.5 py-0.5 rounded-full">
+                {sentOffers.length} प्रेषित
+              </span>
+            </div>
+
+            {sentOffers.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-xs">
+                <p className="font-bold text-slate-600">कोई प्रेषित सौदा नहीं है</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  टैब 1 (Buyer Demand) में किसी भी मांग पर "सौदा भेजें (Make Offer)" दबाकर बल्क ऑफर भेजें।
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sentOffers.map((offer) => (
+                  <div
+                    key={offer.id}
+                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-sm">{offer.buyerName}</span>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          offer.status === 'ACCEPTED'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : offer.status === 'REJECTED'
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-purple-100 text-purple-800'
+                        }`}>
+                          {offer.status}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-600 mt-1">
+                        फसल: <strong>{offer.cropName} ({offer.variety})</strong> • मात्रा: <strong>{offer.quantityTons} टन</strong> • भाव: <strong>₹{offer.offeredPricePerKg}/किग्रा</strong>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        शर्तें: {offer.deliveryTerms || 'वेयरहाउस डिलीवरी'}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-sm font-black text-purple-800">
+                        ₹{(Number(offer.quantityTons) * 1000 * Number(offer.offeredPricePerKg)).toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">कुल सौदा मूल्य</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 3: CONFIRMED DEALS & ESCROW ORDERS */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-black text-slate-900">
+                पुष्ट आर्डर व सौदे (Confirmed Deals & Escrow Orders)
+              </h3>
+              <span className="text-xs font-bold text-slate-500">{orders.length} आर्डर</span>
+            </div>
+
+            {orders.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-xs">
+                <DollarSign className="h-6 w-6 mx-auto text-slate-300 mb-1" />
+                <p className="font-bold text-slate-600">कोई पुष्ट आर्डर नहीं है</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">सौदा स्वीकार होते ही आर्डर यहाँ दर्ज हो जाएगा।</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {orders.map((ord) => (
+                  <div key={ord.id} className="bg-slate-50 rounded-2xl border border-slate-200 p-4 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-900">{ord.orderNumber}</span>
+                      <h4 className="font-black text-slate-900 text-sm">{ord.cropName} ({ord.variety}) • {ord.quantityTons}T</h4>
+                      <span className="text-xs text-slate-500">पार्टी: {ord.buyerName || ord.sellerName}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-black text-emerald-700">₹{Number(ord.totalAmount).toLocaleString('en-IN')}</span>
+                      <span className="text-[10px] text-slate-400 block font-bold uppercase">{ord.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1168,17 +1664,139 @@ export const AggregatorDashboard: React.FC = () => {
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setShowSubscriptionModal(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600"
+                className="px-4 py-2 text-xs font-bold text-slate-600 cursor-pointer"
               >
                 Close
               </button>
               <button
                 onClick={() => handleSubscribe(selectedPlanId)}
-                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-xs"
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs rounded-xl shadow-xs cursor-pointer"
               >
                 Activate Subscription
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🚀 AGGREGATOR TO BULK BUYER MAKE OFFER MODAL */}
+      {/* ========================================================================= */}
+      {makeOfferModal.isOpen && makeOfferModal.requirement && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>🏢 थोक खरीदार को सौदा प्रस्ताव (Send Bulk Offer)</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  खरीदार: <strong>{makeOfferModal.requirement.buyerCompany || makeOfferModal.requirement.buyerName}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setMakeOfferModal(prev => ({ ...prev, isOpen: false }))}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendOfferSubmit} className="space-y-4 text-xs">
+              <div className="bg-purple-50 rounded-2xl p-3 border border-purple-100 text-xs text-purple-900 space-y-1">
+                <div className="font-bold">मांग विवरण:</div>
+                <div className="flex justify-between">
+                  <span>फसल:</span>
+                  <span className="font-black">{makeOfferModal.requirement.cropName} ({makeOfferModal.requirement.variety || 'Grade A'})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>कंपनी की मांग:</span>
+                  <span className="font-black">{makeOfferModal.requirement.quantityTons} टन (संकेतक भाव: ₹{makeOfferModal.requirement.offeredPricePerKg}/किग्रा)</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  ऑफर की जाने वाली मात्रा (टन में / Tons):
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  step="1"
+                  value={makeOfferModal.quantityTons}
+                  onChange={(e) => setMakeOfferModal({ ...makeOfferModal, quantityTons: Number(e.target.value) })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900 outline-none"
+                  required
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  = {Math.round(makeOfferModal.quantityTons * 10)} क्विंटल ({makeOfferModal.quantityTons * 1000} किग्रा)
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  प्रस्तावित भाव (₹ प्रति किलो / ₹ per kg):
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.25"
+                  value={makeOfferModal.offeredPricePerKg}
+                  onChange={(e) => setMakeOfferModal({ ...makeOfferModal, offeredPricePerKg: Number(e.target.value) })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900 outline-none"
+                  required
+                />
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  = ₹{Math.round(makeOfferModal.offeredPricePerKg * 100)} / क्विंटल
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">डिलीवरी की शर्तें:</label>
+                <input
+                  type="text"
+                  value={makeOfferModal.deliveryTerms}
+                  onChange={(e) => setMakeOfferModal({ ...makeOfferModal, deliveryTerms: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">संदेश (नोट):</label>
+                <textarea
+                  rows={2}
+                  value={makeOfferModal.message}
+                  onChange={(e) => setMakeOfferModal({ ...makeOfferModal, message: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-medium text-slate-900 outline-none"
+                />
+              </div>
+
+              {/* Total Value Summary */}
+              <div className="bg-emerald-50 rounded-2xl p-3 border border-emerald-100 flex justify-between items-center text-xs">
+                <span className="font-bold text-emerald-900">कुल सौदा मूल्य (Total Contract Value):</span>
+                <span className="text-base font-black text-emerald-800">
+                  ₹{Math.round(makeOfferModal.quantityTons * 1000 * makeOfferModal.offeredPricePerKg).toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setMakeOfferModal(prev => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 font-bold text-xs"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={makeOfferModal.isSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{makeOfferModal.isSubmitting ? 'भेज रहे हैं...' : 'सौदा प्रस्ताव भेजें (Send Offer)'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

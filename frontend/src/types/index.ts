@@ -344,30 +344,41 @@ export interface Order {
   deliveryLocation: string;
   transporterId: string;
   transporterName: string;
-  status: 'CREATED' | 'CONFIRMED' | 'AGGREGATING' | 'READY_FOR_PICKUP' | 'IN_TRANSIT' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
+  status: 'CREATED' | 'CONFIRMED' | 'ACTIVE' | 'AGGREGATING' | 'READY_FOR_PICKUP' | 'IN_TRANSIT' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
   paymentStatus: 'PENDING' | 'ESCROW_LOCKED' | 'RELEASED_TO_SELLER' | 'REFUNDED';
   createdAt: string;
-  estimatedDeliveryDate: string;
+  estimatedDeliveryDate?: string;
+  offerId?: string;
+  listingId?: string;
+  requirementId?: string;
+  agreedPricePerKg?: number;
   timeline: OrderTimelineItem[];
 }
 
 export interface Offer {
   id: string;
-  requirementId: string;
-  listingId: string;
+  requirementId?: string;
+  listingId?: string;
+  dealId?: string;
   buyerId: string;
   buyerName: string;
   sellerId: string;
   sellerName: string;
-  sellerRole: string;
+  sellerRole?: string;
   cropName: string;
-  variety: string;
+  variety?: string;
   quantityTons: number;
-  buyerOfferedPricePerKg: number;
-  farmerExpectedPricePerKg: number;
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED';
-  deliveryTerms: string;
+  offeredPricePerKg?: number;
+  buyerOfferedPricePerKg?: number;
+  farmerExpectedPricePerKg?: number;
+  counterPricePerKg?: number;
+  counterQuantityTons?: number;
+  counterMessage?: string;
+  counterBy?: 'farmer' | 'buyer' | string;
+  status: 'PENDING' | 'COUNTERED' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+  deliveryTerms?: string;
   createdAt: string;
+  updatedAt?: string;
   message?: string;
 }
 

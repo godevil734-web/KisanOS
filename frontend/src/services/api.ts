@@ -89,13 +89,22 @@ export const api = {
 
   // Offers
   getOffers: () => request<any[]>('/offers'),
+  getSentOffers: () => request<any[]>('/offers/sent'),
+  getIncomingOffers: () => request<any[]>('/offers/incoming'),
   createOffer: (data: any) => request<any>('/offers', { method: 'POST', body: JSON.stringify(data) }),
+  acceptOffer: (id: string) => request<any>(`/offers/${id}/accept`, { method: 'POST' }),
+  counterOffer: (id: string, data: { counterPricePerKg: number; counterQuantityTons: number; message?: string }) => 
+    request<any>(`/offers/${id}/counter`, { method: 'POST', body: JSON.stringify(data) }),
+  rejectOffer: (id: string, reason?: string) => 
+    request<any>(`/offers/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   updateOfferStatus: (id: string, status: string) => 
     request<any>(`/offers/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
 
-  // Orders
+  // Orders & Deals
   getOrders: () => request<any[]>('/orders'),
   getOrder: (id: string) => request<any>(`/orders/${id}`),
+  getDeals: () => request<any[]>('/deals'),
+  getDeal: (id: string) => request<any>(`/deals/${id}`),
   updateOrderStatus: (id: string, status: string, note?: string) => 
     request<any>(`/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, note }) }),
 

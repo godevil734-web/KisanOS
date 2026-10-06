@@ -252,9 +252,136 @@ export const FarmerDashboard: React.FC = () => {
     }
   };
 
+  const [makeOfferModal, setMakeOfferModal] = useState<{
+    isOpen: boolean;
+    requirement: any | null;
+    listing: any | null;
+    quantityTons: number;
+    offeredPricePerKg: number;
+    deliveryTerms: string;
+    message: string;
+    isSubmitting: boolean;
+  }>({
+    isOpen: false,
+    requirement: null,
+    listing: null,
+    quantityTons: 5,
+    offeredPricePerKg: 20,
+    deliveryTerms: 'Farm Gate Pickup',
+    message: '',
+    isSubmitting: false
+  });
+
+  const [counterModal, setCounterModal] = useState<{
+    isOpen: boolean;
+    offer: any | null;
+    counterPricePerKg: number;
+    counterQuantityTons: number;
+    message: string;
+    isSubmitting: boolean;
+  }>({
+    isOpen: false,
+    offer: null,
+    counterPricePerKg: 0,
+    counterQuantityTons: 0,
+    message: '',
+    isSubmitting: false
+  });
+
+  const openMakeOfferModal = (buyerReq: any, listing?: any) => {
+    const currentList = listing || selectedListingForMatches || listings[0];
+    const reqQty = Number(buyerReq.quantityTons || 0);
+    const listQty = Number(currentList?.quantityTons || 0);
+    const initialQty = (listQty > 0 && reqQty > 0) ? Math.min(listQty, reqQty) : (listQty || reqQty || 5);
+    const initialPrice = Number(buyerReq.offeredPricePerKg || currentList?.expectedPricePerKg || 22);
+
+    setMakeOfferModal({
+      isOpen: true,
+      requirement: buyerReq,
+      listing: currentList,
+      quantityTons: initialQty,
+      offeredPricePerKg: initialPrice,
+      deliveryTerms: buyerReq.deliveryType === 'PICKUP_REQUIRED' ? 'Farm Gate Pickup' : 'Mandi Delivery',
+      message: 'हमारी उपज उच्च गुणवत्ता की है और हम तुरंत डिलीवरी के लिए तैयार हैं।',
+      isSubmitting: false
+    });
+  };
+
+  const handleSendOfferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!makeOfferModal.requirement) return;
+    setMakeOfferModal(prev => ({ ...prev, isSubmitting: true }));
+    try {
+      await api.createOffer({
+        requirementId: makeOfferModal.requirement.id,
+        listingId: makeOfferModal.listing?.id,
+        buyerId: makeOfferModal.requirement.buyerId,
+        buyerName: makeOfferModal.requirement.buyerCompany || makeOfferModal.requirement.buyerName,
+        sellerId: user?.id,
+        sellerName: user?.name,
+        cropName: makeOfferModal.listing?.cropName || makeOfferModal.requirement.cropName,
+        variety: makeOfferModal.listing?.variety || makeOfferModal.requirement.variety,
+        quantityTons: makeOfferModal.quantityTons,
+        offeredPricePerKg: makeOfferModal.offeredPricePerKg,
+        deliveryTerms: makeOfferModal.deliveryTerms,
+        message: makeOfferModal.message
+      });
+
+      alert(lang === 'hi' 
+        ? `${makeOfferModal.requirement.buyerCompany || makeOfferModal.requirement.buyerName} को आपका सौदा प्रस्ताव भेज दिया गया है!` 
+        : `Offer sent successfully to ${makeOfferModal.requirement.buyerCompany || makeOfferModal.requirement.buyerName}!`);
+      
+      setMakeOfferModal(prev => ({ ...prev, isOpen: false }));
+      await fetchData();
+      setActiveTab('offers');
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setMakeOfferModal(prev => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
+  const handleJoinAggregatorBatch = (customListing?: any) => {
+    const currentList = customListing || selectedListingForMatches || listings[0];
+    const aggregatorReq = {
+      id: 'req-agg-kushinagar',
+      buyerId: 'usr-agg-1',
+      buyerCompany: 'विक्रम सिंह (कुशीनगर एग्रीगेटर हब / FPO)',
+      buyerName: 'Vikram Singh',
+      cropName: currentList?.cropName || 'Potato',
+      variety: currentList?.variety || 'Kufri Jyoti',
+      quantityTons: 60,
+      offeredPricePerKg: 20.50,
+      deliveryType: 'PICKUP_REQUIRED',
+      location: 'कुशीनगर हब (12 km)',
+      isAggregator: true
+    };
+    openMakeOfferModal(aggregatorReq, currentList);
+  };
+
+  const handleCounterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!counterModal.offer) return;
+    setCounterModal(prev => ({ ...prev, isSubmitting: true }));
+    try {
+      await api.counterOffer(counterModal.offer.id, {
+        counterPricePerKg: counterModal.counterPricePerKg,
+        counterQuantityTons: counterModal.counterQuantityTons,
+        message: counterModal.message
+      });
+      alert(lang === 'hi' ? 'जवाबी प्रस्ताव भेज दिया गया है!' : 'Counter offer sent successfully!');
+      setCounterModal(prev => ({ ...prev, isOpen: false }));
+      await fetchData();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setCounterModal(prev => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
   const handleAcceptOffer = async (offerId: string) => {
     try {
-      await api.updateOfferStatus(offerId, 'ACCEPTED');
+      await api.acceptOffer(offerId);
       alert(lang === 'hi' 
         ? 'सौदा पक्का हो गया! आपका ऑर्डर दर्ज हो गया है और एस्क्रो भुगतान सुरक्षित है।' 
         : lang === 'hinglish' 
@@ -267,9 +394,10 @@ export const FarmerDashboard: React.FC = () => {
     }
   };
 
-  const handleRejectOffer = async (offerId: string) => {
+  const handleRejectOffer = async (offerId: string, reason?: string) => {
     try {
-      await api.updateOfferStatus(offerId, 'REJECTED');
+      await api.rejectOffer(offerId, reason);
+      alert(lang === 'hi' ? 'प्रस्ताव अस्वीकृत कर दिया गया।' : 'Offer rejected.');
       await fetchData();
     } catch (err) {
       alert((err as Error).message);
@@ -1392,26 +1520,7 @@ export const FarmerDashboard: React.FC = () => {
                       <div className="flex items-center gap-2">
                         {isDirectEligible ? (
                           <button
-                            onClick={async () => {
-                              try {
-                                await api.createOffer({
-                                  requirementId: req.id,
-                                  listingId: activeListing?.id,
-                                  sellerId: user?.id,
-                                  sellerName: user?.name,
-                                  cropName: activeListing?.cropName,
-                                  variety: activeListing?.variety,
-                                  quantityTons: activeListing?.quantityTons,
-                                  offeredPricePerKg: req.offeredPricePerKg,
-                                  deliveryTerms: req.deliveryType
-                                });
-                                alert(`${req.buyerCompany || req.buyerName} को आपका प्रस्ताव भेज दिया गया है!`);
-                                await fetchData();
-                                setActiveTab('offers');
-                              } catch (e) {
-                                alert((e as Error).message);
-                              }
-                            }}
+                            onClick={() => openMakeOfferModal(req, activeListing)}
                             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs"
                           >
                             सौदा भेजें (Make Offer)
@@ -1569,26 +1678,7 @@ export const FarmerDashboard: React.FC = () => {
 
                         {isEligibleDirect ? (
                           <button
-                            onClick={async () => {
-                              try {
-                                await api.createOffer({
-                                  requirementId: req.id,
-                                  listingId: activeListing?.id,
-                                  sellerId: user?.id,
-                                  sellerName: user?.name,
-                                  cropName: activeListing?.cropName,
-                                  variety: activeListing?.variety,
-                                  quantityTons: activeListing?.quantityTons,
-                                  offeredPricePerKg: req.offeredPricePerKg,
-                                  deliveryTerms: req.deliveryType
-                                });
-                                alert(`${req.buyerCompany || req.buyerName} को आपका सौदा प्रस्ताव भेज दिया गया है!`);
-                                await fetchData();
-                                setActiveTab('offers');
-                              } catch (e) {
-                                alert((e as Error).message);
-                              }
-                            }}
+                            onClick={() => openMakeOfferModal(req, activeListing)}
                             className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer"
                           >
                             सौदा भेजें (Make Offer)
@@ -1646,13 +1736,24 @@ export const FarmerDashboard: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {offers.map((off) => {
-                const totalAmount = Math.round(off.buyerOfferedPricePerKg * off.quantityTons * 1000);
+                const effectivePrice = (off.status === 'COUNTERED' && off.counterPricePerKg)
+                  ? off.counterPricePerKg
+                  : (off.offeredPricePerKg || off.buyerOfferedPricePerKg || off.farmerExpectedPricePerKg || 0);
+                const effectiveQty = (off.status === 'COUNTERED' && off.counterQuantityTons)
+                  ? off.counterQuantityTons
+                  : off.quantityTons;
+                const totalAmount = Math.round(effectivePrice * effectiveQty * 1000);
+
+                const isFarmerSender = off.sellerId === user?.id || off.sellerRole === 'farmer';
+                const isBuyerCountered = off.status === 'COUNTERED' && off.counterBy === 'buyer';
+                const isFarmerCountered = off.status === 'COUNTERED' && off.counterBy === 'farmer';
+
                 return (
                   <div 
                     key={off.id}
                     className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
                   >
-                    <div className="space-y-2">
+                    <div className="space-y-2 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-black text-slate-900">{off.buyerName}</span>
                         <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
@@ -1660,60 +1761,134 @@ export const FarmerDashboard: React.FC = () => {
                             ? 'bg-emerald-100 text-emerald-800'
                             : off.status === 'REJECTED'
                             ? 'bg-rose-100 text-rose-800'
-                            : 'bg-amber-100 text-amber-800 animate-pulse'
+                            : off.status === 'COUNTERED'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-blue-100 text-blue-800'
                         }`}>
-                          {off.status === 'ACCEPTED' ? '✓ स्वीकृत (Accepted)' : off.status === 'REJECTED' ? '✕ अस्वीकृत' : '⏳ नया ऑफर (Pending)'}
+                          {off.status === 'ACCEPTED'
+                            ? '✓ स्वीकृत सौदा (Deal Confirmed)'
+                            : off.status === 'REJECTED'
+                            ? '✕ अस्वीकृत (Declined)'
+                            : off.status === 'COUNTERED'
+                            ? '🔄 जवाबी प्रस्ताव (Counter-Offer)'
+                            : '⏳ समीक्षाधीन (Pending)'}
                         </span>
                       </div>
 
                       <div className="text-lg font-black text-emerald-700">
-                        ₹{off.buyerOfferedPricePerKg} / किलो
+                        ₹{effectivePrice} / किलो
                         <span className="text-xs font-normal text-slate-500 ml-2">
                           (कुल रकम: <strong>₹{totalAmount.toLocaleString()}</strong>)
                         </span>
                       </div>
 
                       <div className="text-xs text-slate-600">
-                        मात्रा: <strong>{off.quantityTons * 10} क्विंटल ({off.quantityTons} टन)</strong> • {off.cropName} ({off.variety})
+                        मात्रा: <strong>{effectiveQty * 10} क्विंटल ({effectiveQty} टन)</strong> • {off.cropName} {off.variety ? `(${off.variety})` : ''}
                       </div>
 
-                      {off.message && (
+                      {/* Buyer Counter Offer Details Box */}
+                      {isBuyerCountered && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-950 space-y-1">
+                          <div className="font-extrabold flex items-center gap-1.5 text-amber-900">
+                            <span>⚠️ खरीदार ने नया भाव/मात्रा प्रस्तावित की है (Buyer Counter):</span>
+                          </div>
+                          <div className="flex items-center gap-2 font-bold text-slate-800">
+                            <span className="bg-amber-200 px-2 py-0.5 rounded text-amber-950">₹{off.counterPricePerKg}/किग्रा</span>
+                            <span className="bg-amber-200 px-2 py-0.5 rounded text-amber-950">{off.counterQuantityTons} टन</span>
+                          </div>
+                          {off.counterMessage && (
+                            <p className="italic text-slate-600 bg-white p-2 rounded border border-amber-100">
+                              "{off.counterMessage}"
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {isFarmerCountered && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-xs text-blue-900">
+                          ⏳ आपने नया प्रस्ताव भेजा है (₹{off.counterPricePerKg}/kg, {off.counterQuantityTons}T)। खरीदार के उत्तर की प्रतीक्षा है।
+                        </div>
+                      )}
+
+                      {off.message && !isBuyerCountered && (
                         <p className="text-xs text-slate-500 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
                           "{off.message}"
                         </p>
                       )}
 
                       <div className="text-[10px] text-slate-400">
-                        शर्तें: {off.deliveryTerms === 'PICKUP_REQUIRED' ? 'खेत से उठान' : 'डिलीवरी'} • {new Date(off.createdAt).toLocaleDateString()}
+                        शर्तें: {off.deliveryTerms || 'Farm Gate Pickup'} • {new Date(off.createdAt).toLocaleDateString()}
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-                      {off.status === 'PENDING' && (
+                      {/* Case 1: Buyer countered -> Farmer can Accept counter, Counter again, or Decline */}
+                      {isBuyerCountered && (
                         <>
                           <button
                             onClick={() => handleAcceptOffer(off.id)}
-                            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5"
+                            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                           >
                             <Check className="h-4 w-4" />
-                            <span>ऑफर स्वीकार करें (Accept)</span>
+                            <span>स्वीकार करें (Accept Counter)</span>
                           </button>
                           <button
-                            onClick={() => handleRejectOffer(off.id)}
-                            className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                            onClick={() => setCounterModal({
+                              isOpen: true,
+                              offer: off,
+                              counterPricePerKg: off.counterPricePerKg || effectivePrice,
+                              counterQuantityTons: off.counterQuantityTons || effectiveQty,
+                              message: '',
+                              isSubmitting: false
+                            })}
+                            className="px-3.5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs cursor-pointer"
+                          >
+                            नया भाव दें (Counter Again)
+                          </button>
+                          <button
+                            onClick={() => handleRejectOffer(off.id, 'Farmer declined buyer counter')}
+                            className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
                           >
                             मना करें (Decline)
                           </button>
                         </>
                       )}
 
+                      {/* Case 2: Farmer created pending offer -> waiting for buyer */}
+                      {off.status === 'PENDING' && isFarmerSender && (
+                        <div className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 font-bold text-xs border border-blue-200 flex items-center gap-1.5">
+                          <Clock className="h-4 w-4" />
+                          <span>खरीदार के निर्णय की प्रतीक्षा है (Waiting for Buyer)</span>
+                        </div>
+                      )}
+
+                      {/* Case 3: Buyer created pending offer to farmer -> farmer can Accept or Decline */}
+                      {off.status === 'PENDING' && !isFarmerSender && (
+                        <>
+                          <button
+                            onClick={() => handleAcceptOffer(off.id)}
+                            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Check className="h-4 w-4" />
+                            <span>ऑफर स्वीकार करें (Accept)</span>
+                          </button>
+                          <button
+                            onClick={() => handleRejectOffer(off.id)}
+                            className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                          >
+                            मना करें (Decline)
+                          </button>
+                        </>
+                      )}
+
+                      {/* Case 4: Accepted */}
                       {off.status === 'ACCEPTED' && (
                         <button
                           onClick={() => setActiveTab('orders')}
-                          className="px-4 py-2 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-1"
+                          className="px-4 py-2.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs flex items-center gap-1.5 cursor-pointer border border-emerald-300"
                         >
                           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          <span>सौदा देखें (View Order)</span>
+                          <span>सौदा देखें (View Active Deal)</span>
                         </button>
                       )}
                     </div>
@@ -2072,14 +2247,14 @@ export const FarmerDashboard: React.FC = () => {
 
             <div className="flex flex-wrap gap-2 pt-1">
               <button
-                onClick={() => alert('विक्रम सिंह के बैच में आपका नाम जुड़ गया है। वे आज ही गाड़ी पिकअप के लिए संपर्क करेंगे।')}
-                className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs"
+                onClick={() => handleJoinAggregatorBatch()}
+                className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                मुझे इस बैच में शामिल होना है (Join Batch)
+                <span>मुझे इस बैच में शामिल होना है (Join Batch & Make Offer)</span>
               </button>
               <button
                 onClick={() => setActiveTab('buyers')}
-                className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100"
+                className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 सीधे खरीदार को बेचना है
               </button>
@@ -3019,6 +3194,275 @@ export const FarmerDashboard: React.FC = () => {
         onActivityCreated={() => fetchData()}
         language={lang === 'hi' ? 'hi' : 'en'}
       />
+
+      {/* ========================================================================= */}
+      {/* 🤝 MAKE OFFER MODAL (Farmer -> Buyer) */}
+      {/* ========================================================================= */}
+      {makeOfferModal.isOpen && makeOfferModal.requirement && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg">
+                  🤝
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    सौदा प्रस्ताव भेजें (Make Direct Offer)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    खरीदार: <span className="font-bold text-slate-700">{makeOfferModal.requirement.buyerCompany || makeOfferModal.requirement.buyerName}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setMakeOfferModal(prev => ({ ...prev, isOpen: false }))}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Produce & Requirement Facts Card */}
+            <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-semibold">फसल और किस्म:</span>
+                <span className="font-extrabold text-slate-900">
+                  {makeOfferModal.listing?.cropName || makeOfferModal.requirement.cropName} ({makeOfferModal.listing?.variety || makeOfferModal.requirement.variety})
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-semibold">आपकी उपलब्ध मात्रा (Listing):</span>
+                <span className="font-extrabold text-emerald-700">
+                  {makeOfferModal.listing?.quantityTons || 'N/A'} टन ({Number(makeOfferModal.listing?.quantityTons || 0) * 10} क्विंटल)
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500 font-semibold">खरीदार की मांग (Demand):</span>
+                <span className="font-extrabold text-blue-800">
+                  {makeOfferModal.requirement.quantityTons} टन (संकेतक भाव: ₹{makeOfferModal.requirement.offeredPricePerKg}/किग्रा)
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSendOfferSubmit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    प्रस्तावित मात्रा (Tons) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max={makeOfferModal.listing ? Number(makeOfferModal.listing.quantityTons) : 1000}
+                    required
+                    value={makeOfferModal.quantityTons}
+                    onChange={(e) => setMakeOfferModal({ ...makeOfferModal, quantityTons: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-extrabold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-sm"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    = {Math.round(makeOfferModal.quantityTons * 10)} क्विंटल
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    आपका भाव (₹/kg) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    required
+                    value={makeOfferModal.offeredPricePerKg}
+                    onChange={(e) => setMakeOfferModal({ ...makeOfferModal, offeredPricePerKg: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-extrabold text-emerald-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-sm"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    = ₹{Math.round(makeOfferModal.offeredPricePerKg * 100)} / क्विंटल
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  डिलीवरी की शर्तें (Delivery Terms)
+                </label>
+                <select
+                  value={makeOfferModal.deliveryTerms}
+                  onChange={(e) => setMakeOfferModal({ ...makeOfferModal, deliveryTerms: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 text-xs bg-white"
+                >
+                  <option value="Farm Gate Pickup">खेत से उठान (Farm Gate Pickup)</option>
+                  <option value="Mandi Delivery">मंडी केंद्र पर डिलीवरी (Mandi Delivery)</option>
+                  <option value="Direct Processing Plant">खरीदार प्रोसेसिंग प्लांट (Direct Factory)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  खरीदार के लिए संदेश / विवरण (Message)
+                </label>
+                <textarea
+                  rows={2}
+                  value={makeOfferModal.message}
+                  onChange={(e) => setMakeOfferModal({ ...makeOfferModal, message: e.target.value })}
+                  placeholder="उदा. ग्रेड-A छांटी हुई फसल, सूखी बोरियों में पैक..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Live Escrow Total Value */}
+              <div className="bg-emerald-50 rounded-2xl p-3 border border-emerald-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-emerald-800 block uppercase tracking-wider">
+                    अनुमानित कुल सौदा मूल्य (Total Value)
+                  </span>
+                  <div className="text-lg font-black text-emerald-950">
+                    ₹{Math.round(makeOfferModal.quantityTons * 1000 * makeOfferModal.offeredPricePerKg).toLocaleString()}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] bg-emerald-200 text-emerald-900 font-black px-2 py-0.5 rounded-full">
+                    🛡️ सुरक्षित एस्क्रो
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setMakeOfferModal(prev => ({ ...prev, isOpen: false }))}
+                  className="w-1/3 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={makeOfferModal.isSubmitting}
+                  className="w-2/3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {makeOfferModal.isSubmitting ? (
+                    <span>भेजा जा रहा है...</span>
+                  ) : (
+                    <>
+                      <span>प्रस्ताव भेजें (Submit Offer)</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🔄 COUNTER OFFER MODAL (Farmer -> Buyer) */}
+      {/* ========================================================================= */}
+      {counterModal.isOpen && counterModal.offer && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="h-10 w-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg">
+                  🔄
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    जवाबी प्रस्ताव दें (Counter Offer)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    खरीदार: <span className="font-bold text-slate-700">{counterModal.offer.buyerName}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCounterModal(prev => ({ ...prev, isOpen: false }))}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCounterSubmit} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    संशोधित मात्रा (Tons) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    required
+                    value={counterModal.counterQuantityTons}
+                    onChange={(e) => setCounterModal({ ...counterModal, counterQuantityTons: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-extrabold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    नया भाव (₹/kg) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="1"
+                    required
+                    value={counterModal.counterPricePerKg}
+                    onChange={(e) => setCounterModal({ ...counterModal, counterPricePerKg: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-extrabold text-amber-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  संदेश (Message / Reason)
+                </label>
+                <textarea
+                  rows={2}
+                  value={counterModal.message}
+                  onChange={(e) => setCounterModal({ ...counterModal, message: e.target.value })}
+                  placeholder="उदा. न्यूनतम ₹22/किलो से कम में संभव नहीं है..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="bg-amber-50 rounded-2xl p-3 border border-amber-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-amber-900 block uppercase">
+                    संशोधित कुल सौदा (New Total)
+                  </span>
+                  <div className="text-lg font-black text-amber-950">
+                    ₹{Math.round(counterModal.counterQuantityTons * 1000 * counterModal.counterPricePerKg).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCounterModal(prev => ({ ...prev, isOpen: false }))}
+                  className="w-1/3 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 cursor-pointer"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={counterModal.isSubmitting}
+                  className="w-2/3 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-md transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {counterModal.isSubmitting ? 'भेजा जा रहा है...' : 'जवाबी प्रस्ताव भेजें (Send Counter)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

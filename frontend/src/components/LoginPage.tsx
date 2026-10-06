@@ -864,6 +864,49 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                       </div>
                     </div>
 
+                    {/* Quick Demo Autofill Pill */}
+                    <div className="pt-1">
+                      {selectedRole === 'aggregator' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmailIdentifier('aggregator@kisanconnect.in');
+                            setPassword('password123');
+                          }}
+                          className="w-full py-1.5 px-3 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 rounded-xl text-left text-xs text-amber-300 font-medium flex items-center justify-between cursor-pointer transition-colors"
+                        >
+                          <span>✨ Demo Aggregator: <strong>Vikram Singh (Kushinagar Hub)</strong></span>
+                          <span className="text-[10px] font-mono text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded">AUTOFILL</span>
+                        </button>
+                      )}
+                      {selectedRole === 'dealer' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmailIdentifier('vikram@freshbites.com');
+                            setPassword('password123');
+                          }}
+                          className="w-full py-1.5 px-3 bg-blue-950/40 hover:bg-blue-900/60 border border-blue-500/40 rounded-xl text-left text-xs text-blue-300 font-medium flex items-center justify-between cursor-pointer transition-colors"
+                        >
+                          <span>✨ Demo Bulk Dealer: <strong>FreshBites Foods (Vikram Mehta)</strong></span>
+                          <span className="text-[10px] font-mono text-blue-400 bg-blue-950/80 px-2 py-0.5 rounded">AUTOFILL</span>
+                        </button>
+                      )}
+                      {selectedRole === 'farmer' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmailIdentifier('farmer@kisanconnect.in');
+                            setPassword('password123');
+                          }}
+                          className="w-full py-1.5 px-3 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/40 rounded-xl text-left text-xs text-emerald-300 font-medium flex items-center justify-between cursor-pointer transition-colors"
+                        >
+                          <span>✨ Demo Farmer: <strong>Ramesh Patel (Kushinagar)</strong></span>
+                          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded">AUTOFILL</span>
+                        </button>
+                      )}
+                    </div>
+
                     <button
                       type="submit"
                       disabled={loading}
@@ -908,6 +951,37 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                         >
                           {otpSent ? (isHi ? 'पुनः भेजें' : 'Resend') : (isHi ? 'ओटीपी भेजें' : 'Send OTP')}
                         </button>
+                      </div>
+
+                      {/* Quick Demo Phone Pill */}
+                      <div className="pt-1">
+                        {selectedRole === 'aggregator' && (
+                          <button
+                            type="button"
+                            onClick={() => { setPhone('9877788990'); setOtpCode('123456'); }}
+                            className="text-[11px] text-amber-300 hover:text-amber-200 underline font-mono cursor-pointer"
+                          >
+                            ✨ Demo Phone: 9877788990 (Vikram Singh Hub)
+                          </button>
+                        )}
+                        {selectedRole === 'dealer' && (
+                          <button
+                            type="button"
+                            onClick={() => { setPhone('9800200001'); setOtpCode('123456'); }}
+                            className="text-[11px] text-blue-300 hover:text-blue-200 underline font-mono cursor-pointer"
+                          >
+                            ✨ Demo Phone: 9800200001 (FreshBites Foods)
+                          </button>
+                        )}
+                        {selectedRole === 'farmer' && (
+                          <button
+                            type="button"
+                            onClick={() => { setPhone('9800100001'); setOtpCode('123456'); }}
+                            className="text-[11px] text-emerald-300 hover:text-emerald-200 underline font-mono cursor-pointer"
+                          >
+                            ✨ Demo Phone: 9800100001 (Ramesh Patel)
+                          </button>
+                        )}
                       </div>
                     </div>
 

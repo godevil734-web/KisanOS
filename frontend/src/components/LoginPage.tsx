@@ -115,9 +115,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Phone / OTP form state
-  const [phone, setPhone] = useState('9876543210');
-  const [otpCode, setOtpCode] = useState('123456');
+  // Phone / OTP form state (no prefilled credentials)
+  const [phone, setPhone] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [demoOtpChip, setDemoOtpChip] = useState<string | null>(null);
 
@@ -368,33 +368,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
 
 
   return (
-    <div className="min-h-[calc(100vh-72px)] w-full flex items-center justify-center p-3 sm:p-6 lg:p-10 bg-[#07120D] text-white relative overflow-hidden">
+    <div className="min-h-[calc(100vh-72px)] w-full flex items-center justify-center p-3 sm:p-6 lg:p-10 text-white relative overflow-hidden bg-[#05110B]">
       
-      {/* Background ambient lighting & subtle tech grid */}
+      {/* 🌾 Full-Page Scenic Agriculture Background Image (High Visibility) */}
       <div 
-        className="absolute inset-0 pointer-events-none opacity-20"
-        style={{
-          backgroundImage: `
-            linear-gradient(to right, rgba(74, 222, 128, 0.07) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(74, 222, 128, 0.07) 1px, transparent 1px)
-          `,
-          backgroundSize: '48px 48px'
-        }}
+        className="absolute inset-0 bg-center bg-cover bg-no-repeat pointer-events-none scale-105"
+        style={{ backgroundImage: `url('/farm_landscape_preview.jpg')` }}
       />
-      <div className="absolute top-1/4 left-1/4 w-[420px] h-[420px] rounded-full bg-emerald-500/10 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-[360px] h-[360px] rounded-full bg-cyan-500/10 blur-[100px] pointer-events-none" />
 
-      {/* Main Split-Screen Container */}
-      <div className="relative z-10 w-full max-w-6xl min-h-[620px] rounded-3xl border border-emerald-900/60 bg-[#0A1711]/90 backdrop-blur-xl shadow-2xl shadow-black/60 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
+      {/* Balanced semi-transparent overlay: farm landscape clearly visible, text contrast preserved */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#05110B]/60 via-[#07160F]/45 to-[#05110B]/70 backdrop-blur-[1px] pointer-events-none" />
+
+      {/* Subtle tech ambient glow */}
+      <div className="absolute top-1/4 left-1/4 w-[420px] h-[420px] rounded-full bg-emerald-500/15 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-[360px] h-[360px] rounded-full bg-cyan-500/15 blur-[100px] pointer-events-none" />
+
+      {/* Main Split-Screen Container with glassmorphism */}
+      <div className="relative z-10 w-full max-w-6xl min-h-[620px] rounded-3xl border border-emerald-500/30 bg-[#0A1711]/75 backdrop-blur-2xl shadow-2xl shadow-black/70 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
         
         {/* ========================================================================= */}
         {/* LEFT SIDE (~50% width on Desktop): Brand & Value Proposition Panel        */}
         {/* ========================================================================= */}
-        <div className="lg:col-span-6 p-6 sm:p-10 lg:p-12 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-emerald-900/60 relative overflow-hidden bg-gradient-to-br from-[#0B1B13] via-[#08150F] to-[#050E0A]">
+        <div className="lg:col-span-6 p-6 sm:p-10 lg:p-12 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-emerald-900/60 relative overflow-hidden bg-gradient-to-br from-[#0B1B13]/70 via-[#08150F]/60 to-[#050E0A]/70">
           
-          {/* Subtle background crop watermark */}
+          {/* Subtle background crop watermark in left panel */}
           <div 
-            className="absolute inset-0 opacity-[0.04] bg-center bg-cover pointer-events-none"
+            className="absolute inset-0 opacity-20 bg-center bg-cover pointer-events-none"
             style={{ backgroundImage: `url('/farm_landscape_preview.jpg')` }}
           />
 
@@ -540,79 +539,51 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                 </span>
               </div>
 
-              {/* 3 Role Selection Tabs */}
-              <div className="grid grid-cols-3 gap-2 p-1.5 bg-[#08150E] rounded-2xl border border-emerald-900/60 shadow-inner">
+              {/* 3 Role Selection Tabs (Clean & Modern, No Circular Dots) */}
+              <div className="grid grid-cols-3 gap-2 p-1.5 bg-[#08150E]/80 rounded-2xl border border-emerald-900/60 shadow-inner">
                 
                 {/* Farmer Option */}
                 <button
                   type="button"
                   onClick={() => handleRoleSelect('farmer')}
-                  className={`min-h-[50px] py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
+                  className={`min-h-[48px] py-2 px-1.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
                     selectedRole === 'farmer'
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/80 border border-emerald-400/40 ring-1 ring-emerald-400/30'
-                      : 'text-emerald-300/70 hover:text-white hover:bg-emerald-950/40'
+                      ? 'bg-emerald-900/50 text-emerald-200 border border-emerald-400/60 shadow-sm'
+                      : 'text-emerald-400/60 hover:text-white hover:bg-emerald-950/40 border border-transparent'
                   }`}
                 >
                   <span className="text-base leading-none">🌾</span>
                   <span className="tracking-tight text-center">{isHi ? 'किसान' : 'Farmer'}</span>
-                  {selectedRole === 'farmer' && (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0B1711] shadow-[0_0_8px_#34d399]" />
-                  )}
                 </button>
 
                 {/* Aggregator Option */}
                 <button
                   type="button"
                   onClick={() => handleRoleSelect('aggregator')}
-                  className={`min-h-[50px] py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
+                  className={`min-h-[48px] py-2 px-1.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
                     selectedRole === 'aggregator'
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/80 border border-emerald-400/40 ring-1 ring-emerald-400/30'
-                      : 'text-emerald-300/70 hover:text-white hover:bg-emerald-950/40'
+                      ? 'bg-emerald-900/50 text-emerald-200 border border-emerald-400/60 shadow-sm'
+                      : 'text-emerald-400/60 hover:text-white hover:bg-emerald-950/40 border border-transparent'
                   }`}
                 >
                   <span className="text-base leading-none">📦</span>
                   <span className="tracking-tight text-center">{isHi ? 'आढ़ती' : 'Aggregator'}</span>
-                  {selectedRole === 'aggregator' && (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0B1711] shadow-[0_0_8px_#34d399]" />
-                  )}
                 </button>
 
                 {/* Bulk Dealer Option */}
                 <button
                   type="button"
                   onClick={() => handleRoleSelect('dealer')}
-                  className={`min-h-[50px] py-2 px-1.5 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
+                  className={`min-h-[48px] py-2 px-1.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
                     selectedRole === 'dealer'
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/80 border border-emerald-400/40 ring-1 ring-emerald-400/30'
-                      : 'text-emerald-300/70 hover:text-white hover:bg-emerald-950/40'
+                      ? 'bg-emerald-900/50 text-emerald-200 border border-emerald-400/60 shadow-sm'
+                      : 'text-emerald-400/60 hover:text-white hover:bg-emerald-950/40 border border-transparent'
                   }`}
                 >
                   <span className="text-base leading-none">🏢</span>
                   <span className="tracking-tight text-center">{isHi ? 'थोक डीलर' : 'Bulk Dealer'}</span>
-                  {selectedRole === 'dealer' && (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0B1711] shadow-[0_0_8px_#34d399]" />
-                  )}
                 </button>
 
-              </div>
-
-              {/* Context Banner: Explains the selected portal persona */}
-              <div className="mt-2.5 px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-900/60 flex items-center justify-between text-[11px]">
-                <div className="flex items-center gap-2 text-emerald-200 min-w-0">
-                  <span className="text-sm shrink-0">{ROLE_DETAILS[selectedRole].icon}</span>
-                  <div className="min-w-0">
-                    <span className="font-bold text-white">
-                      {isHi ? ROLE_DETAILS[selectedRole].titleHi : ROLE_DETAILS[selectedRole].titleEn}
-                    </span>
-                    <span className="text-emerald-400/40 mx-1.5 hidden sm:inline">•</span>
-                    <span className="text-emerald-300/70 text-[10px] hidden sm:inline truncate">
-                      {isHi ? ROLE_DETAILS[selectedRole].descHi : ROLE_DETAILS[selectedRole].descEn}
-                    </span>
-                  </div>
-                </div>
-                <span className="text-[10px] font-mono text-emerald-400 shrink-0 font-bold bg-emerald-900/40 px-2 py-0.5 rounded-full border border-emerald-800/40 ml-2">
-                  {selectedRole === 'farmer' ? (isHi ? 'ओटीपी अनुशंसित' : 'OTP Preferred') : (isHi ? 'पासवर्ड / ओटीपी' : 'Password / OTP')}
-                </span>
               </div>
             </div>
 
@@ -938,9 +909,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                             maxLength={10}
                             value={phone}
                             onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                            placeholder="9876543210"
+                            placeholder={isHi ? '10-अंकीय मोबाइल नंबर दर्ज करें' : 'Enter 10-digit mobile number'}
                             required
-                            className="w-full min-h-[48px] pl-10 pr-3 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 rounded-xl text-sm font-medium text-white placeholder-emerald-900 outline-none transition-all"
+                            className="w-full min-h-[48px] pl-10 pr-3 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 rounded-xl text-sm font-medium text-white placeholder-emerald-800/60 outline-none transition-all"
                           />
                         </div>
                         <button
@@ -1001,9 +972,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                         maxLength={6}
                         value={otpCode}
                         onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        placeholder="123456"
+                        placeholder="• • • • • •"
                         required
-                        className="w-full min-h-[48px] px-3.5 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 rounded-xl text-base font-bold text-center tracking-widest text-white placeholder-emerald-900 outline-none transition-all"
+                        className="w-full min-h-[48px] px-3.5 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 rounded-xl text-base font-bold text-center tracking-widest text-white placeholder-emerald-800/60 outline-none transition-all"
                       />
                     </div>
 

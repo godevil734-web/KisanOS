@@ -185,6 +185,8 @@ export const api = {
   unblockUser: (userId: string) => request<any>(`/admin/users/${userId}/unblock`, { method: 'POST' }),
   makeUserAdmin: (userId: string) => request<any>(`/admin/users/${userId}/make-admin`, { method: 'POST' }),
   deleteUser: (userId: string) => request<any>(`/admin/users/${userId}`, { method: 'DELETE' }),
+  bulkApproveUsers: (userIds: string[]) => request<{ success: boolean; message: string; approvedCount: number }>('/admin/users/bulk-approve', { method: 'POST', body: JSON.stringify({ userIds }) }),
+  bulkDeleteUsers: (userIds: string[]) => request<{ success: boolean; message: string; deletedCount: number }>('/admin/users/bulk-delete', { method: 'POST', body: JSON.stringify({ userIds }) }),
   updateUserRole: (userId: string, role: string) => request<any>(`/admin/users/${userId}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
   revealUserPhone: (userId: string) => request<{ id: string; phone: string }>(`/admin/users/${userId}/reveal-phone`, { method: 'POST' }),
   getAuditLogs: (params: { action?: string; limit?: number | string; offset?: number | string } = {}) => {

@@ -2901,6 +2901,93 @@ app.delete('/api/admin/users/:id', authMiddleware, requireRole(['admin']), async
   }
 });
 
+// Admin Bulk Approve Users
+app.post('/api/admin/users/bulk-approve', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { userIds } = req.body || {};
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'userIds array is required' });
+    }
+    const { pool, mapRow } = require('./db');
+    const { logAudit } = require('./services/auditService');
+
+    let approvedCount = 0;
+    for (const id of userIds) {
+      const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+      if (userRes.rows.length === 0) continue;
+      const targetUser = mapRow(userRes.rows[0]);
+
+      await pool.query(`
+        UPDATE users
+        SET status = 'active', rejection_reason = NULL, verified = true, updated_at = NOW()
+        WHERE id = $1
+      `, [id]);
+
+      await logAudit({
+        adminId: req.user.id,
+        action: 'USER_BULK_APPROVE',
+        targetUserId: id,
+        details: { role: targetUser.role, name: targetUser.name, email: targetUser.email, previousStatus: targetUser.status }
+      });
+      approvedCount++;
+    }
+
+    res.json({ success: true, message: `${approvedCount} users approved successfully`, approvedCount });
+  } catch (err) {
+    console.error('[ADMIN BULK APPROVE] Error:', err.message);
+    res.status(500).json({ error: 'Failed to bulk approve users: ' + err.message });
+  }
+});
+
+// Admin Bulk Delete Users
+app.post('/api/admin/users/bulk-delete', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { userIds } = req.body || {};
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'userIds array is required' });
+    }
+    const { pool, mapRow } = require('./db');
+    const { logAudit } = require('./services/auditService');
+
+    // Never delete own admin account
+    const safeIds = userIds.filter(id => id !== req.user.id);
+    let deletedCount = 0;
+
+    for (const targetId of safeIds) {
+      const userRes = await pool.query('SELECT * FROM users WHERE id = $1', [targetId]);
+      if (userRes.rows.length === 0) continue;
+      const targetUser = mapRow(userRes.rows[0]);
+
+      // Clean up relations
+      await pool.query('DELETE FROM farm_activities WHERE farmer_id = $1', [targetId]).catch(() => {});
+      await pool.query('DELETE FROM farmer_listings WHERE farmer_id = $1', [targetId]).catch(() => {});
+      await pool.query('DELETE FROM buyer_requirements WHERE buyer_id = $1', [targetId]).catch(() => {});
+      await pool.query('DELETE FROM marketplace_deals WHERE farmer_id = $1 OR buyer_id = $1', [targetId]).catch(() => {});
+      await pool.query('DELETE FROM marketplace_offers WHERE farmer_id = $1 OR buyer_id = $1', [targetId]).catch(() => {});
+      await pool.query('DELETE FROM notifications WHERE user_id = $1', [targetId]).catch(() => {});
+      await pool.query('DELETE FROM users WHERE id = $1', [targetId]);
+
+      await logAudit({
+        adminId: req.user.id,
+        action: 'USER_BULK_DELETE',
+        targetUserId: targetId,
+        details: {
+          role: targetUser.role,
+          name: targetUser.name,
+          email: targetUser.email,
+          phone: targetUser.phone
+        }
+      });
+      deletedCount++;
+    }
+
+    res.json({ success: true, message: `${deletedCount} users removed successfully`, deletedCount });
+  } catch (err) {
+    console.error('[ADMIN BULK DELETE] Error:', err.message);
+    res.status(500).json({ error: 'Failed to bulk delete users: ' + err.message });
+  }
+});
+
 // Configure Subscription Plans
 app.get('/api/admin/plans', authMiddleware, requireRole(['admin']), async (req, res) => {
   const plans = await db.find('subscriptionPlans');

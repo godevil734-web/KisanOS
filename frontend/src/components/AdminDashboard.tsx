@@ -21,7 +21,8 @@ import {
   FileText,
   AlertTriangle,
   ChevronRight,
-  Trash2
+  Trash2,
+  CheckSquare
 } from 'lucide-react';
 import { RegisterModal } from './RegisterModal';
 import { useAuth } from '../context/AuthContext';
@@ -65,6 +66,100 @@ export const AdminDashboard: React.FC = () => {
   // Delete user confirmation state
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<User | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Multi-selection states for Pending Approvals & Stakeholder Directory
+  const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkDeleteModal, setBulkDeleteModal] = useState<{
+    isOpen: boolean;
+    ids: string[];
+    source: 'pending' | 'users';
+  }>({ isOpen: false, ids: [], source: 'users' });
+
+  // Toggle selection for pending approval
+  const toggleSelectPending = (id: string) => {
+    setSelectedPendingIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllPending = () => {
+    if (selectedPendingIds.length === pendingApprovals.length) {
+      setSelectedPendingIds([]);
+    } else {
+      setSelectedPendingIds(pendingApprovals.map(p => p.id));
+    }
+  };
+
+  const handleBulkApprovePending = async () => {
+    if (selectedPendingIds.length === 0) return;
+    setBulkLoading(true);
+    try {
+      await api.bulkApproveUsers(selectedPendingIds);
+      alert(isHi ? `${selectedPendingIds.length} खाते सफलतापूर्वक स्वीकृत किए गए।` : `${selectedPendingIds.length} accounts approved successfully.`);
+      setSelectedPendingIds([]);
+      await fetchData();
+    } catch (err: any) {
+      alert('Error approving users: ' + (err?.message || 'Failed'));
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  // Toggle selection for stakeholder user
+  const toggleSelectUser = (id: string) => {
+    if (id === user?.id) return; // Prevent selecting self
+    setSelectedUserIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectUsersInList = (list: User[]) => {
+    const selectable = list.filter(u => u.id !== user?.id).map(u => u.id);
+    const allSelected = selectable.length > 0 && selectable.every(id => selectedUserIds.includes(id));
+    if (allSelected) {
+      setSelectedUserIds(prev => prev.filter(id => !selectable.includes(id)));
+    } else {
+      setSelectedUserIds(prev => Array.from(new Set([...prev, ...selectable])));
+    }
+  };
+
+  const handleBulkApproveUsers = async () => {
+    if (selectedUserIds.length === 0) return;
+    setBulkLoading(true);
+    try {
+      await api.bulkApproveUsers(selectedUserIds);
+      alert(isHi ? `${selectedUserIds.length} खाते सफलतापूर्वक स्वीकृत व सक्रिय किए गए।` : `${selectedUserIds.length} accounts approved and verified.`);
+      setSelectedUserIds([]);
+      await fetchData();
+    } catch (err: any) {
+      alert('Error approving users: ' + (err?.message || 'Failed'));
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleExecuteBulkDelete = async () => {
+    const { ids, source } = bulkDeleteModal;
+    if (ids.length === 0) return;
+    setBulkLoading(true);
+    try {
+      await api.bulkDeleteUsers(ids);
+      alert(isHi ? `${ids.length} खाते सफलतापूर्वक हटा दिए गए।` : `${ids.length} accounts permanently removed.`);
+      setBulkDeleteModal({ isOpen: false, ids: [], source: 'users' });
+      if (source === 'pending') {
+        setSelectedPendingIds(prev => prev.filter(id => !ids.includes(id)));
+      } else {
+        setSelectedUserIds(prev => prev.filter(id => !ids.includes(id)));
+      }
+      await fetchData();
+    } catch (err: any) {
+      alert('Error deleting accounts: ' + (err?.message || 'Failed'));
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   const handleDeleteUserConfirm = async () => {
     if (!deleteConfirmUser) return;
@@ -533,10 +628,69 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </h2>
               <p className="text-xs text-slate-500">
-                Review and approve new aggregator, dealer, and business registrations before platform access.
+                {isHi 
+                  ? 'नए एग्रीगेटर, डीलर व बिजनेस खातों की समीक्षा करें और एक साथ स्वीकृत या हटाएं।' 
+                  : 'Review and approve new aggregator, dealer, and business registrations before platform access.'}
               </p>
             </div>
           </div>
+
+          {pendingApprovals.length > 0 && (
+            <div className="bg-white p-3.5 rounded-2xl border border-amber-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={pendingApprovals.length > 0 && selectedPendingIds.length === pendingApprovals.length}
+                    onChange={selectAllPending}
+                    className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-800">
+                    {selectedPendingIds.length === pendingApprovals.length 
+                      ? (isHi ? 'सभी अचयनित करें' : 'Deselect All') 
+                      : (isHi ? 'सभी मार्क करें (Select All)' : 'Mark All')}
+                  </span>
+                </label>
+                {selectedPendingIds.length > 0 && (
+                  <span className="text-[11px] font-black bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full border border-amber-200">
+                    {selectedPendingIds.length} {isHi ? 'चयनित (Marked)' : 'selected'}
+                  </span>
+                )}
+              </div>
+
+              {selectedPendingIds.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={bulkLoading}
+                    onClick={handleBulkApprovePending}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>{isHi ? `स्वीकृत करें (${selectedPendingIds.length})` : `Approve Selected (${selectedPendingIds.length})`}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={bulkLoading}
+                    onClick={() => setBulkDeleteModal({ isOpen: true, ids: selectedPendingIds, source: 'pending' })}
+                    className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>{isHi ? `हटाएं (${selectedPendingIds.length})` : `Delete Selected (${selectedPendingIds.length})`}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPendingIds([])}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    {isHi ? 'रद्द करें' : 'Clear'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {pendingApprovals.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
@@ -553,18 +707,32 @@ export const AdminDashboard: React.FC = () => {
               {pendingApprovals.map((p) => {
                 const businessName = p.aggregatorProfile?.businessName || p.buyerProfile?.companyName || p.farmerProfile?.farmName || p.name;
                 const signupDate = p.createdAt ? new Date(p.createdAt).toLocaleDateString() : 'Recent';
+                const isSelected = selectedPendingIds.includes(p.id);
 
                 return (
-                  <div key={p.id} className="bg-white rounded-2xl border border-amber-200 p-5 shadow-xs flex flex-col justify-between space-y-4">
+                  <div 
+                    key={p.id} 
+                    className={`bg-white rounded-2xl border transition-all p-5 shadow-xs flex flex-col justify-between space-y-4 ${
+                      isSelected ? 'border-amber-500 ring-2 ring-amber-400/30 bg-amber-50/10' : 'border-amber-200'
+                    }`}
+                  >
                     <div className="space-y-2">
                       <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                            {p.role}
-                          </span>
-                          <h3 className="text-base font-bold text-slate-900 mt-1">
-                            {businessName}
-                          </h3>
+                        <div className="flex items-start gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectPending(p.id)}
+                            className="h-4 w-4 mt-1 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                          />
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                              {p.role}
+                            </span>
+                            <h3 className="text-base font-bold text-slate-900 mt-1">
+                              {businessName}
+                            </h3>
+                          </div>
                         </div>
                         <span className="text-[11px] text-slate-400 font-medium">
                           {signupDate}
@@ -606,6 +774,14 @@ export const AdminDashboard: React.FC = () => {
                       >
                         <XCircle className="h-4 w-4" />
                         <span>{t('admin.rejectBtn') || 'Reject'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmUser(p)}
+                        title={isHi ? 'खाता स्थायी रूप से हटाएं' : 'Permanently remove account'}
+                        className="p-2 rounded-xl text-rose-600 hover:text-white hover:bg-rose-600 border border-rose-200 hover:border-rose-600 transition-all cursor-pointer"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -722,6 +898,55 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Bulk Action Bar for Stakeholders Directory */}
+          {selectedUserIds.length > 0 && (
+            <div className="sticky top-4 z-30 bg-slate-900 text-white p-3.5 sm:p-4 rounded-2xl shadow-xl flex flex-wrap items-center justify-between gap-3 border border-slate-700 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-3">
+                <span className="h-7 w-7 rounded-lg bg-emerald-500 text-slate-950 flex items-center justify-center font-black text-xs">
+                  {selectedUserIds.length}
+                </span>
+                <div>
+                  <span className="font-bold text-xs sm:text-sm text-white block">
+                    {isHi ? `${selectedUserIds.length} खाते मार्क किए गए (Selected)` : `${selectedUserIds.length} accounts marked`}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {isHi ? 'एक साथ स्वीकृत/सत्यापित करें या स्थायी रूप से हटाएं' : 'Bulk approve/verify or delete selected accounts'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  disabled={bulkLoading}
+                  onClick={handleBulkApproveUsers}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  <CheckCircle2 className="h-4 w-4 text-emerald-200" />
+                  <span>{isHi ? `स्वीकृत करें (${selectedUserIds.length})` : `Approve (${selectedUserIds.length})`}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={bulkLoading}
+                  onClick={() => setBulkDeleteModal({ isOpen: true, ids: selectedUserIds, source: 'users' })}
+                  className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+                >
+                  <Trash2 className="h-4 w-4 text-rose-200" />
+                  <span>{isHi ? `हटाएं (${selectedUserIds.length})` : `Delete (${selectedUserIds.length})`}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserIds([])}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  {isHi ? 'चयन हटाएं' : 'Clear'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 0. PLATFORM ADMINISTRATORS */}
           {(selectedRoleSection === 'all' || selectedRoleSection === 'admin') && (
             <div className="bg-white rounded-2xl border-2 border-purple-300 overflow-hidden shadow-xs space-y-3 p-5">
@@ -743,6 +968,18 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[650px]">
                   <thead className="bg-purple-50/70 text-purple-900 font-bold border-b border-purple-200">
                     <tr>
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filterBySearch(admins).filter(u => u.id !== user?.id).length > 0 &&
+                            filterBySearch(admins).filter(u => u.id !== user?.id).every(u => selectedUserIds.includes(u.id))
+                          }
+                          onChange={() => toggleSelectUsersInList(filterBySearch(admins))}
+                          className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                          title={isHi ? "सभी चुनें" : "Select all"}
+                        />
+                      </th>
                       <th className="p-3">व्यवस्थापक का नाम</th>
                       <th className="p-3">ईमेल व संपर्क</th>
                       <th className="p-3">भूमिका</th>
@@ -752,31 +989,43 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filterBySearch(admins).map((u) => (
-                      <tr key={u.id} className="hover:bg-purple-50/20 transition-colors">
-                        <td className="p-3">
-                          <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
-                          <span className="text-[10px] text-purple-700 font-semibold">{u.location || 'Central Admin'}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-bold text-slate-800 block">{u.email}</span>
-                          {renderPhoneCell(u)}
-                        </td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                            Super Admin
-                          </span>
-                        </td>
-                        <td className="p-3">{renderStatusBadge(u)}</td>
-                        <td className="p-3">
-                          <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                            सत्यापित
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">{renderUserActions(u)}</td>
-                      </tr>
-                    ))}
+                    {filterBySearch(admins).map((u) => {
+                      const isSelected = selectedUserIds.includes(u.id);
+                      return (
+                        <tr key={u.id} className={`transition-colors ${isSelected ? 'bg-purple-100/50' : 'hover:bg-purple-50/20'}`}>
+                          <td className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              disabled={u.id === user?.id}
+                              checked={isSelected}
+                              onChange={() => toggleSelectUser(u.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer disabled:opacity-20"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
+                            <span className="text-[10px] text-purple-700 font-semibold">{u.location || 'Central Admin'}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-800 block">{u.email}</span>
+                            {renderPhoneCell(u)}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                              Super Admin
+                            </span>
+                          </td>
+                          <td className="p-3">{renderStatusBadge(u)}</td>
+                          <td className="p-3">
+                            <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              सत्यापित
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">{renderUserActions(u)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -804,6 +1053,18 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[650px]">
                   <thead className="bg-emerald-50/70 text-emerald-900 font-bold border-b border-emerald-200">
                     <tr>
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filterBySearch(farmers).filter(u => u.id !== user?.id).length > 0 &&
+                            filterBySearch(farmers).filter(u => u.id !== user?.id).every(u => selectedUserIds.includes(u.id))
+                          }
+                          onChange={() => toggleSelectUsersInList(filterBySearch(farmers))}
+                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          title={isHi ? "सभी चुनें" : "Select all"}
+                        />
+                      </th>
                       <th className="p-3">किसान का नाम व फोन</th>
                       <th className="p-3">गाँव व जिला</th>
                       <th className="p-3">खेत का नाम व जमीन</th>
@@ -813,38 +1074,50 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filterBySearch(farmers).map((u) => (
-                      <tr key={u.id} className="hover:bg-emerald-50/20 transition-colors">
-                        <td className="p-3">
-                          <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
-                          {renderPhoneCell(u)}
-                        </td>
-                        <td className="p-3 text-slate-600">{u.location || '—'}</td>
-                        <td className="p-3">
-                          <span className="font-semibold text-slate-800 block">
-                            {u.farmerProfile?.farmName || `${u.name || 'Unnamed'} Farm`}
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            {u.farmerProfile?.acres || 5} एकड़
-                          </span>
-                        </td>
-                        <td className="p-3">{renderStatusBadge(u)}</td>
-                        <td className="p-3">
-                          {u.verified ? (
-                            <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              सत्यापित
+                    {filterBySearch(farmers).map((u) => {
+                      const isSelected = selectedUserIds.includes(u.id);
+                      return (
+                        <tr key={u.id} className={`transition-colors ${isSelected ? 'bg-emerald-100/50' : 'hover:bg-emerald-50/20'}`}>
+                          <td className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              disabled={u.id === user?.id}
+                              checked={isSelected}
+                              onChange={() => toggleSelectUser(u.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-20"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
+                            {renderPhoneCell(u)}
+                          </td>
+                          <td className="p-3 text-slate-600">{u.location || '—'}</td>
+                          <td className="p-3">
+                            <span className="font-semibold text-slate-800 block">
+                              {u.farmerProfile?.farmName || `${u.name || 'Unnamed'} Farm`}
                             </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
-                              <XCircle className="h-4 w-4" />
-                              असत्यापित
+                            <span className="text-[10px] text-slate-500">
+                              {u.farmerProfile?.acres || 5} एकड़
                             </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">{renderUserActions(u)}</td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="p-3">{renderStatusBadge(u)}</td>
+                          <td className="p-3">
+                            {u.verified ? (
+                              <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                सत्यापित
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
+                                <XCircle className="h-4 w-4" />
+                                असत्यापित
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">{renderUserActions(u)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -872,6 +1145,18 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[650px]">
                   <thead className="bg-amber-50/70 text-amber-900 font-bold border-b border-amber-200">
                     <tr>
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filterBySearch(aggregators).filter(u => u.id !== user?.id).length > 0 &&
+                            filterBySearch(aggregators).filter(u => u.id !== user?.id).every(u => selectedUserIds.includes(u.id))
+                          }
+                          onChange={() => toggleSelectUsersInList(filterBySearch(aggregators))}
+                          className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                          title={isHi ? "सभी चुनें" : "Select all"}
+                        />
+                      </th>
                       <th className="p-3">व्यवसाय / हब का नाम</th>
                       <th className="p-3">संचालक व फोन</th>
                       <th className="p-3">कार्यक्षेत्र</th>
@@ -881,38 +1166,50 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filterBySearch(aggregators).map((u) => (
-                      <tr key={u.id} className="hover:bg-amber-50/20 transition-colors">
-                        <td className="p-3">
-                          <span className="font-bold text-slate-900 block">
-                            {u.aggregatorProfile?.businessName || `${u.name || 'Unnamed'} Agro Hub`}
-                          </span>
-                          <span className="text-[10px] text-slate-500">{u.location || '—'}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
-                          {renderPhoneCell(u)}
-                        </td>
-                        <td className="p-3 text-slate-600 font-medium">
-                          {u.aggregatorProfile?.operatingRegion || 'Agra Cluster'}
-                        </td>
-                        <td className="p-3">{renderStatusBadge(u)}</td>
-                        <td className="p-3">
-                          {u.verified ? (
-                            <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              सत्यापित
+                    {filterBySearch(aggregators).map((u) => {
+                      const isSelected = selectedUserIds.includes(u.id);
+                      return (
+                        <tr key={u.id} className={`transition-colors ${isSelected ? 'bg-amber-100/50' : 'hover:bg-amber-50/20'}`}>
+                          <td className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              disabled={u.id === user?.id}
+                              checked={isSelected}
+                              onChange={() => toggleSelectUser(u.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:opacity-20"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">
+                              {u.aggregatorProfile?.businessName || `${u.name || 'Unnamed'} Agro Hub`}
                             </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
-                              <XCircle className="h-4 w-4" />
-                              असत्यापित
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">{renderUserActions(u)}</td>
-                      </tr>
-                    ))}
+                            <span className="text-[10px] text-slate-500">{u.location || '—'}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
+                            {renderPhoneCell(u)}
+                          </td>
+                          <td className="p-3 text-slate-600 font-medium">
+                            {u.aggregatorProfile?.operatingRegion || 'Agra Cluster'}
+                          </td>
+                          <td className="p-3">{renderStatusBadge(u)}</td>
+                          <td className="p-3">
+                            {u.verified ? (
+                              <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                सत्यापित
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
+                                <XCircle className="h-4 w-4" />
+                                असत्यापित
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">{renderUserActions(u)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -940,6 +1237,18 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[650px]">
                   <thead className="bg-blue-50/70 text-blue-900 font-bold border-b border-blue-200">
                     <tr>
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filterBySearch(buyers).filter(u => u.id !== user?.id).length > 0 &&
+                            filterBySearch(buyers).filter(u => u.id !== user?.id).every(u => selectedUserIds.includes(u.id))
+                          }
+                          onChange={() => toggleSelectUsersInList(filterBySearch(buyers))}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          title={isHi ? "सभी चुनें" : "Select all"}
+                        />
+                      </th>
                       <th className="p-3">कंपनी व ब्रांड का नाम</th>
                       <th className="p-3">प्रोक्योरमेंट लीड व फोन</th>
                       <th className="p-3">व्यवसाय प्रकार</th>
@@ -949,38 +1258,50 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filterBySearch(buyers).map((u) => (
-                      <tr key={u.id} className="hover:bg-blue-50/20 transition-colors">
-                        <td className="p-3">
-                          <span className="font-bold text-slate-900 block">
-                            {u.buyerProfile?.companyName || u.name}
-                          </span>
-                          <span className="text-[10px] text-slate-500">{u.location || '—'}</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
-                          {renderPhoneCell(u)}
-                        </td>
-                        <td className="p-3 text-slate-600 font-medium">
-                          {u.buyerProfile?.businessType || 'Food Processor'}
-                        </td>
-                        <td className="p-3">{renderStatusBadge(u)}</td>
-                        <td className="p-3">
-                          {u.verified ? (
-                            <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              सत्यापित
+                    {filterBySearch(buyers).map((u) => {
+                      const isSelected = selectedUserIds.includes(u.id);
+                      return (
+                        <tr key={u.id} className={`transition-colors ${isSelected ? 'bg-blue-100/50' : 'hover:bg-blue-50/20'}`}>
+                          <td className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              disabled={u.id === user?.id}
+                              checked={isSelected}
+                              onChange={() => toggleSelectUser(u.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:opacity-20"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">
+                              {u.buyerProfile?.companyName || u.name}
                             </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
-                              <XCircle className="h-4 w-4" />
-                              असत्यापित
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">{renderUserActions(u)}</td>
-                      </tr>
-                    ))}
+                            <span className="text-[10px] text-slate-500">{u.location || '—'}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
+                            {renderPhoneCell(u)}
+                          </td>
+                          <td className="p-3 text-slate-600 font-medium">
+                            {u.buyerProfile?.businessType || 'Food Processor'}
+                          </td>
+                          <td className="p-3">{renderStatusBadge(u)}</td>
+                          <td className="p-3">
+                            {u.verified ? (
+                              <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                सत्यापित
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
+                                <XCircle className="h-4 w-4" />
+                                असत्यापित
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">{renderUserActions(u)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1008,6 +1329,18 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[650px]">
                   <thead className="bg-cyan-50/70 text-cyan-900 font-bold border-b border-cyan-200">
                     <tr>
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filterBySearch(coldStorages).filter(u => u.id !== user?.id).length > 0 &&
+                            filterBySearch(coldStorages).filter(u => u.id !== user?.id).every(u => selectedUserIds.includes(u.id))
+                          }
+                          onChange={() => toggleSelectUsersInList(filterBySearch(coldStorages))}
+                          className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer"
+                          title={isHi ? "सभी चुनें" : "Select all"}
+                        />
+                      </th>
                       <th className="p-3">फैसिलिटी का नाम</th>
                       <th className="p-3">संचालक व फोन</th>
                       <th className="p-3">स्थान</th>
@@ -1017,34 +1350,46 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filterBySearch(coldStorages).map((u) => (
-                      <tr key={u.id} className="hover:bg-cyan-50/20 transition-colors">
-                        <td className="p-3">
-                          <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
-                          <span className="text-[10px] text-slate-500">Imperial Cold Hub</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
-                          {renderPhoneCell(u)}
-                        </td>
-                        <td className="p-3 text-slate-600">{u.location || '—'}</td>
-                        <td className="p-3">{renderStatusBadge(u)}</td>
-                        <td className="p-3">
-                          {u.verified ? (
-                            <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              सत्यापित
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
-                              <XCircle className="h-4 w-4" />
-                              असत्यापित
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">{renderUserActions(u)}</td>
-                      </tr>
-                    ))}
+                    {filterBySearch(coldStorages).map((u) => {
+                      const isSelected = selectedUserIds.includes(u.id);
+                      return (
+                        <tr key={u.id} className={`transition-colors ${isSelected ? 'bg-cyan-100/50' : 'hover:bg-cyan-50/20'}`}>
+                          <td className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              disabled={u.id === user?.id}
+                              checked={isSelected}
+                              onChange={() => toggleSelectUser(u.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer disabled:opacity-20"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
+                            <span className="text-[10px] text-slate-500">Imperial Cold Hub</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
+                            {renderPhoneCell(u)}
+                          </td>
+                          <td className="p-3 text-slate-600">{u.location || '—'}</td>
+                          <td className="p-3">{renderStatusBadge(u)}</td>
+                          <td className="p-3">
+                            {u.verified ? (
+                              <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                सत्यापित
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
+                                <XCircle className="h-4 w-4" />
+                                असत्यापित
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">{renderUserActions(u)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1072,6 +1417,18 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs min-w-[650px]">
                   <thead className="bg-purple-50/70 text-purple-900 font-bold border-b border-purple-200">
                     <tr>
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filterBySearch(transporters).filter(u => u.id !== user?.id).length > 0 &&
+                            filterBySearch(transporters).filter(u => u.id !== user?.id).every(u => selectedUserIds.includes(u.id))
+                          }
+                          onChange={() => toggleSelectUsersInList(filterBySearch(transporters))}
+                          className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                          title={isHi ? "सभी चुनें" : "Select all"}
+                        />
+                      </th>
                       <th className="p-3">एजेंसी का नाम</th>
                       <th className="p-3">संचालक व फोन</th>
                       <th className="p-3">स्थान</th>
@@ -1081,34 +1438,46 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filterBySearch(transporters).map((u) => (
-                      <tr key={u.id} className="hover:bg-purple-50/20 transition-colors">
-                        <td className="p-3">
-                          <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
-                          <span className="text-[10px] text-slate-500">Kisan Express Freight</span>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
-                          {renderPhoneCell(u)}
-                        </td>
-                        <td className="p-3 text-slate-600">{u.location || '—'}</td>
-                        <td className="p-3">{renderStatusBadge(u)}</td>
-                        <td className="p-3">
-                          {u.verified ? (
-                            <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              सत्यापित
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
-                              <XCircle className="h-4 w-4" />
-                              असत्यापित
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right">{renderUserActions(u)}</td>
-                      </tr>
-                    ))}
+                    {filterBySearch(transporters).map((u) => {
+                      const isSelected = selectedUserIds.includes(u.id);
+                      return (
+                        <tr key={u.id} className={`transition-colors ${isSelected ? 'bg-purple-100/50' : 'hover:bg-purple-50/20'}`}>
+                          <td className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              disabled={u.id === user?.id}
+                              checked={isSelected}
+                              onChange={() => toggleSelectUser(u.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer disabled:opacity-20"
+                            />
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">{u.name || 'Unnamed'}</span>
+                            <span className="text-[10px] text-slate-500">Kisan Express Freight</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold text-slate-800 block">{u.name || 'Unnamed'}</span>
+                            {renderPhoneCell(u)}
+                          </td>
+                          <td className="p-3 text-slate-600">{u.location || '—'}</td>
+                          <td className="p-3">{renderStatusBadge(u)}</td>
+                          <td className="p-3">
+                            {u.verified ? (
+                              <span className="flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                                सत्यापित
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-slate-400 font-medium text-xs">
+                                <XCircle className="h-4 w-4" />
+                                असत्यापित
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">{renderUserActions(u)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1544,6 +1913,74 @@ export const AdminDashboard: React.FC = () => {
                 }`}
               >
                 {confirmModal.type === 'block' ? 'Block Account' : 'Unblock Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Users Confirmation Modal */}
+      {bulkDeleteModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border-2 border-rose-300">
+            <div className="flex items-center gap-3 border-b border-rose-100 pb-3">
+              <div className="p-2.5 rounded-2xl bg-rose-100 text-rose-700 shrink-0">
+                <Trash2 className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {isHi ? `${bulkDeleteModal.ids.length} उपयोगकर्ताओं को स्थायी रूप से हटाएं?` : `Permanently Delete ${bulkDeleteModal.ids.length} Users?`}
+                </h3>
+                <span className="text-xs font-bold text-slate-500">
+                  {isHi ? 'बल्क विलोपन (Bulk Removal)' : 'Bulk Account Deletion'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {isHi
+                ? `क्या आप वाकई चयनित ${bulkDeleteModal.ids.length} खातों को स्थायी रूप से हटाना चाहते हैं? उनकी सभी संबंधित लिस्टिंग, आवश्यकताएं, सौदे और सूचनाएं तुरंत हटा दी जाएंगी।`
+                : `Are you sure you want to permanently delete all ${bulkDeleteModal.ids.length} selected accounts? All associated listings, buyer requirements, deals, and records will be deleted immediately.`}
+            </p>
+
+            {/* List preview of selected accounts */}
+            <div className="max-h-48 overflow-y-auto rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-1.5 divide-y divide-slate-100">
+              {(bulkDeleteModal.source === 'pending' ? pendingApprovals : usersList)
+                .filter(u => bulkDeleteModal.ids.includes(u.id))
+                .map(u => (
+                  <div key={u.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-slate-900">{u.name || 'Unnamed'}</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">{u.phone || u.email || '—'}</span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                      {u.role}
+                    </span>
+                  </div>
+                ))}
+            </div>
+
+            <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-[11px] font-bold text-rose-800">
+              ⚠️ {isHi ? 'यह कार्रवाई पूर्ववत नहीं की जा सकती (Irreversible Action)।' : 'This action is irreversible and recorded in the audit trail.'}
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button 
+                type="button" 
+                disabled={bulkLoading}
+                onClick={() => setBulkDeleteModal({ isOpen: false, ids: [], source: 'users' })} 
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer transition-colors"
+              >
+                {isHi ? 'रद्द करें' : 'Cancel'}
+              </button>
+              <button 
+                type="button" 
+                disabled={bulkLoading}
+                onClick={handleExecuteBulkDelete} 
+                className="px-4 py-2 rounded-xl font-black text-xs text-white bg-rose-600 hover:bg-rose-700 shadow-md cursor-pointer transition-colors flex items-center gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{bulkLoading ? (isHi ? 'हटाया जा रहा है...' : 'Deleting...') : (isHi ? `पुष्टि करें (हटाएं ${bulkDeleteModal.ids.length})` : `Confirm Delete (${bulkDeleteModal.ids.length})`)}</span>
               </button>
             </div>
           </div>

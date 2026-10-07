@@ -42,12 +42,14 @@ import {
   Tractor,
   FlaskConical,
   ShieldAlert,
-  Handshake
+  Handshake,
+  Landmark
 } from 'lucide-react';
 import { VoiceListenButton } from './VoiceListenButton';
 import { VoiceSearchInput } from './VoiceSearchInput';
 import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
+import { MandiPricesView } from './MandiPricesView';
 
 type Lang = 'hi' | 'hinglish' | 'en';
 
@@ -72,8 +74,8 @@ export const FarmerDashboard: React.FC = () => {
     }
   };
 
-  // Farmer Navigation Tabs: 'home' | 'listings' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'
-  const [activeTab, setActiveTab] = useState<'home' | 'listings' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'>('home');
+  // Farmer Navigation Tabs: 'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'
+  const [activeTab, setActiveTab] = useState<'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'>('home');
 
   // Backend Data
   const [listings, setListings] = useState<FarmerListing[]>([]);
@@ -700,6 +702,7 @@ export const FarmerDashboard: React.FC = () => {
         {[
           { id: 'home', label: t.home, icon: Home },
           { id: 'listings', label: `${t.myCrops} (${activeListings.length})`, icon: Sprout },
+          { id: 'mandi_prices', label: lang === 'hi' ? 'सरकारी मंडी भाव' : 'Mandi Prices', icon: Landmark },
           { id: 'activities', label: lang === 'hi' ? 'खेत डायरी (Fasal Diary)' : 'Farm Diary (Passport)', count: activities.length, icon: Activity },
           { id: 'buyers', label: t.findBuyers, icon: Search },
           { id: 'offers', label: `${t.myOffers}`, count: pendingOffersCount, icon: DollarSign },
@@ -864,6 +867,26 @@ export const FarmerDashboard: React.FC = () => {
                 <div className="mt-3">
                   <div className="text-lg font-black text-slate-900">{t.poolWithFarmers}</div>
                   <div className="text-xs text-slate-600 mt-0.5">{t.poolWithFarmersSub}</div>
+                </div>
+              </button>
+
+              {/* ACTION 7: सरकारी मंडी भाव (Live Government Mandi Prices) */}
+              <button
+                onClick={() => setActiveTab('mandi_prices')}
+                className="p-5 rounded-2xl bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white text-left shadow-sm hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px] border border-emerald-700/50"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="h-11 w-11 rounded-xl bg-white/10 flex items-center justify-center text-2xl">
+                    🏛️
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-black flex items-center gap-1 border border-emerald-500/30">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{lang === 'hi' ? 'लाइव भाव' : 'Live Feed'}</span>
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <div className="text-lg font-black text-white">{lang === 'hi' ? 'सरकारी मंडी भाव' : 'Govt Mandi Prices'}</div>
+                  <div className="text-xs text-slate-300 mt-0.5">{lang === 'hi' ? 'Agmarknet व data.gov.in से लाइव थोक भाव' : 'Live wholesale rates from Agmarknet & data.gov.in'}</div>
                 </div>
               </button>
 
@@ -3084,6 +3107,31 @@ export const FarmerDashboard: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* 🏛️ TAB: OFFICIAL GOVERNMENT MANDI PRICES (सरकारी मंडी भाव) */}
+      {/* ========================================================================= */}
+      {activeTab === 'mandi_prices' && (
+        <MandiPricesView
+          user={user}
+          lang={lang === 'hi' ? 'hi' : 'en'}
+          farmerListings={listings}
+          onFindBuyersForCrop={(cropName) => {
+            setBuyerFilterCrop(cropName);
+            setActiveTab('buyers');
+          }}
+          onListCrop={(cropName, modalPrice) => {
+            setWizardForm(prev => ({
+              ...prev,
+              cropName: cropName || 'Potato',
+              customCropName: cropName || '',
+              expectedPricePerKg: modalPrice ? Math.round(modalPrice / 100) : prev.expectedPricePerKg
+            }));
+            setWizardStep(1);
+            setShowAddWizard(true);
+          }}
+        />
+      )}
+
+      {/* ========================================================================= */}
       {/* 4. MOBILE BOTTOM NAVIGATION BAR (Fixed at bottom on phones) */}
       {/* ========================================================================= */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-lg px-2 py-1 flex items-center justify-around">
@@ -3105,6 +3153,16 @@ export const FarmerDashboard: React.FC = () => {
         >
           <Sprout className="h-5 w-5 mb-0.5" />
           <span>{t.myCrops}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mandi_prices')}
+          className={`flex flex-col items-center py-1.5 px-2 rounded-xl text-[10px] font-bold transition-all min-h-[44px] justify-center ${
+            activeTab === 'mandi_prices' ? 'text-emerald-700 font-black' : 'text-slate-500'
+          }`}
+        >
+          <Landmark className="h-5 w-5 mb-0.5" />
+          <span>{lang === 'hi' ? 'मंडी भाव' : 'Mandi'}</span>
         </button>
 
         {/* Central Add Crop Button */}

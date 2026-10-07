@@ -168,6 +168,18 @@ export const api = {
     return request<any[]>(`/market-prices${query ? `?${query}` : ''}`);
   },
 
+  // Real Government Mandi Prices (Agmarknet & data.gov.in)
+  getMandiLocations: () => request<{ success: boolean; states: MandiLocationState[] }>('/mandi-locations'),
+  getMandiPrices: (params: { state: string; district?: string; commodity?: string; date?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params.state) q.append('state', params.state);
+    if (params.district) q.append('district', params.district);
+    if (params.commodity) q.append('commodity', params.commodity);
+    if (params.date) q.append('date', params.date);
+    if (params.limit) q.append('limit', String(params.limit));
+    return request<MandiPricesResponse>(`/mandi-prices?${q.toString()}`);
+  },
+
   // Forecasts & AI
   getRegionalForecasts: () => request<any[]>('/forecasts/regional'),
   predictYield: (data: any) => request<any>('/forecasts/predict-yield', { method: 'POST', body: JSON.stringify(data) }),
@@ -216,3 +228,56 @@ export const api = {
   getListingTraceability: (listingId: string) => request<any>(`/listings/${listingId}/traceability`),
   getNaLamKIManifest: () => request<any>('/activities/standards/nalamki-manifest')
 };
+
+export interface MandiLocationState {
+  id: number;
+  state_name: string;
+  districts: string[];
+}
+
+export interface MandiPriceRecord {
+  id: string;
+  state: string;
+  district: string;
+  market: string;
+  commodity: string;
+  variety: string;
+  group?: string;
+  minPrice: number;
+  maxPrice: number;
+  modalPrice: number;
+  modalPricePerKg: string;
+  unit: string;
+  arrivals?: number | null;
+  arrivalsUnit?: string;
+  arrivalDate: string;
+  source: string;
+}
+
+export interface MandiCommoditySummary {
+  commodity: string;
+  group: string;
+  avgModalPrice: number;
+  avgPricePerKg: string;
+  priceRange: string;
+  lowestPrice: number;
+  highestPrice: number;
+  reportingMandisCount: number;
+  totalArrivals?: number | null;
+  arrivalsUnit?: string;
+}
+
+export interface MandiPricesResponse {
+  success: boolean;
+  source: string;
+  reportDate: string;
+  state: string;
+  district: string;
+  totalRecords: number;
+  distinctCommoditiesCount: number;
+  commoditySummaries: MandiCommoditySummary[];
+  records: MandiPriceRecord[];
+  lastUpdated: string;
+  error?: string;
+  message?: string;
+}

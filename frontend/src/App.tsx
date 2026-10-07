@@ -145,7 +145,7 @@ const MainApp: React.FC = () => {
       {user?.status === 'pending' && <PendingApprovalBanner />}
 
       {/* Main Content Area */}
-      <main className={`flex-1 w-full ${isPublicView ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}`}>
+      <main className={`flex-1 w-full relative z-10 ${isPublicView ? '' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8'}`}>
         {loading ? (
           <div className="py-24 text-center">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#315C45] border-r-transparent" />

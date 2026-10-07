@@ -180,9 +180,10 @@ async function runTests() {
     assert('Google verify OTP with invalid code is rejected with 400', verifyWrong.status === 400);
 
     // 11. Google Verify OTP with valid code -> logs in and sets session cookie
+    const activeOtp = resendRes.data.demoOtp || loginDemoOtp;
     const verifyValid = await post('/auth/google/verify-otp', {
       tempToken,
-      code: loginDemoOtp
+      code: activeOtp
     });
     assert('Google verify Email OTP with valid code succeeds (200)', verifyValid.status === 200);
     assert('Google verify OTP returns valid token and user', Boolean(verifyValid.data.token) && verifyValid.data.user?.id === regRes.data.user?.id);

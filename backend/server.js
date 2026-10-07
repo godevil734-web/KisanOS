@@ -22,6 +22,7 @@ const {
   rejectOffer,
   getDealsForUser,
   getDealById,
+  getAllOffersForUser,
   getSentOffers,
   getIncomingOffers
 } = require('./services/dealService');
@@ -893,7 +894,29 @@ app.get('/api/listings', optionalAuth, async (req, res) => {
       listings = listings.filter(l => l.grade === grade);
     }
 
-    const sanitizedListings = await Promise.all(listings.map(l => sanitizeListing(l, req.user)));
+    const sanitizedListings = await Promise.all(listings.map(async l => {
+      const total = Number(l.quantityTons || 0);
+      const reserved = Number(l.reservedQuantityTons || 0);
+      const confirmed = Number(l.confirmedQuantityTons || 0);
+      const available = Math.max(0, Number((total - reserved - confirmed).toFixed(2)));
+
+      let status = l.status || 'ACTIVE';
+      if (total > 0) {
+        if (available <= 0 && reserved > 0) status = 'RESERVED';
+        else if (available <= 0 && reserved <= 0 && confirmed > 0) status = 'SOLD';
+        else if (available > 0) status = 'ACTIVE';
+      }
+
+      const enriched = {
+        ...l,
+        totalQuantityTons: total,
+        reservedQuantityTons: reserved,
+        confirmedQuantityTons: confirmed,
+        availableQuantityTons: available,
+        status
+      };
+      return sanitizeListing(enriched, req.user);
+    }));
     res.json(sanitizedListings);
   } catch (err) {
     console.error('[GET LISTINGS] Error:', err.message);
@@ -1491,11 +1514,28 @@ app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
   const minDirectLotKg = Number(requirement.minimumDirectFarmerLotKg || 0);
 
   // 1. Direct Farmer Listings & Aggregator Supply Pipeline
-  const allListings = await db.find('farmerListings', l => l.status === 'ACTIVE');
+  const rawListings = await db.find('farmerListings');
   const directFarmers = [];
   const aggregatorSupply = [];
 
-  for (const listing of allListings) {
+  for (const rawL of rawListings) {
+    const totalQty = Number(rawL.quantityTons || 0);
+    const reservedQty = Number(rawL.reservedQuantityTons || 0);
+    const confirmedQty = Number(rawL.confirmedQuantityTons || 0);
+    const availQty = Math.max(0, Number((totalQty - reservedQty - confirmedQty).toFixed(2)));
+
+    // Only listings with available stock can be matched for new supply
+    if (availQty <= 0) continue;
+
+    const listing = {
+      ...rawL,
+      totalQuantityTons: totalQty,
+      reservedQuantityTons: reservedQty,
+      confirmedQuantityTons: confirmedQty,
+      availableQuantityTons: availQty,
+      quantityTons: availQty // Show currently available unreserved tons
+    };
+
     const matchResult = calculateMatch(listing, requirement);
     if (matchResult.score >= 40 && (listing.cropName || '').toLowerCase() === (requirement.cropName || '').toLowerCase()) {
       const netCalc = calculateNetRealization({
@@ -1515,7 +1555,7 @@ app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
         netRealization: netCalc
       };
 
-      const farmerQtyKg = Number(listing.quantityKg || (listing.quantityTons * 1000)) || 1000;
+      const farmerQtyKg = Number(listing.quantityKg || (availQty * 1000)) || 1000;
       if (minDirectLotKg > 0 && farmerQtyKg < minDirectLotKg) {
         aggregatorSupply.push(matchObj);
       } else {
@@ -1548,13 +1588,41 @@ app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
     });
   });
 
-  // Part O: Channel progress summary
-  const directTons = Number(directFarmers.reduce((sum, f) => sum + (Number(f.listing.quantityTons) || 0), 0).toFixed(1));
-  const batchTons = Number(batches.reduce((sum, b) => sum + (Number(b.currentAggregatedTons) || 0), 0).toFixed(1));
-  const storageTons = Number(storageMatches.reduce((sum, s) => sum + (Number(s.availableQuantityTons) || 0), 0).toFixed(1));
-  const totalAvailableTons = Number((directTons + batchTons + storageTons).toFixed(1));
-  const requiredTons = Number(requirement.quantityTons) || 1;
-  const remainingTons = Math.max(0, Number((requiredTons - totalAvailableTons).toFixed(1)));
+  // 4. Track Offers, Negotiations, and Confirmed Procurement for this requirement
+  const reqOffers = await db.find('offers', o => o.requirementId === req.params.reqId);
+  const reqOrders = await db.find('orders', ord => ord.requirementId === req.params.reqId && ord.status !== 'CANCELLED');
+
+  const offersSentTons = Number(reqOffers
+    .filter(o => o.status === 'PENDING')
+    .reduce((sum, o) => sum + Number(o.quantityTons || 0), 0)
+    .toFixed(1));
+
+  const negotiatingTons = Number(reqOffers
+    .filter(o => o.status === 'COUNTERED')
+    .reduce((sum, o) => sum + Number(o.counterQuantityTons || o.quantityTons || 0), 0)
+    .toFixed(1));
+
+  let confirmedProcurementTons = Number(reqOrders
+    .reduce((sum, ord) => sum + Number(ord.quantityTons || 0), 0)
+    .toFixed(1));
+
+  if (confirmedProcurementTons === 0) {
+    confirmedProcurementTons = Number(reqOffers
+      .filter(o => o.status === 'ACCEPTED')
+      .reduce((sum, o) => sum + Number(o.counterQuantityTons || o.quantityTons || 0), 0)
+      .toFixed(1));
+  }
+
+  const targetRequirementTons = Number(requirement.quantityTons) || 1;
+  const remainingRequirementTons = Math.max(0, Number((targetRequirementTons - confirmedProcurementTons).toFixed(1)));
+
+  // Available supply channels
+  const directFarmerSupplyTons = Number(directFarmers.reduce((sum, f) => sum + (Number(f.listing.availableQuantityTons || f.listing.quantityTons) || 0), 0).toFixed(1));
+  const batchSupplyTons = Number(batches.reduce((sum, b) => sum + (Number(b.currentAggregatedTons) || 0), 0).toFixed(1));
+  const storageSupplyTons = Number(storageMatches.reduce((sum, s) => sum + (Number(s.availableQuantityTons) || 0), 0).toFixed(1));
+  const totalAvailableSupplyTons = Number((directFarmerSupplyTons + batchSupplyTons + storageSupplyTons).toFixed(1));
+
+  const fulfillmentPercent = Math.min(100, Math.round((confirmedProcurementTons / targetRequirementTons) * 100));
 
   res.json({
     requirement: {
@@ -1562,19 +1630,27 @@ app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
       buyerType: requirement.buyerType || requirement.buyer_type || 'bulk',
       requiredQuantityKg: requirement.requiredQuantityKg ? Number(requirement.requiredQuantityKg) : Number(requirement.quantityTons * 1000),
       minimumDirectFarmerLotKg: requirement.minimumDirectFarmerLotKg !== undefined ? Number(requirement.minimumDirectFarmerLotKg) : 0,
-      aggregationAllowed: requirement.aggregationAllowed !== false && requirement.aggregation_allowed !== false
+      aggregationAllowed: requirement.aggregationAllowed !== false && requirement.aggregation_allowed !== false,
+      confirmedProcuredTons: confirmedProcurementTons
     },
     farmerMatches: directFarmers.sort((a, b) => b.matchScore - a.matchScore),
     aggregatorSupply: aggregatorSupply.sort((a, b) => b.matchScore - a.matchScore),
     aggregatorBatches: batches,
     coldStorageInventory: storageMatches,
     supplySummary: {
-      directFarmersTons: directTons,
-      aggregatorProcurementTons: batchTons,
-      coldStorageTons: storageTons,
-      totalAvailableTons,
-      requiredTons,
-      remainingTons
+      // 6 Essential Procurement Metrics (Part 6)
+      targetRequirementTons,
+      availableFarmerSupplyTons: directFarmerSupplyTons,
+      offersSentTons,
+      negotiatingTons,
+      confirmedProcurementTons,
+      remainingRequirementTons,
+      // Channel Breakdown
+      directFarmerTons: directFarmerSupplyTons,
+      aggregatorProcurementTons: batchSupplyTons,
+      coldStorageTons: storageSupplyTons,
+      totalAvailableTons: totalAvailableSupplyTons,
+      fulfillmentPercent
     }
   });
 });
@@ -1829,7 +1905,7 @@ app.post('/api/ai/buyer-recommendation', authMiddleware, aiLimiter, async (req, 
       return res.status(400).json({ error: 'No active listing found for AI recommendation' });
     }
 
-    const allReqs = await db.find('buyerRequirements', r => r.status === 'OPEN');
+    const allReqs = await db.find('buyerRequirements', r => r.status === 'OPEN' || r.status === 'ACTIVE');
     const matches = allReqs.map(reqItem => {
       const matchResult = calculateMatch(listing, reqItem);
       return {
@@ -1958,14 +2034,7 @@ app.post('/api/ai/kisan-saathi/chat', authMiddleware, requireRole(['farmer', 'ad
 app.get('/api/offers', authMiddleware, async (req, res) => {
   try {
     const user = req.user;
-    let offers = [];
-    if (user.role === 'farmer' || user.role === 'aggregator') {
-      offers = await getSentOffers({ user });
-    } else if (user.role === 'buyer' || user.role === 'dealer') {
-      offers = await getIncomingOffers({ user });
-    } else {
-      offers = await getSentOffers({ user });
-    }
+    const offers = await getAllOffersForUser({ user });
     res.json(offers);
   } catch (err) {
     console.error('Error fetching offers:', err);
@@ -2015,12 +2084,16 @@ app.post('/api/offers/:id/accept', authMiddleware, requireActiveStatus, async (r
 
 app.post('/api/offers/:id/counter', authMiddleware, requireActiveStatus, async (req, res) => {
   try {
-    const { counterPricePerKg, counterQuantityTons, message } = req.body;
+    const { counterPricePerKg, counterQuantityTons, pickupTerms, deliveryTerms, targetDate, date, message } = req.body;
     const updatedOffer = await counterOffer({
       user: req.user,
       offerId: req.params.id,
       counterPricePerKg,
       counterQuantityTons,
+      pickupTerms,
+      deliveryTerms,
+      targetDate,
+      date,
       message
     });
     res.json(updatedOffer);

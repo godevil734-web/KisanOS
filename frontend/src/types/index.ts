@@ -73,6 +73,10 @@ export interface FarmerListing {
   variety: string;
   quantityTons: number;
   quantityKg?: number;
+  totalQuantityTons?: number;
+  reservedQuantityTons?: number;
+  confirmedQuantityTons?: number;
+  availableQuantityTons?: number;
   latitude?: number;
   longitude?: number;
   listingType: 'AVAILABLE_NOW' | 'FUTURE_HARVEST';
@@ -87,7 +91,7 @@ export interface FarmerListing {
   storageRequirement: 'NONE' | 'COLD_STORAGE' | 'DRY_VENTILATED';
   verificationStatus: 'SELF_DECLARED' | 'VERIFIED';
   verifier?: string;
-  status: 'ACTIVE' | 'PARTIALLY_MATCHED' | 'FULFILLED' | 'CANCELLED';
+  status: 'ACTIVE' | 'RESERVED' | 'SOLD' | 'PARTIALLY_MATCHED' | 'FULFILLED' | 'CANCELLED';
   images: string[];
   notes?: string;
   createdAt?: string;
@@ -119,6 +123,7 @@ export interface BuyerRequirement {
   offeredPricePerKg: number;
   deliveryType: 'PICKUP_REQUIRED' | 'DELIVERY_TO_BUYER' | 'DIRECT_FARM';
   status: 'OPEN' | 'MATCHED' | 'PARTIALLY_FULFILLED' | 'FULFILLED' | 'CANCELLED';
+  confirmedProcuredTons?: number;
   specialRequirements?: string;
   createdAt?: string;
 }
@@ -355,11 +360,30 @@ export interface Order {
   timeline: OrderTimelineItem[];
 }
 
+export interface NegotiationHistoryItem {
+  round: number;
+  action: 'OFFER_CREATED' | 'COUNTER_OFFER' | 'OFFER_REJECTED' | 'DEAL_CONFIRMED' | string;
+  senderId: string;
+  senderRole: string;
+  senderName: string;
+  quantityTons?: number;
+  pricePerKg?: number;
+  pickupTerms?: string;
+  deliveryTerms?: string;
+  date?: string;
+  message?: string;
+  createdAt: string;
+}
+
 export interface Offer {
   id: string;
   requirementId?: string;
   listingId?: string;
   dealId?: string;
+  initiatorId?: string;
+  initiatorRole?: 'farmer' | 'buyer' | 'aggregator' | string;
+  recipientId?: string;
+  recipientRole?: 'farmer' | 'buyer' | 'aggregator' | string;
   buyerId: string;
   buyerName: string;
   sellerId: string;
@@ -375,11 +399,22 @@ export interface Offer {
   counterQuantityTons?: number;
   counterMessage?: string;
   counterBy?: 'farmer' | 'buyer' | string;
+  lastActionBy?: string;
+  lastActionRole?: string;
   status: 'PENDING' | 'COUNTERED' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+  pickupTerms?: string;
   deliveryTerms?: string;
+  targetDate?: string;
   createdAt: string;
   updatedAt?: string;
   message?: string;
+  negotiationHistory?: NegotiationHistoryItem[];
+  effectivePricePerKg?: number;
+  effectiveQuantityTons?: number;
+  direction?: 'SENT' | 'RECEIVED';
+  isMyTurn?: boolean;
+  statusBadge?: string;
+  statusText?: string;
 }
 
 export interface MarketPrice {

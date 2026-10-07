@@ -135,7 +135,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 2. HOW IT WORKS (CONSOLIDATED) — 4 Steps + Folded Worked Example          */}
       {/* ========================================================================= */}
-      <section id="how-it-works" className="py-12 sm:py-16 bg-white border-b border-[#D8D2C4]">
+      <section id="how-it-works" className="py-12 sm:py-16 bg-white/85 backdrop-blur-xs border-b border-[#D8D2C4]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           
           {/* Section Header */}
@@ -374,7 +374,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 3. SIMPLE CROP DIRECTORY — Direct Demand Discovery                        */}
       {/* ========================================================================= */}
-      <section id="crop-directory" className="py-12 sm:py-16 bg-[#FAF9F5] border-b border-[#D8D2C4]">
+      <section id="crop-directory" className="py-12 sm:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs border-b border-[#D8D2C4]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
@@ -452,7 +452,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 4. INTERACTIVE CALCULATOR — What Will I Take Home?                        */}
       {/* ========================================================================= */}
-      <section id="net-calculator" className="py-12 sm:py-16 bg-white border-b border-[#D8D2C4]">
+      <section id="net-calculator" className="py-12 sm:py-16 bg-white/85 backdrop-blur-xs border-b border-[#D8D2C4]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           
           <div className="text-center max-w-2xl mx-auto">
@@ -796,7 +796,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 5. SUPPLY POOLING — Small Lots, Big Order                                 */}
       {/* ========================================================================= */}
-      <section id="supply-pooling" className="py-12 sm:py-16 bg-[#FAF9F5] border-b border-[#D8D2C4]">
+      <section id="supply-pooling" className="py-12 sm:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs border-b border-[#D8D2C4]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           
           <div className="text-center max-w-2xl mx-auto">
@@ -922,7 +922,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 6. IMPORTANT SECONDARY LINK — Connected Ecosystem                         */}
       {/* ========================================================================= */}
-      <section id="secondary-supply-chain-link" className="py-10 sm:py-14 bg-white border-y border-[#D8D2C4]">
+      <section id="secondary-supply-chain-link" className="py-10 sm:py-14 bg-white/85 backdrop-blur-xs border-y border-[#D8D2C4]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="bg-[#FAF9F5] rounded-3xl p-6 sm:p-8 border-2 border-[#D8D2C4] text-center space-y-4">
@@ -959,7 +959,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 7. SMALL FINAL CTA — Action-Oriented                                      */}
       {/* ========================================================================= */}
-      <section id="final-cta" className="py-12 sm:py-16 bg-[#FAF9F5] text-center">
+      <section id="final-cta" className="py-12 sm:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs text-center">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-[#EEF5F2] text-[#1E3A2B] border border-[#C5DDD2] flex items-center justify-center text-3xl mx-auto shadow-2xs">
             🌱

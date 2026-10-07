@@ -93,7 +93,7 @@ export const api = {
   getIncomingOffers: () => request<any[]>('/offers/incoming'),
   createOffer: (data: any) => request<any>('/offers', { method: 'POST', body: JSON.stringify(data) }),
   acceptOffer: (id: string) => request<any>(`/offers/${id}/accept`, { method: 'POST' }),
-  counterOffer: (id: string, data: { counterPricePerKg: number; counterQuantityTons: number; message?: string }) => 
+  counterOffer: (id: string, data: { counterPricePerKg: number; counterQuantityTons: number; pickupTerms?: string; deliveryTerms?: string; targetDate?: string; date?: string; message?: string }) => 
     request<any>(`/offers/${id}/counter`, { method: 'POST', body: JSON.stringify(data) }),
   rejectOffer: (id: string, reason?: string) => 
     request<any>(`/offers/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),

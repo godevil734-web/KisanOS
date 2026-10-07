@@ -88,9 +88,22 @@
 /* Option 2 (India Map with Farm) for Main Platform & Dashboards             */
 /* Option 1 (Indian Farm Landscape) for Login & Sign Up Authentication Views */
 /* ========================================================================= */
+/* AGRICULTURAL BACKGROUND ILLUSTRATION & WATERMARK SYSTEM                   */
+/* Visual Hierarchy:                                                         */
+/*   CONTENT/TEXT (z-10)                                                     */
+/*       ↓                                                                   */
+/*   SOLID UI CARDS (94-98% opacity, high contrast)                          */
+/*       ↓                                                                   */
+/*   SUBTLE WHITE/CREAM OVERLAY (z-1)                                        */
+/*       ↓                                                                   */
+/*   SUBTLE BACKGROUND ILLUSTRATION (::before, z-0, opacity: 0.08)           */
+/*       ↓                                                                   */
+/*   PAGE BACKGROUND (#F7F5EF)                                               */
+/* ========================================================================= */
 
 .watermark-india-map {
   position: relative;
+  background-color: #F7F5EF;
 }
 .watermark-india-map::before {
   content: '';
@@ -98,21 +111,34 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 92vw;
-  height: 92vh;
-  max-width: 860px;
-  max-height: 860px;
+  width: 90vw;
+  height: 90vh;
+  max-width: 880px;
+  max-height: 880px;
   background-image: url('/india_map_farm_preview.jpg');
   background-repeat: no-repeat;
   background-position: center center;
   background-size: contain;
-  opacity: 0.055;
+  opacity: 0.08;
+  mix-blend-mode: multiply;
   pointer-events: none;
   z-index: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* Dedicated subtle cream/white calming layer between illustration and UI cards */
+.watermark-india-map::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(247, 245, 239, 0.45);
+  pointer-events: none;
+  z-index: 1;
 }
 
 .watermark-farm-landscape {
   position: relative;
+  background-color: #F7F5EF;
 }
 .watermark-farm-landscape::before {
   content: '';
@@ -125,6 +151,17 @@
   background-position: center center;
   background-size: cover;
   opacity: 0.08;
+  mix-blend-mode: multiply;
   pointer-events: none;
   z-index: 0;
+}
+
+/* Dedicated subtle cream/white calming layer between illustration and UI cards */
+.watermark-farm-landscape::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(247, 245, 239, 0.45);
+  pointer-events: none;
+  z-index: 1;
 }

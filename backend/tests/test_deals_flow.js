@@ -203,12 +203,12 @@ async function main() {
   await runTest('6. Inventory Consistency: Listing and Requirement quantities deducted correctly', async () => {
     // Farmer listing had 15T, 5T sold -> remaining should be 10T
     const listRes = await pool.query('SELECT * FROM farmer_listings WHERE id = $1', [testListingId]);
-    const remainingListingQty = Number(listRes.rows[0].quantity_tons);
+    const remainingListingQty = Number(listRes.rows[0].quantity_tons) - Number(listRes.rows[0].confirmed_quantity_tons || 0);
     assert.strictEqual(remainingListingQty, 10.0, `Expected 10.0T remaining in listing, got ${remainingListingQty}`);
 
     // Buyer requirement had 40T, 5T fulfilled -> remaining should be 35T
     const reqRes = await pool.query('SELECT * FROM buyer_requirements WHERE id = $1', [testReqId]);
-    const remainingReqQty = Number(reqRes.rows[0].quantity_tons);
+    const remainingReqQty = Number(reqRes.rows[0].quantity_tons) - Number(reqRes.rows[0].confirmed_procured_tons || 0);
     assert.strictEqual(remainingReqQty, 35.0, `Expected 35.0T remaining in requirement, got ${remainingReqQty}`);
   });
 
@@ -293,7 +293,8 @@ async function main() {
 
     // Verify listing quantity was NOT deducted
     const listRes = await pool.query('SELECT * FROM farmer_listings WHERE id = $1', [testListingId]);
-    assert.strictEqual(Number(listRes.rows[0].quantity_tons), 10.0, 'Listing quantity should remain 10T');
+    const availableQty = Number(listRes.rows[0].quantity_tons) - Number(listRes.rows[0].confirmed_quantity_tons || 0);
+    assert.strictEqual(availableQty, 10.0, 'Listing quantity should remain 10T');
   });
 
   // TEST 10: Insufficient Quantity Protection

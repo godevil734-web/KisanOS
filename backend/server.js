@@ -26,6 +26,7 @@ const {
   getSentOffers,
   getIncomingOffers
 } = require('./services/dealService');
+const { getMandiLocations, getMandiPrices } = require('./services/mandiService');
 const { createRateLimiter } = require('./middleware/rateLimiter');
 const { 
   JWT_SECRET, 
@@ -2619,6 +2620,54 @@ app.get('/api/market-prices', async (req, res) => {
   }
 
   res.json(prices);
+});
+
+// Official Government Mandi Locations
+app.get('/api/mandi-locations', async (req, res) => {
+  try {
+    const locations = await getMandiLocations();
+    res.json({ success: true, states: locations });
+  } catch (error) {
+    console.error('[API] /api/mandi-locations error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch mandi locations' });
+  }
+});
+
+// Official Government Mandi Prices (Live Real-Time Data)
+app.get('/api/mandi-prices', optionalAuth, async (req, res) => {
+  try {
+    const { state, district, commodity, date, limit } = req.query;
+    
+    let targetState = state;
+    let targetDistrict = district;
+
+    if (!targetState && req.user) {
+      targetState = req.user.state || (req.user.location && req.user.location.state);
+      if (!targetDistrict) {
+        targetDistrict = req.user.district || (req.user.location && req.user.location.district);
+      }
+    }
+
+    if (!targetState) {
+      targetState = 'Uttar Pradesh';
+    }
+
+    const data = await getMandiPrices({
+      state: targetState,
+      district: targetDistrict || 'all',
+      commodity: commodity || undefined,
+      date: date || undefined,
+      limit: limit ? Number(limit) : 200
+    });
+
+    res.json(data);
+  } catch (error) {
+    console.error('[API] /api/mandi-prices error:', error);
+    res.status(502).json({
+      success: false,
+      error: error.message || 'Failed to fetch government mandi prices from official servers.'
+    });
+  }
 });
 
 // ---------------------------------------------

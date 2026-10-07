@@ -1006,6 +1006,34 @@ app.post('/api/listings/:id/verify', authMiddleware, async (req, res) => {
   res.json(updated);
 });
 
+// Update listing status (e.g. mark deal done / SOLD, or reactivate to ACTIVE)
+app.patch('/api/listings/:id/status', authMiddleware, requireRole(['farmer', 'admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ error: 'Status is required' });
+
+    const listing = await db.findById('farmerListings', id);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    if (listing.farmerId !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized to modify this listing' });
+    }
+
+    const { pool, mapRow } = require('./db');
+    const updateRes = await pool.query(`
+      UPDATE farmer_listings
+      SET status = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `, [status, id]);
+
+    res.json(mapRow(updateRes.rows[0]));
+  } catch (err) {
+    console.error('[UPDATE LISTING STATUS] Error:', err.message);
+    res.status(500).json({ error: 'Failed to update listing status' });
+  }
+});
+
 // ---------------------------------------------
 // NALAMKI & ITU-T DIGITAL FARM ACTIVITY API (Annex A.16)
 // Provides standardized electronic field records, agronomic operation logs & batch traceability

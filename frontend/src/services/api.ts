@@ -75,6 +75,8 @@ export const api = {
   },
   createListing: (data: any) => request<any>('/listings', { method: 'POST', body: JSON.stringify(data) }),
   verifyListing: (id: string) => request<any>(`/listings/${id}/verify`, { method: 'POST' }),
+  updateListingStatus: (id: string, status: string) => 
+    request<any>(`/listings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
   // Requirements
   getRequirements: (params: Record<string, string> = {}) => {

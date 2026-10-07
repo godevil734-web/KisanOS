@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
@@ -14,7 +14,7 @@ import {
   DollarSign, 
   HelpCircle, 
   ChevronRight, 
-  ChevronLeft,
+  ChevronLeft, 
   ChevronDown, 
   FileCheck, 
   AlertCircle,
@@ -41,7 +41,8 @@ import {
   Droplets,
   Tractor,
   FlaskConical,
-  ShieldAlert
+  ShieldAlert,
+  Handshake
 } from 'lucide-react';
 import { VoiceListenButton } from './VoiceListenButton';
 import { VoiceSearchInput } from './VoiceSearchInput';
@@ -87,11 +88,29 @@ export const FarmerDashboard: React.FC = () => {
   const [showActivityLoggerModal, setShowActivityLoggerModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [listingSearchQuery, setListingSearchQuery] = useState('');
+  const [cropSubTab, setCropSubTab] = useState<'active' | 'dealed'>('active');
 
   // Selected Listing for Buyer Matches
   const [selectedListingForMatches, setSelectedListingForMatches] = useState<FarmerListing | null>(null);
   const [matchedBuyers, setMatchedBuyers] = useState<RequirementMatch[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+
+  // Separation of Active Listings vs Dealed / Sold Crops
+  const isListingDealed = (l: FarmerListing) => {
+    const total = Number(l.totalQuantityTons ?? l.quantityTons ?? 0);
+    const confirmed = Number(l.confirmedQuantityTons ?? 0);
+    const avail = Number(l.availableQuantityTons ?? (total - confirmed));
+    const hasOrder = orders.some(o => (o.listingId === l.id || (o as any).listing_id === l.id) && o.status !== 'CANCELLED');
+    return l.status === 'SOLD' || l.status === 'DEAL_COMPLETED' || (confirmed > 0 && avail <= 0) || (hasOrder && avail <= 0);
+  };
+
+  const activeListings = useMemo(() => {
+    return listings.filter(l => !isListingDealed(l));
+  }, [listings, orders]);
+
+  const dealedListings = useMemo(() => {
+    return listings.filter(l => isListingDealed(l));
+  }, [listings, orders]);
 
   // Match score explanation modal
   const [selectedMatchExplanation, setSelectedMatchExplanation] = useState<RequirementMatch | null>(null);
@@ -184,7 +203,21 @@ export const FarmerDashboard: React.FC = () => {
       setActivities(actRes || []);
 
       if (listRes.length > 0) {
-        handleViewMatches(listRes[0]);
+        setSelectedListingForMatches(prev => {
+          if (prev) {
+            const foundStill = listRes.find(l => l.id === prev.id);
+            if (foundStill) return foundStill;
+          }
+          const activeOnly = listRes.filter(l => {
+            const total = Number(l.totalQuantityTons ?? l.quantityTons ?? 0);
+            const confirmed = Number(l.confirmedQuantityTons ?? 0);
+            const avail = Number(l.availableQuantityTons ?? (total - confirmed));
+            return l.status !== 'SOLD' && l.status !== 'DEAL_COMPLETED' && (avail > 0);
+          });
+          const initial = activeOnly.length > 0 ? activeOnly[0] : listRes[0];
+          handleViewMatches(initial);
+          return initial;
+        });
       }
     } catch (err) {
       console.error('Error fetching farmer data:', err);
@@ -196,13 +229,19 @@ export const FarmerDashboard: React.FC = () => {
   useEffect(() => {
     fetchData();
     runStorageCalculation();
+  }, [user?.id]);
 
+  useEffect(() => {
     const handleTabNav = (e: any) => {
       if (e.detail?.tab) {
         setActiveTab(e.detail.tab);
       }
       if (e.detail?.cropName) {
         setBuyerFilterCrop(e.detail.cropName);
+        const matchL = activeListings.find(l => l.cropName.toLowerCase() === e.detail.cropName.toLowerCase());
+        if (matchL) {
+          handleViewMatches(matchL);
+        }
       }
       if (e.detail?.filter) {
         if (e.detail.filter === 'nearest') setBuyerSortBy('nearest');
@@ -212,7 +251,7 @@ export const FarmerDashboard: React.FC = () => {
       if (e.detail?.openOffer && e.detail?.requirementId) {
         const targetReq = matchedBuyers.find(m => m.requirement?.id === e.detail.requirementId)?.requirement;
         if (targetReq) {
-          const activeListing = selectedListingForMatches || listings[0];
+          const activeListing = selectedListingForMatches || activeListings[0] || listings[0];
           setMakeOfferModal({
             isOpen: true,
             requirement: targetReq,
@@ -236,11 +275,32 @@ export const FarmerDashboard: React.FC = () => {
 
     window.addEventListener('farmer-navigate-tab', handleTabNav);
     return () => window.removeEventListener('farmer-navigate-tab', handleTabNav);
-  }, [user, matchedBuyers, listings]);
+  }, [matchedBuyers, activeListings, listings, selectedListingForMatches]);
+
+  const handleMarkListingSold = async (listingId: string) => {
+    if (!window.confirm(lang === 'hi' ? 'क्या आप इस फसल को "सौदा हो चुका (Dealed / Sold)" के रूप में अलग सेक्शन में ले जाना चाहते हैं?' : 'Move this crop listing to Dealed / Sold section?')) return;
+    try {
+      await api.updateListingStatus(listingId, 'SOLD');
+      await fetchData();
+    } catch (err) {
+      alert('Error updating status: ' + (err as Error).message);
+    }
+  };
+
+  const handleReactivateListing = async (listingId: string) => {
+    try {
+      await api.updateListingStatus(listingId, 'ACTIVE');
+      await fetchData();
+    } catch (err) {
+      alert('Error reactivating listing: ' + (err as Error).message);
+    }
+  };
 
   const handleViewMatches = async (listing: FarmerListing) => {
     setSelectedListingForMatches(listing);
     setLoadingMatches(true);
+    setAiRecommendation(null);
+    setAiError(null);
     try {
       const res = await api.getListingMatches(listing.id);
       setMatchedBuyers(res.matches || []);
@@ -639,7 +699,7 @@ export const FarmerDashboard: React.FC = () => {
       <div className="hidden md:flex items-center border-b border-slate-200 space-x-1 overflow-x-auto scrollbar-none pb-1">
         {[
           { id: 'home', label: t.home, icon: Home },
-          { id: 'listings', label: `${t.myCrops} (${listings.length})`, icon: Sprout },
+          { id: 'listings', label: `${t.myCrops} (${activeListings.length})`, icon: Sprout },
           { id: 'activities', label: lang === 'hi' ? 'खेत डायरी (Fasal Diary)' : 'Farm Diary (Passport)', count: activities.length, icon: Activity },
           { id: 'buyers', label: t.findBuyers, icon: Search },
           { id: 'offers', label: `${t.myOffers}`, count: pendingOffersCount, icon: DollarSign },
@@ -923,7 +983,9 @@ export const FarmerDashboard: React.FC = () => {
                 मेरा माल (Mere Paas Kitna Maal Hai)
               </h2>
               <p className="text-xs text-slate-500">
-                आपके द्वारा बाजार में दर्ज की गई फसलें ({listings.length})
+                {cropSubTab === 'active' 
+                  ? `बाजार में बिक्री के लिए उपलब्ध सक्रिय फसलें (${activeListings.length})` 
+                  : `सौदा हो चुकी / पूर्ण बिकी फसलें (${dealedListings.length})`}
               </p>
             </div>
             <button
@@ -938,6 +1000,42 @@ export const FarmerDashboard: React.FC = () => {
             </button>
           </div>
 
+          {/* Sub-tab Switcher: Active Listings vs Dealed / Sold Crops */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+            <button
+              type="button"
+              onClick={() => setCropSubTab('active')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                cropSubTab === 'active'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <span>🌱 सक्रिय फसलें (Active Produce)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                cropSubTab === 'active' ? 'bg-white text-emerald-800' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {activeListings.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCropSubTab('dealed')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                cropSubTab === 'dealed'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <span>🤝 सौदा हो चुकी फसलें (Dealed & Sold)</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                cropSubTab === 'dealed' ? 'bg-white text-indigo-800' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {dealedListings.length}
+              </span>
+            </button>
+          </div>
+
           {/* Assisted Voice Search Bar */}
           {listings.length > 0 && (
             <div className="max-w-md">
@@ -949,173 +1047,329 @@ export const FarmerDashboard: React.FC = () => {
             </div>
           )}
 
-          {listings.length === 0 ? (
-            <div className="text-center py-14 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
-              <div className="text-4xl">🌾</div>
-              <h3 className="text-base font-bold text-slate-800">अभी कोई फसल नहीं डाली गई है</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                अपनी तैयार फसल या खेत में खड़ी फसल की जानकारी दें ताकि खरीदार आपसे संपर्क कर सकें।
-              </p>
-              <button
-                onClick={() => {
-                  setWizardStep(1);
-                  setShowAddWizard(true);
-                }}
-                className="mt-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs"
-              >
-                + पहली फसल जोड़ें
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {listings
-                .filter(l => {
-                  if (!listingSearchQuery.trim()) return true;
-                  const q = listingSearchQuery.toLowerCase();
-                  return l.cropName.toLowerCase().includes(q) ||
-                    l.variety.toLowerCase().includes(q) ||
-                    l.farmerLocation.toLowerCase().includes(q) ||
-                    l.grade.toLowerCase().includes(q);
-                })
-                .map((list) => {
-                const isFuture = list.listingType === 'FUTURE_HARVEST';
-                const totalTons = Number(list.totalQuantityTons ?? list.quantityTons ?? 0);
-                const reservedTons = Number(list.reservedQuantityTons ?? 0);
-                const confirmedTons = Number(list.confirmedQuantityTons ?? 0);
-                const availTons = Number(list.availableQuantityTons ?? (totalTons - reservedTons - confirmedTons));
-                const isSoldOut = list.status === 'SOLD' || (availTons <= 0 && confirmedTons > 0);
-                const isOnHold = list.status === 'RESERVED' || (availTons <= 0 && reservedTons > 0);
-
-                return (
-                  <div 
-                    key={list.id}
-                    className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-xs hover:border-emerald-400 transition-all flex flex-col justify-between space-y-4"
+          {/* SECTION 1: ACTIVE LISTINGS */}
+          {cropSubTab === 'active' && (
+            <>
+              {activeListings.length === 0 ? (
+                <div className="text-center py-14 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
+                  <div className="text-4xl">🌾</div>
+                  <h3 className="text-base font-bold text-slate-800">वर्तमान में कोई सक्रिय फसल नहीं है</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    {dealedListings.length > 0
+                      ? 'आपकी दर्ज फसलों के सौदे पक्के हो चुके हैं ("सौदा हो चुकी फसलें" टैब देखें)। नया माल जोड़ने के लिए नीचे क्लिक करें।'
+                      : 'अपनी तैयार फसल या खेत में खड़ी फसल की जानकारी दें ताकि खरीदार आपसे संपर्क कर सकें।'}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setWizardStep(1);
+                      setShowAddWizard(true);
+                    }}
+                    className="mt-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs"
                   >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                            isSoldOut
-                              ? 'bg-slate-100 text-slate-700 border-slate-300'
-                              : isOnHold
-                              ? 'bg-amber-100 text-amber-800 border-amber-300'
-                              : isFuture
-                              ? 'bg-amber-100 text-amber-800 border-amber-200'
-                              : 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                          }`}>
-                            {isSoldOut
-                              ? '✓ पूर्ण बिका हुआ (Sold Out)'
-                              : isOnHold
-                              ? '🔒 प्रस्ताव आरक्षित (On Hold)'
-                              : isFuture
-                              ? '⏳ खड़ी फसल (Pre-harvest)'
-                              : '✓ तैयार फसल (Ready)'}
-                          </span>
-                          <h3 className="text-lg font-black text-slate-900 mt-1">
-                            {list.cropName} <span className="text-xs font-medium text-slate-500">({list.variety})</span>
-                          </h3>
-                        </div>
-                        <div className="text-right flex flex-col items-end gap-1">
-                          <div>
-                            <div className="text-base font-black text-emerald-700">₹{list.expectedPricePerKg}</div>
-                            <span className="text-[10px] text-slate-400">उम्मीद भाव / किलो</span>
+                    + नया माल जोड़ें (Add Crop)
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activeListings
+                    .filter(l => {
+                      if (!listingSearchQuery.trim()) return true;
+                      const q = listingSearchQuery.toLowerCase();
+                      return l.cropName.toLowerCase().includes(q) ||
+                        l.variety.toLowerCase().includes(q) ||
+                        l.farmerLocation.toLowerCase().includes(q) ||
+                        l.grade.toLowerCase().includes(q);
+                    })
+                    .map((list) => {
+                      const isFuture = list.listingType === 'FUTURE_HARVEST';
+                      const totalTons = Number(list.totalQuantityTons ?? list.quantityTons ?? 0);
+                      const reservedTons = Number(list.reservedQuantityTons ?? 0);
+                      const confirmedTons = Number(list.confirmedQuantityTons ?? 0);
+                      const availTons = Number(list.availableQuantityTons ?? (totalTons - reservedTons - confirmedTons));
+                      const isOnHold = list.status === 'RESERVED' || (availTons <= 0 && reservedTons > 0);
+
+                      return (
+                        <div 
+                          key={list.id}
+                          className="bg-white rounded-2xl border-2 border-slate-200 p-5 shadow-xs hover:border-emerald-400 transition-all flex flex-col justify-between space-y-4"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                  isOnHold
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : isFuture
+                                    ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                    : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                }`}>
+                                  {isOnHold
+                                    ? '🔒 प्रस्ताव आरक्षित (On Hold)'
+                                    : isFuture
+                                    ? '⏳ खड़ी फसल (Pre-harvest)'
+                                    : '✓ बिक्री के लिए तैयार (Active)'}
+                                </span>
+                                <h3 className="text-lg font-black text-slate-900 mt-1">
+                                  {list.cropName} <span className="text-xs font-medium text-slate-500">({list.variety})</span>
+                                </h3>
+                              </div>
+                              <div className="text-right flex flex-col items-end gap-1">
+                                <div>
+                                  <div className="text-base font-black text-emerald-700">₹{list.expectedPricePerKg}</div>
+                                  <span className="text-[10px] text-slate-400">उम्मीद भाव / किलो</span>
+                                </div>
+                                <VoiceListenButton
+                                  size="xs"
+                                  textHi={`${list.cropName} (${list.variety}), कुल मात्रा ${totalTons} टन, उपलब्ध ${availTons} टन, उम्मीद भाव ₹${list.expectedPricePerKg} प्रति किलो, ग्रेड ${list.grade}, स्थान ${list.farmerLocation}।`}
+                                  textEn={`${list.cropName} ${list.variety}, total quantity ${totalTons} tons, available ${availTons} tons, expected price ₹${list.expectedPricePerKg} per kg, grade ${list.grade}, location ${list.farmerLocation}.`}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                              <div>
+                                <span className="text-slate-400 text-[10px] block">कुल मात्रा (Total):</span>
+                                <span className="font-extrabold text-slate-800">
+                                  {totalTons * 10} क्विंटल ({totalTons} टन)
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 text-[10px] block">उपलब्ध माल (Available):</span>
+                                <span className={`font-black ${availTons > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                                  {availTons} टन ({availTons * 10} क्विंटल)
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 text-[10px] block">गुणवत्ता (Grade):</span>
+                                <span className="font-bold text-slate-800">{list.grade}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 text-[10px] block">तैयार तारीख:</span>
+                                <span className="font-medium text-slate-700">{list.availableDate}</span>
+                              </div>
+                            </div>
+
+                            {/* Stock availability status chips */}
+                            {(reservedTons > 0 || confirmedTons > 0) && (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                                {reservedTons > 0 && (
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 font-bold flex items-center gap-1">
+                                    <span>🔒 {reservedTons} टन</span>
+                                    <span className="font-normal text-[10px]">ऑफर पर होल्ड (Reserved)</span>
+                                  </span>
+                                )}
+                                {confirmedTons > 0 && (
+                                  <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 border border-blue-200 font-bold flex items-center gap-1">
+                                    <span>✓ {confirmedTons} टन</span>
+                                    <span className="font-normal text-[10px]">सौदा पक्का (Dealed)</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500">
+                              <span>📍 {list.farmerLocation}</span>
+                              <span className="font-bold text-emerald-700">✓ बाजार में सक्रिय</span>
+                            </div>
                           </div>
-                          <VoiceListenButton
-                            size="xs"
-                            textHi={`${list.cropName} (${list.variety}), कुल मात्रा ${totalTons} टन, उपलब्ध ${availTons} टन, उम्मीद भाव ₹${list.expectedPricePerKg} प्रति किलो, ग्रेड ${list.grade}, स्थान ${list.farmerLocation}।`}
-                            textEn={`${list.cropName} ${list.variety}, total quantity ${totalTons} tons, available ${availTons} tons, expected price ₹${list.expectedPricePerKg} per kg, grade ${list.grade}, location ${list.farmerLocation}.`}
-                          />
-                        </div>
-                      </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <div>
-                          <span className="text-slate-400 text-[10px] block">कुल मात्रा (Total):</span>
-                          <span className="font-extrabold text-slate-800">
-                            {totalTons * 10} क्विंटल ({totalTons} टन)
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 text-[10px] block">उपलब्ध माल (Available):</span>
-                          <span className={`font-black ${availTons > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
-                            {availTons} टन ({availTons * 10} क्विंटल)
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 text-[10px] block">गुणवत्ता (Grade):</span>
-                          <span className="font-bold text-slate-800">{list.grade}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 text-[10px] block">तैयार तारीख:</span>
-                          <span className="font-medium text-slate-700">{list.availableDate}</span>
-                        </div>
-                      </div>
+                          <div className="space-y-2 pt-2 border-t border-slate-100">
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedListingForTraceability(list);
+                                  setShowTraceabilityModal(true);
+                                }}
+                                className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+                                <span>{lang === 'hi' ? '📜 फसल प्रमाण पत्र' : '📜 Digital Passport'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedListingForTraceability(list);
+                                  setShowActivityLoggerModal(true);
+                                }}
+                                className="py-2 px-2.5 rounded-xl bg-[#FAF9F5] hover:bg-white text-[#1C2B23] border border-[#D8D2C4] font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Plus className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>{lang === 'hi' ? '✍️ डायरी लिखें' : '✍️ Log Work'}</span>
+                              </button>
+                            </div>
 
-                      {/* Stock availability status chips */}
-                      {(reservedTons > 0 || confirmedTons > 0) && (
-                        <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
-                          {reservedTons > 0 && (
-                            <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200 font-bold flex items-center gap-1">
-                              <span>🔒 {reservedTons} टन</span>
-                              <span className="font-normal text-[10px]">ऑफर पर होल्ड (Reserved)</span>
-                            </span>
-                          )}
-                          {confirmedTons > 0 && (
-                            <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 border border-blue-200 font-bold flex items-center gap-1">
-                              <span>✓ {confirmedTons} टन</span>
-                              <span className="font-normal text-[10px]">बिक चुका (Sold)</span>
-                            </span>
-                          )}
+                            <button
+                              onClick={() => {
+                                handleViewMatches(list);
+                                setBuyerFilterCrop('All');
+                                setActiveTab('buyers');
+                              }}
+                              className="w-full py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 border border-emerald-200 cursor-pointer"
+                            >
+                              <Search className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>इसके खरीदार देखें (See Matching Buyers)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleMarkListingSold(list.id)}
+                              className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-900 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 border border-slate-200 cursor-pointer"
+                              title="इस फसल का सौदा पक्का होने पर अलग सेक्शन में ले जाएं"
+                            >
+                              <Handshake className="h-3.5 w-3.5 text-indigo-600" />
+                              <span>{lang === 'hi' ? '🤝 सौदा पक्का दर्ज करें (Move to Dealed)' : '🤝 Move to Dealed / Sold'}</span>
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      );
+                    })}
+                </div>
+              )}
+            </>
+          )}
 
-                      <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500">
-                        <span>📍 {list.farmerLocation}</span>
-                        <span className="font-bold text-emerald-700">✓ बाजार में सक्रिय</span>
-                      </div>
-                    </div>
+          {/* SECTION 2: DEALED & SOLD CROPS */}
+          {cropSubTab === 'dealed' && (
+            <>
+              {dealedListings.length === 0 ? (
+                <div className="text-center py-14 bg-white rounded-3xl border border-slate-200 p-6 space-y-3">
+                  <div className="text-4xl">🤝</div>
+                  <h3 className="text-base font-bold text-slate-800">अभी कोई सौदा पक्का नहीं हुआ है</h3>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                    जैसे ही किसी खरीदार के साथ आपका सौदा तय होता है या आप खुद सौदा पक्का दर्ज करते हैं, वह फसल यहां अलग सेक्शन में दिखाई देगी।
+                  </p>
+                  <button
+                    onClick={() => setCropSubTab('active')}
+                    className="mt-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-xs"
+                  >
+                    सक्रिय फसलें देखें (View Active Crops)
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {dealedListings
+                    .filter(l => {
+                      if (!listingSearchQuery.trim()) return true;
+                      const q = listingSearchQuery.toLowerCase();
+                      return l.cropName.toLowerCase().includes(q) ||
+                        l.variety.toLowerCase().includes(q) ||
+                        l.farmerLocation.toLowerCase().includes(q) ||
+                        l.grade.toLowerCase().includes(q);
+                    })
+                    .map((list) => {
+                      const totalTons = Number(list.totalQuantityTons ?? list.quantityTons ?? 0);
+                      const confirmedTons = Number(list.confirmedQuantityTons ?? totalTons);
+                      const linkedOrder = orders.find(o => (o.listingId === list.id || (o as any).listing_id === list.id) && o.status !== 'CANCELLED');
 
-                    <div className="space-y-2 pt-2 border-t border-slate-100">
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedListingForTraceability(list);
-                            setShowTraceabilityModal(true);
-                          }}
-                          className="py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                      return (
+                        <div 
+                          key={list.id}
+                          className="bg-slate-50 rounded-2xl border-2 border-indigo-200 p-5 shadow-xs hover:border-indigo-400 transition-all flex flex-col justify-between space-y-4"
                         >
-                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                          <span>{lang === 'hi' ? '📜 फसल प्रमाण पत्र' : '📜 Digital Passport'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedListingForTraceability(list);
-                            setShowActivityLoggerModal(true);
-                          }}
-                          className="py-2 px-2.5 rounded-xl bg-[#FAF9F5] hover:bg-white text-[#1C2B23] border border-[#D8D2C4] font-black text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <Plus className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>{lang === 'hi' ? '✍️ डायरी लिखें' : '✍️ Log Work'}</span>
-                        </button>
-                      </div>
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border bg-indigo-100 text-indigo-900 border-indigo-300 flex items-center gap-1 w-fit">
+                                  <CheckCircle2 className="h-3 w-3 text-indigo-700" />
+                                  <span>✓ सौदा पक्का (Deal Done / Sold)</span>
+                                </span>
+                                <h3 className="text-lg font-black text-slate-900 mt-1.5">
+                                  {list.cropName} <span className="text-xs font-medium text-slate-500">({list.variety})</span>
+                                </h3>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-base font-black text-indigo-900">
+                                  ₹{linkedOrder?.agreedPricePerKg || list.expectedPricePerKg}
+                                </div>
+                                <span className="text-[10px] text-slate-400">तय भाव / किलो</span>
+                              </div>
+                            </div>
 
-                      <button
-                        onClick={() => {
-                          handleViewMatches(list);
-                          setActiveTab('buyers');
-                        }}
-                        className="w-full py-2.5 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 border border-emerald-200 cursor-pointer"
-                      >
-                        <Search className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>इसके खरीदार देखें (See Matching Buyers)</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                            {/* Deal & Order details box */}
+                            <div className="bg-white p-3 rounded-xl border border-indigo-100 space-y-2 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-500 text-[11px]">बिका हुआ माल (Sold):</span>
+                                <span className="font-extrabold text-slate-900">
+                                  {confirmedTons * 10} क्विंटल ({confirmedTons} टन)
+                                </span>
+                              </div>
+
+                              {linkedOrder ? (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500 text-[11px]">सौदा ID:</span>
+                                    <span className="font-mono font-bold text-indigo-700">
+                                      {linkedOrder.orderNumber}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500 text-[11px]">खरीदार (Buyer):</span>
+                                    <span className="font-bold text-slate-800">
+                                      {linkedOrder.buyerName}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-slate-500 text-[11px]">कुल सौदा मूल्य:</span>
+                                    <span className="font-black text-emerald-700">
+                                      ₹{Number(linkedOrder.totalAmount || linkedOrder.produceTotal || 0).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                                    <span className="text-slate-400">सुरक्षा:</span>
+                                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
+                                      🛡️ एस्क्रो सुरक्षित (Escrow Locked)
+                                    </span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-[11px] text-slate-500 italic pt-1">
+                                  ✓ यह फसल किसान द्वारा सौदा पक्का होने पर आर्काइव की गई है।
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                              <span>📍 {list.farmerLocation}</span>
+                              <span className="text-indigo-800 font-bold">ग्रेड {list.grade}</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                            {linkedOrder ? (
+                              <button
+                                type="button"
+                                onClick={() => setActiveTab('orders')}
+                                className="py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                              >
+                                <Package className="h-3.5 w-3.5" />
+                                <span>सौदा देखें (View Deal)</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setActiveTab('orders')}
+                                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              >
+                                <span>सौदे देखें</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleReactivateListing(list.id)}
+                              className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              title="इस फसल को वापस सक्रिय फसलों की सूची में ले जाएं"
+                            >
+                              <span>↩️ पुनः सक्रिय करें</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1181,22 +1435,47 @@ export const FarmerDashboard: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {listings.length > 0 && (
+                {(activeListings.length > 0 || listings.length > 0) && (
                   <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
                     <span className="text-xs font-bold text-slate-600">आपकी फसल:</span>
                     <select
                       value={activeListing?.id || ''}
                       onChange={(e) => {
-                        const found = listings.find(l => l.id === e.target.value);
-                        if (found) handleViewMatches(found);
+                        const targetId = e.target.value;
+                        const found = activeListings.find(l => l.id === targetId) || listings.find(l => l.id === targetId);
+                        if (found) {
+                          handleViewMatches(found);
+                          setBuyerFilterCrop('All');
+                        }
                       }}
                       className="text-xs font-black text-emerald-800 bg-transparent outline-none cursor-pointer"
                     >
-                      {listings.map(l => (
-                        <option key={l.id} value={l.id}>
-                          {l.cropName} ({l.quantityTons}T / {l.quantityTons * 10} क्विंटल) - {l.grade || 'Grade A'}
-                        </option>
-                      ))}
+                      {activeListings.length > 0 ? (
+                        <>
+                          <optgroup label="── सक्रिय फसलें (Active Produce) ──">
+                            {activeListings.map(l => (
+                              <option key={l.id} value={l.id}>
+                                {l.cropName} ({l.availableQuantityTons ?? l.quantityTons}T उपलब्ध) - {l.grade || 'Grade A'}
+                              </option>
+                            ))}
+                          </optgroup>
+                          {dealedListings.length > 0 && (
+                            <optgroup label="── सौदा हो चुकी फसलें (Dealed / Sold) ──">
+                              {dealedListings.map(l => (
+                                <option key={l.id} value={l.id}>
+                                  {l.cropName} ({l.quantityTons}T) - ✓ बिका हुआ (Sold)
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      ) : (
+                        listings.map(l => (
+                          <option key={l.id} value={l.id}>
+                            {l.cropName} ({l.quantityTons}T) - {l.grade || 'Grade A'}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
                 )}

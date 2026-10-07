@@ -525,9 +525,14 @@ export interface TraceabilityPassport {
 export interface BuyerRecommendationItem {
   buyerId: string;
   buyerName: string;
+  buyerType?: 'local' | 'bulk' | string;
   route: 'LOCAL_DIRECT' | 'BULK_DIRECT' | 'AGGREGATOR' | string;
   reason: string;
+  reasons?: string[];
+  matchScore?: number;
   distanceKm: number;
+  requiredQuantityTons?: number;
+  offeredPricePerKg?: number;
   confidence: 'high' | 'medium' | 'low';
 }
 
@@ -540,8 +545,21 @@ export interface BuyerRecommendationResponse {
 
 export interface KisanSaathiAction {
   label: string;
-  actionType: 'navigate_buyers' | 'navigate_crops' | 'navigate_offers' | 'navigate_storage' | 'navigate_deals' | 'navigate_diary' | 'navigate_aggregator' | string;
-  tab?: 'buyers' | 'listings' | 'offers' | 'storage' | 'orders' | 'activities' | 'aggregator_info' | string;
+  actionType: 'navigate_buyers' | 'navigate_crops' | 'navigate_offers' | 'navigate_storage' | 'navigate_deals' | 'navigate_diary' | 'navigate_aggregator' | 'select_crop' | 'view_buyer' | 'make_offer' | 'farmer_find_buyers' | 'custom_prompt' | string;
+  tab?: 'buyers' | 'listings' | 'offers' | 'storage' | 'orders' | 'activities' | 'aggregator_info' | 'demand' | 'supply' | 'procurement' | 'aggregation' | 'logistics' | 'transactions' | 'requirements' | 'supply_discovery' | string;
+  payload?: any;
+}
+
+export interface KisanSaathiCard {
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  distanceKm?: number;
+  quantity?: string;
+  price?: string;
+  details?: string[];
+  reasons?: string[];
+  actions?: KisanSaathiAction[];
 }
 
 export interface KisanSaathiMessage {
@@ -550,8 +568,10 @@ export interface KisanSaathiMessage {
   text: string;
   timestamp: string;
   actions?: KisanSaathiAction[];
+  cards?: KisanSaathiCard[];
   isFallback?: boolean;
 }
+
 
 
 

@@ -14,6 +14,7 @@ const KNOWN_COORDINATES = {
   'kushinagar mandi': { lat: 26.7410, lon: 83.8890 },
   'kasya': { lat: 26.7450, lon: 83.8920 },
   'padrauna': { lat: 26.9025, lon: 83.9822 },
+  'deoria': { lat: 26.5050, lon: 83.7790 },
   'gorakhpur': { lat: 26.7606, lon: 83.3732 },
   'agra': { lat: 27.1767, lon: 78.0081 },
   'khandauli': { lat: 27.2842, lon: 78.0931 },
@@ -21,7 +22,9 @@ const KNOWN_COORDINATES = {
   'firozabad': { lat: 27.1592, lon: 78.3957 },
   'mathura': { lat: 27.4924, lon: 77.6737 },
   'delhi': { lat: 28.6139, lon: 77.2090 },
-  'azadpur': { lat: 28.7165, lon: 77.1752 }
+  'azadpur': { lat: 28.7165, lon: 77.1752 },
+  'noida': { lat: 28.5355, lon: 77.3910 },
+  'okhla': { lat: 28.5300, lon: 77.2700 }
 };
 
 /**

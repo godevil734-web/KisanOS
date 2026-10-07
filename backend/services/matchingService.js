@@ -278,10 +278,28 @@ function calculateMatch(listing, requirement) {
   score += priceScore;
   breakdown.push({ factor: 'Price Feasibility', weight: 10, earned: priceScore, status: priceScore === 10 ? 'MATCH' : 'NEGOTIABLE' });
 
+  let route = 'LOCAL_DIRECT';
+  if (eligibility.routeType === 'direct_local') route = 'LOCAL_DIRECT';
+  else if (eligibility.routeType === 'direct_bulk') route = 'BULK_DIRECT';
+  else if (eligibility.routeType === 'aggregator_pooled' || eligibility.requiresAggregation) route = 'AGGREGATOR';
+  else {
+    const bType = (requirement.buyerType || '').toLowerCase();
+    route = bType === 'local' ? 'LOCAL_DIRECT' : (listQty >= (requirement.minimumDirectFarmerLotKg || 0) / 1000 ? 'BULK_DIRECT' : 'AGGREGATOR');
+  }
+
+  const structuredReasons = [
+    `Matches your ${listing.cropName || 'crop'} requirement`,
+    listQty >= reqQty ? `Accepts your full ${listQty}T quantity` : `Compatible with your ${listQty}T lot`,
+    distanceKm <= 15 ? `Closest suitable buyer (${distanceKm} km away)` : `Accessible regional corridor (${distanceKm} km away)`,
+    expectedPrice <= offeredPrice ? `Compatible price range (Buyer offers ₹${offeredPrice}/kg)` : `Negotiable rate (Buyer offers ₹${offeredPrice}/kg vs ₹${expectedPrice}/kg)`
+  ];
+
   return {
     score: Math.min(100, score),
     breakdown,
     reasons,
+    structuredReasons,
+    route,
     isViable: score >= 50 && eligibility.eligible,
     eligibility,
     offeredPrice,

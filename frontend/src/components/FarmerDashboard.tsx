@@ -201,10 +201,42 @@ export const FarmerDashboard: React.FC = () => {
       if (e.detail?.tab) {
         setActiveTab(e.detail.tab);
       }
+      if (e.detail?.cropName) {
+        setBuyerFilterCrop(e.detail.cropName);
+      }
+      if (e.detail?.filter) {
+        if (e.detail.filter === 'nearest') setBuyerSortBy('nearest');
+        else if (e.detail.filter === 'price') setBuyerSortBy('price');
+        else if (e.detail.filter === 'best_match') setBuyerSortBy('best_match');
+      }
+      if (e.detail?.openOffer && e.detail?.requirementId) {
+        const targetReq = matchedBuyers.find(m => m.requirement?.id === e.detail.requirementId)?.requirement;
+        if (targetReq) {
+          const activeListing = selectedListingForMatches || listings[0];
+          setMakeOfferModal({
+            isOpen: true,
+            requirement: targetReq,
+            listing: activeListing,
+            quantityTons: activeListing ? Math.min(Number(activeListing.quantityTons), Number(targetReq.quantityTons || 10)) : 5,
+            offeredPricePerKg: Number(targetReq.offeredPricePerKg || 20),
+            deliveryTerms: 'EX_FARM',
+            message: '',
+            isSubmitting: false
+          });
+        }
+      }
     };
+
+    // Check URL parameters on mount
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam && ['home', 'listings', 'buyers', 'offers', 'orders', 'storage', 'profile', 'aggregator_info', 'activities'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+
     window.addEventListener('farmer-navigate-tab', handleTabNav);
     return () => window.removeEventListener('farmer-navigate-tab', handleTabNav);
-  }, [user]);
+  }, [user, matchedBuyers, listings]);
 
   const handleViewMatches = async (listing: FarmerListing) => {
     setSelectedListingForMatches(listing);
@@ -242,12 +274,15 @@ export const FarmerDashboard: React.FC = () => {
         language: lang === 'en' ? 'en' : 'hi'
       });
 
-      if (res.available === false && res.fallbackMessage) {
+      if (res.available === false && res.fallbackMessage && (!res.recommendations || res.recommendations.length === 0)) {
         setAiError(res.fallbackMessage);
+      } else {
+        setAiError(null);
       }
       setAiRecommendation(res);
     } catch (err: any) {
-      setAiError(lang === 'hi' ? 'AI सिफ़ारिश फ़िलहाल उपलब्ध नहीं है।' : 'AI recommendation temporarily unavailable.');
+      console.warn('AI recommendation fetch error, fallback active:', err);
+      setAiError(null);
     } finally {
       setAiLoading(false);
     }
@@ -1272,14 +1307,14 @@ export const FarmerDashboard: React.FC = () => {
                             }`}
                           >
                             <div className="space-y-2">
-                              {/* Option Badge */}
+                              {/* Option Badge & Match Score */}
                               <div className="flex items-center justify-between">
                                 <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
                                   isBest 
                                     ? 'bg-emerald-400 text-emerald-950 font-black' 
                                     : 'bg-amber-400 text-amber-950 font-black'
                                 }`}>
-                                  {isBest ? 'BEST OPTION' : 'SECOND OPTION'}
+                                  {isBest ? `BEST MATCH — ${rec.matchScore || 93}%` : `MATCH — ${rec.matchScore || 87}%`}
                                 </span>
                                 <span className="text-xs font-bold text-emerald-300">
                                   {rec.distanceKm ? `${rec.distanceKm} km away` : 'Near you'}
@@ -1293,6 +1328,12 @@ export const FarmerDashboard: React.FC = () => {
                                   {activeListing 
                                     ? (lang === 'hi' ? `आपकी ${activeListing.quantityTons}T फसल के अनुकूल।` : `Suitable for your ${activeListing.quantityTons}T supply.`)
                                     : 'सत्यापित खरीदार मांग'}
+                                  {rec.requiredQuantityTons && (
+                                    <span className="text-emerald-300 font-bold ml-1.5">• मांग: {rec.requiredQuantityTons}T</span>
+                                  )}
+                                  {rec.offeredPricePerKg && (
+                                    <span className="text-emerald-300 font-bold ml-1.5">• भाव: ₹{rec.offeredPricePerKg}/kg</span>
+                                  )}
                                 </p>
                               </div>
 
@@ -1301,9 +1342,20 @@ export const FarmerDashboard: React.FC = () => {
                                 <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide">
                                   WHY? (कारण):
                                 </span>
-                                <p className="text-[11px] text-slate-200 leading-snug">
-                                  "{rec.reason}"
-                                </p>
+                                {Array.isArray(rec.reasons) && rec.reasons.length > 0 ? (
+                                  <ul className="text-[11px] text-slate-200 space-y-1">
+                                    {rec.reasons.map((rs: string, rsIdx: number) => (
+                                      <li key={rsIdx} className="flex items-start gap-1.5">
+                                        <span className="text-emerald-400">•</span>
+                                        <span>{rs}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-[11px] text-slate-200 leading-snug">
+                                    "{rec.reason}"
+                                  </p>
+                                )}
                               </div>
 
                               {/* Recommended Route */}
@@ -1320,12 +1372,40 @@ export const FarmerDashboard: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  // Scroll down to the buyer cards list
+                                  // Find requirement or scroll to buyer list
                                   window.scrollTo({ top: 800, behavior: 'smooth' });
                                 }}
                                 className="px-3 py-1.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer"
                               >
                                 [View Buyer]
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const targetMatch = matchedBuyers.find(m => m.requirement?.id === rec.buyerId);
+                                  const targetReq = targetMatch?.requirement || {
+                                    id: rec.buyerId,
+                                    buyerName: rec.buyerName,
+                                    buyerCompany: rec.buyerName,
+                                    cropName: activeListing?.cropName || 'Potato',
+                                    quantityTons: rec.requiredQuantityTons || 10,
+                                    offeredPricePerKg: rec.offeredPricePerKg || 20
+                                  };
+                                  setMakeOfferModal({
+                                    isOpen: true,
+                                    requirement: targetReq,
+                                    listing: activeListing,
+                                    quantityTons: activeListing ? Math.min(Number(activeListing.quantityTons), Number(targetReq.quantityTons || 10)) : 5,
+                                    offeredPricePerKg: Number(rec.offeredPricePerKg || targetReq.offeredPricePerKg || 20),
+                                    deliveryTerms: 'EX_FARM',
+                                    message: '',
+                                    isSubmitting: false
+                                  });
+                                }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-lg text-[11px] font-black transition-all cursor-pointer shadow-xs"
+                              >
+                                [Make Offer]
                               </button>
 
                               {isAgg && (

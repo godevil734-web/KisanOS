@@ -236,6 +236,70 @@ export const BuyerDashboard: React.FC = () => {
     fetchData();
   }, [user]);
 
+  useEffect(() => {
+    // 1. Sync activeTab from URL search param if present
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    const validTabs: Array<'requirements' | 'supply_discovery' | 'offers' | 'orders'> = [
+      'requirements', 'supply_discovery', 'offers', 'orders'
+    ];
+    if (tabParam && validTabs.includes(tabParam as any)) {
+      setActiveTab(tabParam as any);
+    }
+
+    const handleOpenDirectOffer = async (listingId: string) => {
+      setActiveTab('supply_discovery');
+      let listing = discoveredSupply.farmerMatches.find((m: any) => (m.listing?.id === listingId || m.id === listingId))?.listing;
+      if (!listing) {
+        try {
+          const listings = await api.getListings();
+          listing = (listings || []).find((l: any) => l.id === listingId);
+        } catch (_) {}
+      }
+      if (listing) {
+        const avail = Number(listing.availableQuantityTons ?? listing.quantityTons ?? 5);
+        setDirectOfferModal({
+          isOpen: true,
+          listing,
+          quantityTons: Math.min(avail, Number(selectedReqForDiscovery?.quantityTons || avail)),
+          pricePerKg: Number(selectedReqForDiscovery?.offeredPricePerKg || listing.expectedPricePerKg || 21),
+          pickupTerms: selectedReqForDiscovery?.deliveryType === 'DELIVERY_TO_BUYER' ? 'Delivery to Buyer Mandi' : 'Farm Gate Pickup',
+          targetDate: selectedReqForDiscovery?.requiredDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+          message: `Direct farm procurement offer for ${listing.cropName}`,
+          isSubmitting: false
+        });
+      }
+    };
+
+    // 2. Listen to custom event buyer-navigate-tab
+    const handleTabNav = (e: any) => {
+      const detail = e.detail || {};
+      const targetTab = detail.tab;
+      if (targetTab && validTabs.includes(targetTab)) {
+        setActiveTab(targetTab);
+      }
+      if (detail.openOffer && detail.listingId) {
+        handleOpenDirectOffer(detail.listingId);
+      }
+    };
+
+    // 3. Listen to open offer modal event
+    const handleOpenOffer = (e: any) => {
+      const detail = e.detail || {};
+      if (detail.listingId) {
+        handleOpenDirectOffer(detail.listingId);
+      }
+    };
+
+    window.addEventListener('buyer-navigate-tab', handleTabNav);
+    window.addEventListener('buyer-open-offer-modal', handleOpenOffer);
+
+    return () => {
+      window.removeEventListener('buyer-navigate-tab', handleTabNav);
+      window.removeEventListener('buyer-open-offer-modal', handleOpenOffer);
+    };
+  }, [discoveredSupply, selectedReqForDiscovery]);
+
   const handleCreateRequirement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (user?.status === 'pending') {

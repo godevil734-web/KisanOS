@@ -104,14 +104,26 @@ const MainApp: React.FC = () => {
     }
   };
 
+  // Grouped route definitions to prevent blank pages
+  const isFarmerRoute = pathname === '/list-crop' || pathname === '/farmer' || pathname === '/dashboard' ||
+    pathname === '/buyers' || pathname === '/listings' || pathname === '/crops' || pathname === '/offers' ||
+    pathname === '/orders' || pathname === '/deals' || pathname === '/aggregator-info' || pathname === '/storage-farmer';
+
+  const isAggregatorRoute = pathname === '/aggregator' || pathname === '/demand' || pathname === '/supply' ||
+    pathname === '/procurement' || pathname === '/aggregation' || pathname === '/batches' || pathname === '/logistics' ||
+    pathname === '/transactions';
+
+  const isBuyerRoute = pathname === '/buyer' || pathname === '/dealer' || pathname === '/buyer-requirements' ||
+    pathname === '/supply-discovery' || pathname === '/buyer-offers';
+
   // Derive currentTab from pathname
   let currentTab = 'landing';
   if (pathname === '/login') currentTab = 'login';
   else if (pathname === '/admin-login') currentTab = 'admin-login';
   else if (pathname === '/signup') currentTab = 'signup';
-  else if (pathname === '/list-crop' || pathname === '/farmer' || pathname === '/dashboard') currentTab = 'farmer';
-  else if (pathname === '/aggregator') currentTab = 'aggregator';
-  else if (pathname === '/buyer' || pathname === '/dealer') currentTab = 'buyer';
+  else if (isFarmerRoute) currentTab = 'farmer';
+  else if (isAggregatorRoute) currentTab = 'aggregator';
+  else if (isBuyerRoute) currentTab = 'buyer';
   else if (pathname === '/storage') currentTab = 'storage';
   else if (pathname === '/transport') currentTab = 'transport';
   else if (pathname === '/intelligence') currentTab = 'intelligence';
@@ -121,6 +133,9 @@ const MainApp: React.FC = () => {
 
   const handleSetCurrentTab = (tab: string) => {
     if (tab === 'landing') navigate('/');
+    else if (tab === 'farmer') navigate('/dashboard');
+    else if (tab === 'aggregator') navigate('/aggregator');
+    else if (tab === 'buyer') navigate('/buyer');
     else navigate(`/${tab}`);
   };
 
@@ -187,7 +202,7 @@ const MainApp: React.FC = () => {
                 onOpenGetStarted={handleOpenGetStarted}
               />
             )}
-            {(pathname === '/list-crop' || pathname === '/dashboard' || pathname === '/farmer') && (
+            {isFarmerRoute && (
               user && user.role !== 'farmer' && user.role !== 'admin' ? (
                 <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-amber-200 p-8 shadow-xs text-center space-y-4">
                   <div className="h-16 w-16 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl">
@@ -224,7 +239,7 @@ const MainApp: React.FC = () => {
               )
             )}
 
-            {pathname === '/aggregator' && (
+            {isAggregatorRoute && (
               user && user.role !== 'aggregator' && user.role !== 'admin' ? (
                 <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-amber-200 p-8 shadow-xs text-center space-y-4">
                   <div className="h-16 w-16 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl">
@@ -261,7 +276,7 @@ const MainApp: React.FC = () => {
               )
             )}
 
-            {(pathname === '/buyer' || pathname === '/dealer') && (
+            {isBuyerRoute && (
               user && user.role !== 'buyer' && user.role !== 'dealer' && user.role !== 'admin' ? (
                 <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-rose-200 p-8 shadow-xs text-center space-y-4 animate-fadeIn">
                   <div className="h-16 w-16 mx-auto rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center text-3xl">
@@ -311,6 +326,17 @@ const MainApp: React.FC = () => {
                 />
               )
             )}
+            {/* Fallback to prevent black/blank screens on any unmatched route */}
+            {!isFarmerRoute && !isAggregatorRoute && !isBuyerRoute && 
+             pathname !== '/storage' && pathname !== '/transport' && pathname !== '/intelligence' && 
+             !pathname.startsWith('/admin') && pathname !== '/how-it-works' && 
+             pathname !== '/login' && pathname !== '/signup' && pathname !== '/admin-login' && pathname !== '/' && (
+              <LandingPage 
+                onSelectTab={handleSetCurrentTab} 
+                onOpenGetStarted={handleOpenGetStarted} 
+                onNavigate={navigate}
+              />
+            )}
           </>
         )}
       </main>
@@ -352,13 +378,27 @@ const MainApp: React.FC = () => {
       {/* First-Visit Full-Screen Language Gate Picker */}
       <LanguageGateModal />
 
-      {/* Floating On-Demand Kisan Saathi AI Farmer Assistant */}
+      {/* Floating On-Demand Role-Aware Kisan Saathi AI Assistant */}
       <KisanSaathiWidget 
-        onNavigateTab={(tab) => {
-          if (user?.role === 'farmer') {
-            handleSetCurrentTab(tab);
+        onNavigateTab={(tab, payload) => {
+          const uRole = user?.role || 'farmer';
+          if (uRole === 'farmer') {
+            if (pathname !== '/dashboard' && pathname !== '/farmer') {
+              navigate('/dashboard?tab=' + tab);
+            }
+            window.dispatchEvent(new CustomEvent('farmer-navigate-tab', { detail: { tab, ...payload } }));
+          } else if (uRole === 'aggregator') {
+            if (pathname !== '/aggregator') {
+              navigate('/aggregator?tab=' + tab);
+            }
+            window.dispatchEvent(new CustomEvent('aggregator-navigate-tab', { detail: { tab, ...payload } }));
+          } else if (uRole === 'buyer' || uRole === 'dealer') {
+            if (pathname !== '/buyer' && pathname !== '/dealer') {
+              navigate('/buyer?tab=' + tab);
+            }
+            window.dispatchEvent(new CustomEvent('buyer-navigate-tab', { detail: { tab, ...payload } }));
           } else {
-            navigate(`/${tab}`);
+            navigate('/' + tab);
           }
         }} 
       />

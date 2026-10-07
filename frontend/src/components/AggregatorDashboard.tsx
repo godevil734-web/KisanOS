@@ -156,6 +156,55 @@ export const AggregatorDashboard: React.FC = () => {
     fetchData();
   }, [user]);
 
+  useEffect(() => {
+    // 1. Sync activeTab from URL search param if present
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    const validTabs: Array<'demand' | 'supply' | 'procurement' | 'aggregation' | 'logistics' | 'transactions'> = [
+      'demand', 'supply', 'procurement', 'aggregation', 'logistics', 'transactions'
+    ];
+    if (tabParam && validTabs.includes(tabParam as any)) {
+      setActiveTab(tabParam as any);
+    }
+
+    // 2. Listen to custom event aggregator-navigate-tab
+    const handleTabNav = (e: any) => {
+      const detail = e.detail || {};
+      const targetTab = detail.tab;
+      if (targetTab && validTabs.includes(targetTab)) {
+        setActiveTab(targetTab);
+      }
+      if (detail.reqId) {
+        const foundReq = buyerDemands.find((d: any) => d.id === detail.reqId);
+        if (foundReq && targetTab === 'procurement') {
+          handleStartPlanForDemand(foundReq);
+        }
+      }
+    };
+
+    // 3. Listen to open plan modal event
+    const handleOpenPlan = (e: any) => {
+      const detail = e.detail || {};
+      const targetId = detail.demandId || detail.reqId;
+      const foundReq = targetId ? buyerDemands.find((d: any) => d.id === targetId) : null;
+      if (foundReq) {
+        setActiveTab('procurement');
+        handleStartPlanForDemand(foundReq);
+      } else {
+        setActiveTab('procurement');
+        setShowPlanBuilderModal(true);
+      }
+    };
+
+    window.addEventListener('aggregator-navigate-tab', handleTabNav);
+    window.addEventListener('aggregator-open-plan-modal', handleOpenPlan);
+
+    return () => {
+      window.removeEventListener('aggregator-navigate-tab', handleTabNav);
+      window.removeEventListener('aggregator-open-plan-modal', handleOpenPlan);
+    };
+  }, [buyerDemands]);
+
   const handleSubscribe = async (planId: string) => {
     try {
       await api.subscribeAggregator({

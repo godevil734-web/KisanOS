@@ -7,25 +7,32 @@ import {
   Send, 
   Sparkles, 
   ArrowRight, 
-  RotateCcw,
   Store,
   Sprout,
   Tag,
   Warehouse,
   Users,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2,
+  MapPin,
+  TrendingUp,
+  FileText
 } from 'lucide-react';
 import { api } from '../services/api';
 import { KisanSaathiMessage, KisanSaathiAction } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 
 interface KisanSaathiWidgetProps {
-  onNavigateTab?: (tab: string) => void;
+  onNavigateTab?: (tab: string, payload?: any) => void;
+  onNavigate?: (path: string, tab?: string, payload?: any) => void;
 }
 
-export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigateTab }) => {
+export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigateTab, onNavigate }) => {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const isHi = language === 'hi' || language === 'hinglish';
+  const role = (user?.role || 'farmer').toLowerCase();
 
   // Strictly on-demand: NEVER open automatically on load or dashboard entry
   const [isOpen, setIsOpen] = useState(false);
@@ -34,26 +41,82 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
   const [isLoading, setIsLoading] = useState(false);
   const [apiNotice, setApiNotice] = useState<string | null>(null);
 
-  // Initial welcome message per requirement section 13
-  const initialGreeting = isHi
-    ? "नमस्ते! मैं Kisan Saathi हूँ, KisanConnect का AI सहायक।\n\nमैं buyer खोजने, offers समझने, storage और KisanConnect इस्तेमाल करने में आपकी मदद कर सकता हूँ।"
-    : "Hello! I am Kisan Saathi, KisanConnect's AI Assistant.\n\nI can help you discover matching buyers, understand price offers, book cold storage, and navigate KisanConnect.";
+  // Generate role-specific initial actions
+  const getInitialActions = (userRole: string): KisanSaathiAction[] => {
+    if (userRole === 'aggregator') {
+      return [
+        { label: isHi ? 'Buyer Demand देखें' : 'Buyer Demand', actionType: 'navigate_demand', tab: 'demand' },
+        { label: isHi ? 'Farmer Supply देखें' : 'Farmer Supply', actionType: 'navigate_supply', tab: 'supply' },
+        { label: isHi ? 'Aggregation Batches' : 'Aggregation Batches', actionType: 'navigate_aggregation', tab: 'aggregation' },
+        { label: isHi ? 'Procurement Plans' : 'Procurement Plans', actionType: 'navigate_procurement', tab: 'procurement' },
+        { label: isHi ? 'Storage & Logistics' : 'Storage & Logistics', actionType: 'navigate_logistics', tab: 'logistics' },
+        { label: isHi ? 'Transactions' : 'Transactions', actionType: 'navigate_transactions', tab: 'transactions' },
+        { label: isHi ? 'कुछ और पूछें' : 'Ask Anything', actionType: 'custom_prompt' }
+      ];
+    }
+    if (userRole === 'buyer' || userRole === 'dealer') {
+      return [
+        { label: isHi ? 'मेरी Requirements' : 'My Requirements', actionType: 'navigate_requirements', tab: 'requirements' },
+        { label: isHi ? 'Farmers खोजें' : 'Find Farmers', actionType: 'navigate_supply_discovery', tab: 'supply_discovery' },
+        { label: isHi ? 'Offers देखें' : 'View Offers', actionType: 'navigate_offers', tab: 'offers' },
+        { label: isHi ? 'Negotiations' : 'Negotiations', actionType: 'navigate_offers', tab: 'offers' },
+        { label: isHi ? 'Deals' : 'Deals', actionType: 'navigate_orders', tab: 'orders' },
+        { label: isHi ? 'Procurement Status' : 'Procurement Status', actionType: 'procurement_status' },
+        { label: isHi ? 'कुछ और पूछें' : 'Ask Anything', actionType: 'custom_prompt' }
+      ];
+    }
+    // Farmer (Default)
+    return [
+      { label: isHi ? 'मेरे खरीदार देखें' : 'Find Buyers', actionType: 'farmer_find_buyers' },
+      { label: isHi ? 'मेरी फसल देखें' : 'My Crops', actionType: 'navigate_crops', tab: 'listings' },
+      { label: isHi ? 'मेरे ऑफर देखें' : 'My Offers', actionType: 'navigate_offers', tab: 'offers' },
+      { label: isHi ? 'मेरे सौदे देखें' : 'My Deals', actionType: 'navigate_deals', tab: 'orders' },
+      { label: isHi ? 'कोल्ड स्टोरेज देखें' : 'Cold Storage', actionType: 'navigate_storage', tab: 'storage' },
+      { label: isHi ? 'कई किसानों के साथ बेचें' : 'Pool with Farmers', actionType: 'navigate_aggregator', tab: 'aggregator_info' },
+      { label: isHi ? 'कुछ और पूछें' : 'Ask Anything', actionType: 'custom_prompt' }
+    ];
+  };
+
+  // Generate role-specific initial greeting
+  const getInitialGreeting = (userRole: string): string => {
+    const name = user?.name ? ` ${user.name}` : '';
+    if (userRole === 'aggregator') {
+      return isHi
+        ? `नमस्ते${name}! मैं Kisan Saathi हूँ, KisanConnect का AI सहायक।\n\nमैं खरीदार मांग (Demand), किसान आपूर्ति (Supply), एकत्रीकरण बैच और प्रोक्योरमेंट योजना में आपकी मदद कर सकता हूँ।`
+        : `Hello${name}! I am Kisan Saathi, KisanConnect's AI Assistant.\n\nI can help you monitor buyer demand, assemble farmer supply batches, and structure procurement plans.`;
+    }
+    if (userRole === 'buyer' || userRole === 'dealer') {
+      return isHi
+        ? `नमस्ते${name}! मैं Kisan Saathi हूँ, KisanConnect का AI सहायक।\n\nमैं गुणवत्ता-सत्यापित किसानों से सीधी आपूर्ति खोजने, बोलियां लगाने, और खरीद पूरी करने में आपकी मदद कर सकता हूँ।`
+        : `Hello${name}! I am Kisan Saathi, KisanConnect's AI Assistant.\n\nI can help you discover verified farmer supply lots, structure offers, and manage procurement fulfillment.`;
+    }
+    return isHi
+      ? `नमस्ते${name}! मैं Kisan Saathi हूँ, KisanConnect का AI सहायक।\n\nमैं buyer खोजने, अपनी फसल बेचने, offers समझने और कोल्ड स्टोरेज में आपकी मदद कर सकता हूँ।`
+      : `Hello${name}! I am Kisan Saathi, KisanConnect's AI Assistant.\n\nI can help you discover matching buyers, understand price offers, book cold storage, and navigate KisanConnect.`;
+  };
 
   const [messages, setMessages] = useState<KisanSaathiMessage[]>([
     {
       id: 'msg-welcome',
       role: 'assistant',
-      text: initialGreeting,
+      text: getInitialGreeting(role),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      actions: [
-        { label: isHi ? 'Buyer खोजें' : 'Find Buyers', actionType: 'navigate_buyers', tab: 'buyers' },
-        { label: isHi ? 'मेरी फसल' : 'My Crops', actionType: 'navigate_crops', tab: 'listings' },
-        { label: isHi ? 'मेरे Offers' : 'My Offers', actionType: 'navigate_offers', tab: 'offers' },
-        { label: isHi ? 'Cold Storage' : 'Cold Storage', actionType: 'navigate_storage', tab: 'storage' },
-        { label: isHi ? 'कुछ और पूछें' : 'Ask Anything', actionType: 'custom_prompt' }
-      ]
+      actions: getInitialActions(role)
     }
   ]);
+
+  // Update initial message when user role changes
+  useEffect(() => {
+    setMessages([
+      {
+        id: 'msg-welcome',
+        role: 'assistant',
+        text: getInitialGreeting(role),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        actions: getInitialActions(role)
+      }
+    ]);
+  }, [user?.role, user?.name, isHi]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -70,12 +133,64 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
       return;
     }
 
+    if (action.actionType === 'farmer_find_buyers') {
+      handleSendMessage('मेरे खरीदार देखें');
+      return;
+    }
+
+    if (action.actionType === 'procurement_status') {
+      handleSendMessage('Procurement Status');
+      return;
+    }
+
+    if (action.actionType === 'select_crop') {
+      const crop = action.payload?.cropName || action.label;
+      handleSendMessage(crop);
+      return;
+    }
+
+    if (action.actionType === 'show_nearest_buyers') {
+      handleSendMessage('सबसे पास के खरीदार');
+      return;
+    }
+
+    if (action.actionType === 'show_best_price_buyers') {
+      handleSendMessage('सबसे अच्छे दाम');
+      return;
+    }
+
+    if (action.actionType === 'filter_buyers') {
+      if (action.payload?.filter === 'nearest') handleSendMessage('सबसे पास के खरीदार');
+      else if (action.payload?.filter === 'price') handleSendMessage('सबसे अच्छे दाम');
+      else if (action.payload?.filter === 'best_match') handleSendMessage('Best Match');
+      return;
+    }
+
+    if (action.actionType === 'buyer_direct_farmers') {
+      handleSendMessage('Direct Farmers');
+      return;
+    }
+
+    // Role-safe navigation handler
     if (action.tab) {
       if (onNavigateTab) {
-        onNavigateTab(action.tab);
+        onNavigateTab(action.tab, action.payload);
       }
-      // Broadcast custom event so any active dashboard views switch instantly
-      window.dispatchEvent(new CustomEvent('farmer-navigate-tab', { detail: { tab: action.tab } }));
+
+      // Dispatch appropriate custom event
+      if (role === 'farmer') {
+        window.dispatchEvent(new CustomEvent('farmer-navigate-tab', { detail: { tab: action.tab, ...action.payload } }));
+        if (action.actionType === 'make_offer' && action.payload?.requirementId) {
+          window.dispatchEvent(new CustomEvent('farmer-open-offer-modal', { detail: action.payload }));
+        }
+      } else if (role === 'aggregator') {
+        window.dispatchEvent(new CustomEvent('aggregator-navigate-tab', { detail: { tab: action.tab, ...action.payload } }));
+      } else if (role === 'buyer' || role === 'dealer') {
+        window.dispatchEvent(new CustomEvent('buyer-navigate-tab', { detail: { tab: action.tab, ...action.payload } }));
+        if (action.actionType === 'make_offer' && action.payload?.listingId) {
+          window.dispatchEvent(new CustomEvent('buyer-open-offer-modal', { detail: action.payload }));
+        }
+      }
     }
   };
 
@@ -115,25 +230,22 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
         role: 'assistant',
         text: res.reply || (isHi ? 'माफ़ कीजिए, मैं समझ नहीं पाया। कृपया दोबारा प्रयास करें।' : 'Sorry, could not process request. Please try again.'),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        actions: res.actions || []
+        actions: res.actions || [],
+        cards: res.cards || []
       };
 
       setMessages(prev => [...prev, botMsg]);
     } catch (err: any) {
-      setApiNotice(isHi ? 'AI सहायक फ़िलहाल अनुपलब्ध है।' : 'AI assistant temporarily unavailable.');
+      // Deterministic client-side fallback if server connection dropped
+      const fallbackActions = getInitialActions(role);
       const fallbackMsg: KisanSaathiMessage = {
         id: `bot-fallback-${Date.now()}`,
         role: 'assistant',
         text: isHi 
-          ? 'किसान साथी फ़िलहाल व्यस्त है। आप सीधे मुख्य मेनू से अपनी फसल, खरीदार व ऑफर्स देख सकते हैं।' 
-          : 'Kisan Saathi is temporarily busy. You can directly browse crops, buyers, and offers from the main menu.',
+          ? 'डेटा लोड नहीं हो पाया। आप सीधे नीचे दिए गए मुख्य विकल्पों से आगे बढ़ सकते हैं।' 
+          : 'Data could not load. You can directly browse the primary options below.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        actions: [
-          { label: isHi ? 'Buyer खोजें' : 'Find Buyers', actionType: 'navigate_buyers', tab: 'buyers' },
-          { label: isHi ? 'मेरी फसल' : 'My Crops', actionType: 'navigate_crops', tab: 'listings' },
-          { label: isHi ? 'मेरे Offers' : 'My Offers', actionType: 'navigate_offers', tab: 'offers' },
-          { label: isHi ? 'Cold Storage' : 'Cold Storage', actionType: 'navigate_storage', tab: 'storage' }
-        ]
+        actions: fallbackActions
       };
       setMessages(prev => [...prev, fallbackMsg]);
     } finally {
@@ -146,15 +258,9 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
       {
         id: 'msg-welcome',
         role: 'assistant',
-        text: initialGreeting,
+        text: getInitialGreeting(role),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        actions: [
-          { label: isHi ? 'Buyer खोजें' : 'Find Buyers', actionType: 'navigate_buyers', tab: 'buyers' },
-          { label: isHi ? 'मेरी फसल' : 'My Crops', actionType: 'navigate_crops', tab: 'listings' },
-          { label: isHi ? 'मेरे Offers' : 'My Offers', actionType: 'navigate_offers', tab: 'offers' },
-          { label: isHi ? 'Cold Storage' : 'Cold Storage', actionType: 'navigate_storage', tab: 'storage' },
-          { label: isHi ? 'कुछ और पूछें' : 'Ask Anything', actionType: 'custom_prompt' }
-        ]
+        actions: getInitialActions(role)
       }
     ]);
     setApiNotice(null);
@@ -162,7 +268,7 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
 
   return (
     <>
-      {/* Floating Trigger Button: Replaces the generic Help button with Kisan Saathi */}
+      {/* Floating Trigger Button: Role-Aware Kisan Saathi */}
       {!isOpen && (
         <button
           id="kisan-saathi-fab"
@@ -187,10 +293,16 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
           <div className="text-left">
             <div className="text-xs font-black tracking-wide text-white leading-tight flex items-center gap-1.5">
               <span>Kisan Saathi</span>
-              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded font-mono font-bold">AI</span>
+              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded font-mono font-bold">
+                {role === 'aggregator' ? 'AGG' : role === 'buyer' || role === 'dealer' ? 'BUYER' : 'AI'}
+              </span>
             </div>
             <div className="text-[10px] text-emerald-300/80 font-medium leading-none">
-              {isHi ? 'आपका KisanConnect सहायक' : 'Your Agri AI Partner'}
+              {role === 'aggregator' 
+                ? (isHi ? 'संग्राहक हब सहायक' : 'Aggregator Hub Assistant')
+                : role === 'buyer' || role === 'dealer'
+                ? (isHi ? 'थोक खरीद सहायक' : 'Procurement Assistant')
+                : (isHi ? 'आपका KisanConnect सहायक' : 'Your Agri AI Partner')}
             </div>
           </div>
         </button>
@@ -204,21 +316,21 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
             <div>
               <div className="text-xs font-black text-white">Kisan Saathi</div>
               <div className="text-[10px] text-emerald-300 flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Online
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Online • {role.toUpperCase()}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-1 border-l border-emerald-700 pl-2">
             <button
               onClick={() => setIsMinimized(false)}
-              className="p-1 hover:bg-emerald-800 rounded text-emerald-200 transition-colors text-xs font-bold"
+              className="p-1 hover:bg-emerald-800 rounded text-emerald-200 transition-colors text-xs font-bold cursor-pointer"
               title="Expand"
             >
-              खोलें
+              {isHi ? 'खोलें' : 'Open'}
             </button>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 hover:bg-emerald-800 rounded text-emerald-300 hover:text-white transition-colors"
+              className="p-1 hover:bg-emerald-800 rounded text-emerald-300 hover:text-white transition-colors cursor-pointer"
               title="Close"
             >
               <X className="h-4 w-4" />
@@ -229,7 +341,7 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
 
       {/* Kisan Saathi Conversational Drawer / Modal */}
       {isOpen && !isMinimized && (
-        <div className="fixed bottom-4 right-4 z-50 w-[94vw] sm:w-[420px] max-w-[450px] h-[85vh] sm:h-[640px] max-h-[700px] bg-[#fbfdfa] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-emerald-700/20 animate-fadeIn font-sans">
+        <div className="fixed bottom-4 right-4 z-50 w-[94vw] sm:w-[440px] max-w-[460px] h-[85vh] sm:h-[650px] max-h-[720px] bg-[#fbfdfa] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-emerald-700/20 animate-fadeIn font-sans">
           
           {/* Header */}
           <div className="px-4 py-3.5 bg-gradient-to-r from-emerald-900 via-emerald-800 to-emerald-950 text-white flex items-center justify-between border-b border-emerald-700/50 shrink-0">
@@ -242,11 +354,15 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
                   <h3 className="text-sm font-black tracking-tight text-white">Kisan Saathi</h3>
                   <span className="inline-flex items-center gap-1 text-[9px] bg-emerald-400/20 text-emerald-300 font-bold px-1.5 py-0.2 rounded-full border border-emerald-400/30">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Online
+                    {role.toUpperCase()}
                   </span>
                 </div>
                 <p className="text-[11px] text-emerald-200/90 font-medium">
-                  {isHi ? 'आपका KisanConnect सहायक' : 'Your KisanConnect Assistant'}
+                  {role === 'aggregator'
+                    ? (isHi ? 'संग्राहक हब सहायक' : 'Aggregator Assistant')
+                    : role === 'buyer' || role === 'dealer'
+                    ? (isHi ? 'थोक खरीद सहायक' : 'Procurement Assistant')
+                    : (isHi ? 'आपका KisanConnect सहायक' : 'Your KisanConnect Assistant')}
                 </p>
               </div>
             </div>
@@ -256,7 +372,7 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
               <button
                 type="button"
                 onClick={handleClearChat}
-                className="p-1.5 rounded-lg hover:bg-white/15 text-emerald-200 hover:text-white transition-colors"
+                className="p-1.5 rounded-lg hover:bg-white/15 text-emerald-200 hover:text-white transition-colors cursor-pointer"
                 title={isHi ? 'चैट साफ़ करें' : 'Clear Chat'}
               >
                 <Trash2 className="h-4 w-4" />
@@ -264,7 +380,7 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
               <button
                 type="button"
                 onClick={() => setIsMinimized(true)}
-                className="p-1.5 rounded-lg hover:bg-white/15 text-emerald-200 hover:text-white transition-colors"
+                className="p-1.5 rounded-lg hover:bg-white/15 text-emerald-200 hover:text-white transition-colors cursor-pointer"
                 title={isHi ? 'छोटा करें' : 'Minimize'}
               >
                 <Minus className="h-4 w-4" />
@@ -272,7 +388,7 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-white/15 text-emerald-200 hover:text-white transition-colors"
+                className="p-1.5 rounded-lg hover:bg-white/15 text-emerald-200 hover:text-white transition-colors cursor-pointer"
                 title={isHi ? 'बंद करें' : 'Close'}
               >
                 <X className="h-4 w-4" />
@@ -289,9 +405,9 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
               </div>
               <button 
                 onClick={() => setApiNotice(null)} 
-                className="text-amber-800 font-bold hover:underline text-[10px] ml-2"
+                className="text-amber-800 font-bold hover:underline text-[10px] ml-2 cursor-pointer"
               >
-                हटाएं
+                {isHi ? 'हटाएं' : 'Dismiss'}
               </button>
             </div>
           )}
@@ -306,7 +422,7 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
                   className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} animate-fadeIn`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs shadow-xs leading-relaxed ${
+                    className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-xs shadow-xs leading-relaxed ${
                       isUser
                         ? 'bg-emerald-800 text-white rounded-br-xs font-medium'
                         : 'bg-white text-slate-800 border border-emerald-900/10 rounded-bl-xs shadow-slate-200/50'
@@ -315,20 +431,81 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
                     {!isUser && (
                       <div className="flex items-center gap-1.5 mb-1 pb-1 border-b border-slate-100 text-[10px] font-black text-emerald-800">
                         <span>🌾 Kisan Saathi</span>
+                        <span className="text-[9px] font-normal text-slate-400">({role})</span>
                       </div>
                     )}
                     <div className="whitespace-pre-line text-xs font-normal">
                       {m.text}
                     </div>
+
+                    {/* Rich Cards Section (e.g., Buyer cards, Farmer cards, Batch cards) */}
+                    {!isUser && Array.isArray(m.cards) && m.cards.length > 0 && (
+                      <div className="mt-3 space-y-2 pt-2 border-t border-slate-100">
+                        {m.cards.map((c, cIdx) => (
+                          <div 
+                            key={cIdx} 
+                            className="bg-slate-50 hover:bg-emerald-50/50 rounded-xl p-2.5 border border-slate-200 transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div>
+                                <h4 className="text-xs font-black text-slate-900">{c.title}</h4>
+                                {c.subtitle && (
+                                  <p className="text-[10px] text-slate-500 font-medium">{c.subtitle}</p>
+                                )}
+                              </div>
+                              {c.badge && (
+                                <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full shrink-0">
+                                  {c.badge}
+                                </span>
+                              )}
+                            </div>
+
+                            {(c.quantity || c.price) && (
+                              <div className="flex items-center gap-3 mt-1.5 text-[11px] font-bold text-slate-700">
+                                {c.quantity && <span>मात्रा: <strong className="text-emerald-800">{c.quantity}</strong></span>}
+                                {c.price && <span>भाव: <strong className="text-emerald-800">{c.price}</strong></span>}
+                              </div>
+                            )}
+
+                            {Array.isArray(c.details) && c.details.length > 0 && (
+                              <div className="mt-1.5 text-[10px] text-slate-600 space-y-0.5">
+                                {c.details.map((d, dIdx) => (
+                                  <div key={dIdx}>• {d}</div>
+                                ))}
+                              </div>
+                            )}
+
+                            {Array.isArray(c.actions) && c.actions.length > 0 && (
+                              <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-slate-200/60">
+                                {c.actions.map((act, aIdx) => (
+                                  <button
+                                    key={aIdx}
+                                    type="button"
+                                    onClick={() => handleActionClick(act)}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer ${
+                                      act.label.includes('ऑफर') || act.label.includes('Offer') || act.label.includes('Plan')
+                                        ? 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs'
+                                        : 'bg-white hover:bg-slate-100 text-slate-800 border border-slate-300'
+                                    }`}
+                                  >
+                                    [{act.label}]
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <span className="text-[10px] text-slate-400 mt-1 px-1">
                     {m.timestamp}
                   </span>
 
-                  {/* Render Action Buttons Grounded in Backend Modules */}
+                  {/* Render Action Buttons */}
                   {!isUser && Array.isArray(m.actions) && m.actions.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2 max-w-[90%]">
+                    <div className="flex flex-wrap gap-1.5 mt-2 max-w-[92%]">
                       {m.actions.map((act, actIdx) => (
                         <button
                           key={actIdx}
@@ -341,6 +518,8 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
                           {act.tab === 'offers' && <Tag className="h-3 w-3 text-emerald-700" />}
                           {act.tab === 'storage' && <Warehouse className="h-3 w-3 text-emerald-700" />}
                           {act.tab === 'aggregator_info' && <Users className="h-3 w-3 text-emerald-700" />}
+                          {act.tab === 'demand' && <TrendingUp className="h-3 w-3 text-emerald-700" />}
+                          {act.tab === 'procurement' && <FileText className="h-3 w-3 text-emerald-700" />}
                           <span>{act.label}</span>
                           <ArrowRight className="h-2.5 w-2.5 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
                         </button>
@@ -366,27 +545,81 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick Suggested Prompts Bar */}
+          {/* Quick Suggested Prompts Bar (Contextual per Role) */}
           <div className="px-3 py-1.5 bg-slate-50 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
             <span className="text-[10px] font-bold text-slate-500 shrink-0">सुझाव:</span>
-            <button
-              onClick={() => handleSendMessage('Mere paas 8 ton aloo hai, kisko bechu?')}
-              className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
-            >
-              8 ton आलू किसको बेचूं?
-            </button>
-            <button
-              onClick={() => handleSendMessage('Sabse paas buyer kaun hai?')}
-              className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
-            >
-              पास का खरीदार?
-            </button>
-            <button
-              onClick={() => handleSendMessage('Cold storage chahiye')}
-              className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
-            >
-              Cold Storage
-            </button>
+            {role === 'farmer' && (
+              <>
+                <button
+                  onClick={() => handleSendMessage('मेरे खरीदार देखें')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  मेरे खरीदार देखें
+                </button>
+                <button
+                  onClick={() => handleSendMessage('Mere paas 8 ton aloo hai, kisko bechu?')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  8 ton आलू किसको बेचूं?
+                </button>
+                <button
+                  onClick={() => handleSendMessage('पास का खरीदार?')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  पास का खरीदार?
+                </button>
+                <button
+                  onClick={() => handleSendMessage('Cold Storage')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  Cold Storage
+                </button>
+              </>
+            )}
+            {role === 'aggregator' && (
+              <>
+                <button
+                  onClick={() => handleSendMessage('मुझे potato की demand दिखाओ')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  Potato की Demand
+                </button>
+                <button
+                  onClick={() => handleSendMessage('मेरे पास के farmers की potato supply दिखाओ')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  पास के Farmers की Supply
+                </button>
+                <button
+                  onClick={() => handleSendMessage('50 ton potato की demand fulfill करनी है')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  50T Demand Fulfill
+                </button>
+              </>
+            )}
+            {(role === 'buyer' || role === 'dealer') && (
+              <>
+                <button
+                  onClick={() => handleSendMessage('मुझे 20 ton potato चाहिए')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  20 Ton Potato चाहिए
+                </button>
+                <button
+                  onClick={() => handleSendMessage('पास के किसान खोजें')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  पास के किसान खोजें
+                </button>
+                <button
+                  onClick={() => handleSendMessage('Procurement Status')}
+                  className="shrink-0 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 text-slate-700 hover:text-emerald-900 px-2.5 py-1 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  Procurement Status
+                </button>
+              </>
+            )}
           </div>
 
           {/* Input Form */}
@@ -402,7 +635,13 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder={isHi ? "पूछें: '8 ton आलू किसको बेचूं?'" : "Ask: 'I have 8T potatoes, who to sell to?'"}
+              placeholder={
+                role === 'aggregator'
+                  ? (isHi ? "पूछें: 'मुझे potato की demand दिखाओ'" : "Ask: 'Show potato buyer demand'")
+                  : role === 'buyer' || role === 'dealer'
+                  ? (isHi ? "पूछें: 'मुझे 20 ton potato चाहिए'" : "Ask: 'I need 20 tons of potatoes'")
+                  : (isHi ? "पूछें: '8 ton आलू किसको बेचूं?'" : "Ask: 'I have 8T potatoes, who to sell to?'")
+              }
               maxLength={1000}
               className="flex-1 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 focus:border-emerald-600 rounded-xl px-3.5 py-2 text-xs text-slate-900 outline-none transition-all placeholder:text-slate-400 font-medium"
             />

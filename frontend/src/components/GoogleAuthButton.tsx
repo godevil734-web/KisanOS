@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { X, CheckCircle2, UserCheck, Shield } from 'lucide-react';
+import { X, Shield, ArrowRight } from 'lucide-react';
 
 interface GoogleAuthButtonProps {
   onSuccess: (googleData: { email: string; name: string; googleId: string; picture?: string; credential?: string }) => void;
@@ -26,45 +26,14 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
 
   const defaultText = buttonText || (isHi ? 'Google के साथ आगे बढ़ें' : 'Continue with Google');
 
-  // Quick preset test accounts for dev/demo or live testing
-  const presetAccounts = [
-    {
-      name: 'Ramesh Patel',
-      email: 'ramesh.farmer@gmail.com',
-      googleId: 'goog-ramesh-patel-101',
-      roleHint: isHi ? 'किसान (Agra)' : 'Farmer (Agra)'
-    },
-    {
-      name: 'Vikram Singh',
-      email: 'vikram.aggregator@gmail.com',
-      googleId: 'goog-vikram-singh-202',
-      roleHint: isHi ? 'एग्रीगेटर (Mathura)' : 'Aggregator (Mathura)'
-    },
-    {
-      name: 'Priya Sharma',
-      email: 'priya.buyer@gmail.com',
-      googleId: 'goog-priya-sharma-303',
-      roleHint: isHi ? 'थोक खरीदार (Delhi)' : 'Bulk Dealer (Delhi)'
-    }
-  ];
-
-  const handleSelectPreset = (acc: typeof presetAccounts[0]) => {
-    setIsModalOpen(false);
-    onSuccess({
-      email: acc.email,
-      name: acc.name,
-      googleId: acc.googleId,
-      picture: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(acc.name)}`
-    });
-  };
-
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customEmail.trim() || !customEmail.includes('@')) {
-      if (onError) onError(isHi ? 'कृपया वैध Google ईमेल दर्ज करें' : 'Please enter a valid Google email address');
+    const cleanEmail = customEmail.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      if (onError) onError(isHi ? 'कृपया एक वैध Google ईमेल दर्ज करें' : 'Please enter a valid Google email address');
       return;
     }
-    const cleanEmail = customEmail.trim().toLowerCase();
     const cleanName = customName.trim() || cleanEmail.split('@')[0];
     setIsModalOpen(false);
     onSuccess({
@@ -109,7 +78,7 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
         type="button"
         onClick={handleClick}
         disabled={disabled}
-        className={`w-full py-3 px-4 rounded-xl border border-stone-300 bg-white hover:bg-stone-50 active:bg-stone-100 text-stone-700 font-semibold text-sm sm:text-base flex items-center justify-center gap-3 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+        className={`w-full min-h-[48px] py-3 px-4 rounded-xl bg-[#0D1C14] hover:bg-[#12251B] active:bg-[#0A1711] border border-emerald-900/80 hover:border-emerald-600/70 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-3 transition-all shadow-md shadow-black/40 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${className}`}
       >
         <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
           <path
@@ -129,25 +98,26 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
             d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.36 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
           />
         </svg>
-        <span>{defaultText}</span>
+        <span className="tracking-tight">{defaultText}</span>
       </button>
 
-      {/* Google Account Selector Dialog */}
+      {/* Google Account Sign-In Modal (Inspired by Reference Screenshot 2) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200 relative animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-[#0A1812] rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-emerald-900/80 relative text-white animate-in zoom-in-95 duration-150">
             {/* Close Button */}
             <button
+              type="button"
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-stone-400 hover:text-stone-700 p-1 rounded-lg"
+              className="absolute top-5 right-5 text-emerald-400/60 hover:text-white p-1 rounded-xl hover:bg-emerald-950/60 transition-colors cursor-pointer"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
 
-            {/* Google Header */}
-            <div className="text-center mb-5">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-stone-100 mb-3 shadow-inner">
+            {/* Header with Google Logo */}
+            <div className="flex items-center gap-3.5 mb-5">
+              <div className="w-12 h-12 rounded-2xl bg-[#0D2117] border border-emerald-800/60 flex items-center justify-center shadow-inner">
                 <svg className="w-6 h-6" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
@@ -167,89 +137,73 @@ export const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-stone-900">
-                {isHi ? 'Google खाता चुनें' : 'Choose a Google Account'}
-              </h3>
-              <p className="text-xs text-stone-500 mt-1">
-                {isHi ? 'KisanConnect में सुरक्षित लॉगिन के लिए आगे बढ़ें' : 'to continue securely to KisanConnect'}
-              </p>
-            </div>
-
-            {/* Quick Demo Google Accounts */}
-            <div className="space-y-2 mb-4">
-              <p className="text-xs font-bold uppercase text-stone-400 tracking-wider">
-                {isHi ? 'त्वरित खाता चयन (Demo Accounts)' : 'Quick Select (Demo Accounts)'}
-              </p>
-              {presetAccounts.map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => handleSelectPreset(acc)}
-                  className="w-full text-left p-3 rounded-xl border border-stone-200 hover:border-emerald-500 hover:bg-emerald-50/50 flex items-center justify-between transition-colors group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-emerald-700 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                      {acc.name[0]}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-stone-900 group-hover:text-emerald-900">{acc.name}</p>
-                      <p className="text-xs text-stone-500">{acc.email}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-semibold px-2 py-1 bg-stone-100 text-stone-600 rounded-md">
-                    {acc.roleHint}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-stone-200" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-stone-400 font-semibold">{isHi ? 'या अन्य ईमेल' : 'Or Enter Custom'}</span>
+              <div>
+                <h3 className="text-lg font-black text-white tracking-tight">
+                  {isHi ? 'Google खाता साइन-इन' : 'Google Account Sign-In'}
+                </h3>
+                <p className="text-xs text-emerald-300/70 font-medium">
+                  {isHi ? 'प्रत्यक्ष Google पहचान सत्यापन' : 'Direct Google Identity Verification'}
+                </p>
               </div>
             </div>
+
+            <p className="text-xs text-emerald-200/70 leading-relaxed mb-5">
+              {isHi
+                ? 'नीचे अपना Google ईमेल पता दर्ज करें। आपकी पहचान सत्यापित करने के लिए एक 6-अंकीय ओटीपी कोड भेजा जाएगा।'
+                : 'Enter your Google email address below. A 6-digit OTP code will be sent to verify your identity.'}
+            </p>
 
             {/* Custom Google Email Form */}
-            <form onSubmit={handleCustomSubmit} className="space-y-3">
+            <form onSubmit={handleCustomSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  {isHi ? 'आपका नाम' : 'Your Full Name'}
-                </label>
-                <input
-                  type="text"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  placeholder="e.g. Suresh Kumar"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  {isHi ? 'Google ईमेल पता' : 'Google Email Address'}
+                <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-1.5">
+                  {isHi ? 'Google ईमेल' : 'GOOGLE EMAIL'}
                 </label>
                 <input
                   type="email"
                   required
                   value={customEmail}
                   onChange={(e) => setCustomEmail(e.target.value)}
-                  placeholder="name@gmail.com"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  placeholder="farmer@gmail.com"
+                  autoFocus
+                  className="w-full min-h-[46px] px-3.5 py-2.5 rounded-xl border border-emerald-900/70 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-[#06140E] text-sm text-white placeholder-emerald-800/60 outline-none transition-all"
                 />
               </div>
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-lg bg-[#315C45] hover:bg-[#254634] text-white font-bold text-sm shadow-sm transition-colors"
-              >
-                {isHi ? 'इस Google खाते से आगे बढ़ें' : 'Continue with this Google Account'}
-              </button>
+
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-1.5">
+                  {isHi ? 'पूरा नाम (वैकल्पिक)' : 'FULL NAME (OPTIONAL)'}
+                </label>
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder="e.g. Ramesh Patel"
+                  className="w-full min-h-[46px] px-3.5 py-2.5 rounded-xl border border-emerald-900/70 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-[#06140E] text-sm text-white placeholder-emerald-800/60 outline-none transition-all"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl bg-[#0D2117] hover:bg-[#122A1E] text-emerald-300 font-bold text-xs uppercase tracking-wider border border-emerald-900/70 transition-colors cursor-pointer"
+                >
+                  {isHi ? 'रद्द करें' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-950/60 flex items-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99]"
+                >
+                  <span>{isHi ? 'ओटीपी कोड भेजें' : 'Send OTP Code'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </form>
 
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-stone-400 text-center">
-              <Shield className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{isHi ? 'इसके बाद मोबाइल OTP सत्यापन आवश्यक होगा' : 'Mobile OTP verification required on next step'}</span>
+            <div className="mt-5 pt-3.5 border-t border-emerald-950 flex items-center justify-center gap-1.5 text-[11px] text-emerald-400/60">
+              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{isHi ? 'Brevo द्वारा सुरक्षित ईमेल डिलीवरी' : 'Secured via Brevo Email OTP Delivery'}</span>
             </div>
           </div>
         </div>

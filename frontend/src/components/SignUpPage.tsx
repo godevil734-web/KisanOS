@@ -35,7 +35,6 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
     tempToken: string;
     email: string;
     maskedEmail: string;
-    demoOtp?: string;
     role: string;
     user?: any;
   } | null>(null);
@@ -60,8 +59,8 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
   
   // Farmer OTP verification sub-step
   const [farmerOtpSent, setFarmerOtpSent] = useState(false);
-  const [farmerOtpCode, setFarmerOtpCode] = useState('123456');
-  const [demoOtpChip, setDemoOtpChip] = useState<string | null>(null);
+  const [farmerOtpCode, setFarmerOtpCode] = useState('');
+  const [farmerCooldown, setFarmerCooldown] = useState(0);
 
   // Step 2 Form States - Aggregator / Dealer
   const [businessName, setBusinessName] = useState('');
@@ -80,7 +79,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
   } | null>(null);
   const [googlePhone, setGooglePhone] = useState('');
   const [googlePassword, setGooglePassword] = useState('');
-  const [googleOtpCode, setGoogleOtpCode] = useState('123456');
+  const [googleOtpCode, setGoogleOtpCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const [loading, setLoading] = useState(false);
@@ -136,10 +135,8 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
         password: farmerPassword || undefined
       });
       setFarmerOtpSent(true);
-      if (res.demoOtp) {
-        setDemoOtpChip(res.demoOtp);
-        setFarmerOtpCode(res.demoOtp);
-      }
+      setFarmerOtpCode('');
+      setFarmerCooldown(60);
     } catch (err: any) {
       setErrorMsg(err.message || 'Registration failed');
     } finally {
@@ -153,6 +150,13 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
     const t = setTimeout(() => setResendCooldown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [resendCooldown]);
+
+  // Cooldown effect for farmer mobile OTP
+  useEffect(() => {
+    if (farmerCooldown <= 0) return;
+    const t = setTimeout(() => setFarmerCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [farmerCooldown]);
 
 
   // Google 1-Click Auth inside a specific role section (Step 2)
@@ -168,14 +172,11 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
           tempToken: res.tempToken,
           maskedEmail: res.maskedEmail || res.email,
           email: res.email,
-          demoOtp: res.demoOtp,
           role: res.role,
           user: res.user
         });
-        if (res.demoOtp) {
-          setDemoOtpChip(res.demoOtp);
-          setGoogleOtpCode(res.demoOtp);
-        }
+        setGoogleOtpCode('');
+        setResendCooldown(60);
         return;
       }
       if (res.status === 'REGISTER_REQUIRED') {
@@ -185,10 +186,8 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
         setFarmerName(googleData.name);
         setContactPerson(googleData.name);
         setBusinessEmail(googleData.email);
-        if (res.demoOtp) {
-          setDemoOtpChip(res.demoOtp);
-          setGoogleOtpCode(res.demoOtp);
-        }
+        setGoogleOtpCode('');
+        setResendCooldown(60);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Google authentication failed');
@@ -224,12 +223,8 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await googleResendOtp(googleExistingUser.email);
-      if (res.demoOtp) {
-        setDemoOtpChip(res.demoOtp);
-        setGoogleOtpCode(res.demoOtp);
-      }
-      setResendCooldown(30);
+      await googleResendOtp(googleExistingUser.email);
+      setResendCooldown(60);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to resend verification code');
     } finally {
@@ -243,12 +238,8 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await googleResendOtp(googleProfile.email);
-      if (res.demoOtp) {
-        setDemoOtpChip(res.demoOtp);
-        setGoogleOtpCode(res.demoOtp);
-      }
-      setResendCooldown(30);
+      await googleResendOtp(googleProfile.email);
+      setResendCooldown(60);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to resend email verification code');
     } finally {
@@ -320,6 +311,22 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
       onSuccess('/list-crop');
     } catch (err: any) {
       setErrorMsg(err.message || 'OTP verification failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Resend Farmer Mobile OTP
+  const handleResendFarmerOtp = async () => {
+    const cleanPhone = farmerPhone.replace(/\D/g, '').slice(-10);
+    if (!cleanPhone || farmerCooldown > 0) return;
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      await sendOtp(cleanPhone);
+      setFarmerCooldown(60);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to resend OTP');
     } finally {
       setLoading(false);
     }
@@ -633,22 +640,6 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                   </button>
                 </div>
 
-                {demoOtpChip && (
-                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-black px-2 py-0.5 rounded bg-amber-200 text-amber-950 uppercase tracking-wider">
-                        DEMO OTP
-                      </span>
-                      <span className="text-xs text-amber-900 font-bold">
-                        {isHi ? 'परीक्षण हेतु ईमेल कोड:' : 'Test verification code:'}
-                      </span>
-                    </div>
-                    <code className="text-base font-black text-amber-950 tracking-widest bg-white px-2.5 py-0.5 rounded border border-amber-300">
-                      {demoOtpChip}
-                    </code>
-                  </div>
-                )}
-
                 <form onSubmit={handleGoogleVerifyExistingUser} className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
@@ -671,7 +662,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                       maxLength={6}
                       value={googleOtpCode}
                       onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="123456"
+                      placeholder="• • • • • •"
                       className="w-full min-h-[48px] px-3.5 rounded-xl border-2 border-emerald-400 focus:border-emerald-600 bg-white font-black text-lg text-center tracking-widest text-emerald-950 outline-none"
                       required
                     />
@@ -819,7 +810,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                     maxLength={6}
                     value={googleOtpCode}
                     onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="123456"
+                    placeholder="• • • • • •"
                     className="w-full min-h-[48px] px-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-black text-lg text-center tracking-widest text-[#1C2B23] outline-none"
                     required
                   />
@@ -829,23 +820,6 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                       : `A 6-digit verification code was sent to your Google email (${googleProfile.email}).`}
                   </p>
                 </div>
-
-                {/* Demo OTP Helper Chip */}
-                {demoOtpChip && (
-                  <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-black px-2 py-0.5 rounded bg-amber-200 text-amber-950 uppercase tracking-wider">
-                        DEMO OTP
-                      </span>
-                      <span className="text-xs text-amber-900 font-bold">
-                        {isHi ? 'परीक्षण हेतु ईमेल कोड:' : 'Test verification code:'}
-                      </span>
-                    </div>
-                    <code className="text-base font-black text-amber-950 tracking-widest bg-white px-2.5 py-0.5 rounded border border-amber-300">
-                      {demoOtpChip}
-                    </code>
-                  </div>
-                )}
 
                 {/* Optional Mobile Number */}
                 <div>
@@ -1047,33 +1021,38 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
             {/* Farmer OTP Verification */}
             {!googleProfile && !googleExistingUser && selectedRole === 'farmer' && farmerOtpSent && (
               <form onSubmit={handleFarmerOtpVerify} className="space-y-4">
-                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-300 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-black px-2 py-0.5 rounded bg-amber-200 text-amber-950 uppercase tracking-wider">
-                      DEMO OTP
-                    </span>
-                    <span className="text-xs text-amber-900 font-bold">
-                      {isHi ? 'परीक्षण हेतु कोड:' : 'Fixed test code:'}
-                    </span>
-                  </div>
-                  <code className="text-base font-black text-amber-950 tracking-widest bg-white px-2.5 py-0.5 rounded border border-amber-300">
-                    {demoOtpChip || '123456'}
-                  </code>
-                </div>
+
 
                 <div>
-                  <label className="block text-xs sm:text-sm font-black text-[#1C2B23] mb-1.5 uppercase tracking-wider">
-                    {isHi ? 'मोबाइल पर आया 6-अंकों का ओटीपी' : 'Enter 6-Digit Mobile OTP'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs sm:text-sm font-black text-[#1C2B23] uppercase tracking-wider">
+                      {isHi ? 'मोबाइल पर आया 6-अंकों का ओटीपी' : 'Enter 6-Digit Mobile OTP'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleResendFarmerOtp}
+                      disabled={farmerCooldown > 0 || loading}
+                      className="text-xs font-bold text-emerald-800 hover:underline disabled:opacity-50 cursor-pointer"
+                    >
+                      {farmerCooldown > 0
+                        ? `${isHi ? 'पुनः भेजें' : 'Resend in'} ${farmerCooldown}s`
+                        : (isHi ? 'ओटीपी पुनः भेजें' : 'Resend OTP')}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     maxLength={6}
                     value={farmerOtpCode}
                     onChange={(e) => setFarmerOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="123456"
+                    placeholder="• • • • • •"
                     className="w-full min-h-[48px] px-3.5 rounded-xl border-2 border-[#D8D2C4] focus:border-[#1E3A2B] bg-white font-black text-lg text-center tracking-widest text-[#1C2B23] outline-none"
                     required
                   />
+                  <p className="text-[11px] text-[#5A6860] mt-1 font-medium">
+                    {isHi
+                      ? `6-अंकीय ओटीपी आपके मोबाइल (${farmerPhone}) पर भेजा गया है।`
+                      : `A 6-digit OTP was sent to your mobile (${farmerPhone}).`}
+                  </p>
                 </div>
 
                 <button

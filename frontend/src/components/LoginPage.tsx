@@ -115,18 +115,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Phone / OTP form state (no prefilled credentials)
-  const [phone, setPhone] = useState('');
+  // Phone / Email OTP form state
+  const [phoneOrEmail, setPhoneOrEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [demoOtpChip, setDemoOtpChip] = useState<string | null>(null);
+  const [otpCooldown, setOtpCooldown] = useState(0);
 
   // Google 2FA Email OTP state (Existing User Sign In)
   const [googleOtpState, setGoogleOtpState] = useState<{
     tempToken: string;
     maskedEmail: string;
     email: string;
-    demoOtp?: string;
     user: any;
   } | null>(null);
 
@@ -134,11 +133,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
   const [googleRegisterState, setGoogleRegisterState] = useState<{
     googleProfile: { googleId: string; email: string; name: string; picture?: string };
     maskedEmail: string;
-    demoOtp?: string;
   } | null>(null);
   const [googleRegisterRole, setGoogleRegisterRole] = useState<'farmer' | 'aggregator' | 'dealer'>(initialRole);
   const [googleRegisterPassword, setGoogleRegisterPassword] = useState('');
-  const [googleOtpCode, setGoogleOtpCode] = useState('123456');
+  const [googleOtpCode, setGoogleOtpCode] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
 
   // Status & error states
@@ -171,6 +169,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     return () => clearTimeout(t);
   }, [resendCooldown]);
 
+  // Cooldown effect for phone/email OTP
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const t = setTimeout(() => setOtpCooldown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [otpCooldown]);
+
   // Email / Password Login Submit
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,38 +202,56 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     }
   };
 
-  // Phone: Send OTP
+  // Send OTP (Email or Phone)
   const handleSendOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length !== 10) {
-      setErrorMsg(isHi ? 'कृपया 10 अंकों का वैध मोबाइल नंबर दर्ज करें।' : 'Please enter a valid 10-digit mobile number.');
+    const identifier = phoneOrEmail.trim();
+    if (!identifier) {
+      setErrorMsg(isHi ? 'कृपया अपना ईमेल या मोबाइल नंबर दर्ज करें।' : 'Please enter your email or mobile number.');
       return;
     }
+
+    const isEmail = identifier.includes('@');
+    if (isEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(identifier)) {
+        setErrorMsg(isHi ? 'कृपया एक वैध ईमेल पता दर्ज करें।' : 'Please enter a valid email address.');
+        return;
+      }
+    } else {
+      const cleanPhone = identifier.replace(/\D/g, '').slice(-10);
+      if (cleanPhone.length !== 10) {
+        setErrorMsg(isHi ? 'कृपया 10 अंकों का वैध मोबाइल नंबर या ईमेल दर्ज करें।' : 'Please enter a valid 10-digit mobile number or email address.');
+        return;
+      }
+    }
+
+    if (otpCooldown > 0) return;
 
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await sendOtp(cleanPhone);
+      await sendOtp(identifier);
       setOtpSent(true);
-      if (res.demoOtp) {
-        setDemoOtpChip(res.demoOtp);
-        setOtpCode(res.demoOtp);
-      }
-      setSuccessMsg(isHi ? 'ओटीपी सफलतापूर्वक भेजा गया!' : 'OTP sent successfully to your mobile!');
+      setOtpCooldown(60);
+      setSuccessMsg(
+        isEmail
+          ? (isHi ? `ओटीपी आपके ईमेल (${identifier}) पर भेज दिया गया है!` : `OTP sent to your email (${identifier}).`)
+          : (isHi ? `ओटीपी आपके मोबाइल (${identifier}) पर भेज दिया गया है!` : `OTP sent to your mobile (${identifier}).`)
+      );
     } catch (err: any) {
-      setErrorMsg(err.message || (isHi ? 'ओटीपी भेजने में विफल।' : 'Failed to send OTP.'));
+      setErrorMsg(err.message || (isHi ? 'ओटीपी भेजने में विफल।' : 'Unable to send OTP. Please try again.'));
     } finally {
       setLoading(false);
     }
   };
 
-  // Phone: Verify OTP & Sign In
+  // Verify OTP & Sign In
   const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    if (!cleanPhone || cleanPhone.length !== 10) {
-      setErrorMsg(isHi ? 'कृपया 10 अंकों का मोबाइल नंबर दर्ज करें।' : 'Please enter your 10-digit mobile number.');
+    const identifier = phoneOrEmail.trim();
+    if (!identifier) {
+      setErrorMsg(isHi ? 'कृपया अपना ईमेल या मोबाइल नंबर दर्ज करें।' : 'Please enter your email or mobile number.');
       return;
     }
     if (!otpCode || otpCode.trim().length !== 6) {
@@ -239,7 +262,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     setLoading(true);
     setErrorMsg(null);
     try {
-      const loggedUser = await loginWithOtp(cleanPhone, otpCode.trim(), selectedRole);
+      const loggedUser = await loginWithOtp(identifier, otpCode.trim(), selectedRole);
       onSuccess(getTargetUrl(loggedUser?.role || selectedRole));
     } catch (err: any) {
       setErrorMsg(err.message || (isHi ? 'लॉगिन विफल रहा।' : 'Login failed. Invalid or expired OTP.'));
@@ -261,23 +284,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
           tempToken: res.tempToken,
           maskedEmail: res.maskedEmail || res.email,
           email: res.email,
-          demoOtp: res.demoOtp,
           user: res.user
         });
-        if (res.demoOtp) {
-          setGoogleOtpCode(res.demoOtp);
-        }
+        setGoogleOtpCode('');
+        setResendCooldown(60);
         setSuccessMsg(isHi ? `Google खाता मिला! सत्यापन कोड ${res.maskedEmail || res.email} पर भेजा गया है।` : `Google account found! Verification code sent to ${res.maskedEmail || res.email}.`);
       } else if (res.status === 'REGISTER_REQUIRED') {
         setGoogleOtpState(null);
         setGoogleRegisterState({
           googleProfile: res.googleProfile || googleData,
           maskedEmail: res.maskedEmail || res.email,
-          demoOtp: res.demoOtp
         });
-        if (res.demoOtp) {
-          setGoogleOtpCode(res.demoOtp);
-        }
+        setGoogleOtpCode('');
+        setResendCooldown(60);
         setSuccessMsg(isHi ? `नया खाता! सत्यापन कोड ${res.maskedEmail || res.email} पर भेजा गया है।` : `New account! Verification code sent to ${res.maskedEmail || res.email}.`);
       }
     } catch (err: any) {
@@ -357,10 +376,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
     const targetEmail = googleOtpState?.email || googleRegisterState?.googleProfile?.email;
     if (!targetEmail || resendCooldown > 0) return;
     try {
-      const res = await googleResendOtp(targetEmail);
-      if (res.demoOtp) setGoogleOtpCode(res.demoOtp);
+      await googleResendOtp(targetEmail);
       setSuccessMsg(isHi ? 'नया कोड भेजा गया है।' : 'A new code has been sent to your email.');
-      setResendCooldown(30);
+      setResendCooldown(60);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to resend code');
     }
@@ -614,23 +632,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                   </p>
                 </div>
 
-                {googleOtpState.demoOtp && (
-                  <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/50 flex items-center justify-between text-xs text-amber-200">
-                    <span>{isHi ? 'डेमो ईमेल कोड:' : 'Demo verification code:'}</span>
-                    <code className="bg-amber-900/60 px-2 py-0.5 rounded font-mono font-bold text-amber-300">{googleOtpState.demoOtp}</code>
-                  </div>
-                )}
-
                 <div>
-                  <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-1.5">
-                    {isHi ? '6-अंकीय सत्यापन कोड' : '6-Digit Verification Code'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80">
+                      {isHi ? '6-अंकीय सत्यापन कोड' : '6-Digit Verification Code'}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleResendGoogleEmailOtp}
+                      disabled={resendCooldown > 0 || loading}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 underline font-mono disabled:opacity-50 cursor-pointer"
+                    >
+                      {resendCooldown > 0
+                        ? `${isHi ? 'पुनः भेजें' : 'Resend in'} ${resendCooldown}s`
+                        : (isHi ? 'कोड दोबारा भेजें' : 'Resend Code')}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     maxLength={6}
                     value={googleOtpCode}
                     onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="123456"
+                    placeholder="• • • • • •"
                     className="w-full min-h-[48px] px-3.5 rounded-xl border border-emerald-900/60 focus:border-emerald-500 bg-[#08150E] font-black text-lg text-center tracking-widest text-white outline-none"
                     required
                   />
@@ -713,7 +736,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                     maxLength={6}
                     value={googleOtpCode}
                     onChange={(e) => setGoogleOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="123456"
+                    placeholder="• • • • • •"
                     className="w-full min-h-[48px] px-3.5 rounded-xl border border-emerald-900/60 focus:border-emerald-500 bg-[#08150E] font-black text-lg text-center tracking-widest text-white outline-none"
                     required
                   />
@@ -760,8 +783,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                         : 'text-emerald-300/70 hover:text-white'
                     }`}
                   >
-                    <Phone className="w-4 h-4" />
-                    <span>{isHi ? 'मोबाइल / ओटीपी' : 'Phone / OTP'}</span>
+                    <Mail className="w-4 h-4" />
+                    <span>{isHi ? 'ईमेल / फोन ओटीपी' : 'Email / Mobile OTP'}</span>
                     {selectedRole === 'farmer' && (
                       <span className="text-[9px] font-mono bg-emerald-900/80 text-emerald-200 px-1.5 py-0.5 rounded">FAST</span>
                     )}
@@ -892,24 +915,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                   </form>
                 )}
 
-                {/* 4. Form: PHONE / OTP LOGIN */}
+                {/* 4. Form: EMAIL / PHONE OTP LOGIN */}
                 {authTab === 'phone' && (
                   <form onSubmit={handlePhoneSubmit} className="space-y-4">
                     <div>
                       <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80 mb-2">
-                        {isHi ? '10-अंकीय मोबाइल नंबर' : 'REGISTERED MOBILE NUMBER'}
+                        {isHi ? 'ईमेल या 10-अंकीय मोबाइल नंबर' : 'EMAIL OR MOBILE NUMBER'}
                       </label>
                       <div className="flex gap-2">
                         <div className="relative flex-1">
                           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-emerald-400/60">
-                            <Phone className="w-4 h-4" />
+                            {phoneOrEmail.includes('@') ? <Mail className="w-4 h-4" /> : <Phone className="w-4 h-4" />}
                           </div>
                           <input
-                            type="tel"
-                            maxLength={10}
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                            placeholder={isHi ? '10-अंकीय मोबाइल नंबर दर्ज करें' : 'Enter 10-digit mobile number'}
+                            type="text"
+                            value={phoneOrEmail}
+                            onChange={(e) => setPhoneOrEmail(e.target.value)}
+                            placeholder={isHi ? 'ईमेल या 10-अंकीय मोबाइल दर्ज करें' : 'user@example.com or mobile'}
                             required
                             className="w-full min-h-[48px] pl-10 pr-3 py-2.5 bg-[#08150E] border border-emerald-900/60 focus:border-emerald-500 rounded-xl text-sm font-medium text-white placeholder-emerald-800/60 outline-none transition-all"
                           />
@@ -917,55 +939,68 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                         <button
                           type="button"
                           onClick={() => handleSendOtp()}
-                          disabled={loading}
+                          disabled={loading || otpCooldown > 0}
                           className="min-h-[48px] px-4 rounded-xl bg-emerald-900/60 hover:bg-emerald-800/80 text-emerald-300 hover:text-white font-bold text-xs uppercase tracking-wider border border-emerald-700/60 transition-colors shrink-0 cursor-pointer disabled:opacity-50"
                         >
-                          {otpSent ? (isHi ? 'पुनः भेजें' : 'Resend') : (isHi ? 'ओटीपी भेजें' : 'Send OTP')}
+                          {otpCooldown > 0
+                            ? (isHi ? `${otpCooldown}s में पुनः भेजें` : `Resend in ${otpCooldown}s`)
+                            : otpSent
+                              ? (isHi ? 'पुनः भेजें' : 'Resend OTP')
+                              : (isHi ? 'ओटीपी भेजें' : 'Send OTP')}
                         </button>
                       </div>
 
-                      {/* Quick Demo Phone Pill */}
-                      <div className="pt-1">
+                      {/* Quick Helper Identifier Pills */}
+                      <div className="pt-1.5 flex flex-wrap gap-2">
                         {selectedRole === 'aggregator' && (
                           <button
                             type="button"
-                            onClick={() => { setPhone('9877788990'); setOtpCode('123456'); }}
+                            onClick={() => { setPhoneOrEmail('aggregator@kisanconnect.in'); }}
                             className="text-[11px] text-amber-300 hover:text-amber-200 underline font-mono cursor-pointer"
                           >
-                            ✨ Demo Phone: 9877788990 (Vikram Singh Hub)
+                            Demo: aggregator@kisanconnect.in
                           </button>
                         )}
                         {selectedRole === 'dealer' && (
                           <button
                             type="button"
-                            onClick={() => { setPhone('9800200001'); setOtpCode('123456'); }}
+                            onClick={() => { setPhoneOrEmail('vikram@freshbites.com'); }}
                             className="text-[11px] text-blue-300 hover:text-blue-200 underline font-mono cursor-pointer"
                           >
-                            ✨ Demo Phone: 9800200001 (FreshBites Foods)
+                            Demo: vikram@freshbites.com
                           </button>
                         )}
                         {selectedRole === 'farmer' && (
                           <button
                             type="button"
-                            onClick={() => { setPhone('9800100001'); setOtpCode('123456'); }}
+                            onClick={() => { setPhoneOrEmail('farmer@kisanconnect.in'); }}
                             className="text-[11px] text-emerald-300 hover:text-emerald-200 underline font-mono cursor-pointer"
                           >
-                            ✨ Demo Phone: 9800100001 (Ramesh Patel)
+                            Demo: farmer@kisanconnect.in
                           </button>
                         )}
                       </div>
                     </div>
 
+                    {otpSent && (
+                      <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-800/60 text-xs text-emerald-300 flex items-center justify-between">
+                        <span>
+                          {isHi ? 'ओटीपी भेजा गया:' : 'OTP sent to:'}{' '}
+                          <strong className="text-white">{phoneOrEmail}</strong>
+                        </span>
+                        {otpCooldown > 0 && (
+                          <span className="font-mono text-emerald-400 text-[11px]">
+                            {otpCooldown}s
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <label className="block text-xs font-mono uppercase tracking-wider text-emerald-300/80">
-                          {isHi ? '6-अंकीय ओटीपी कोड' : 'OTP CODE'}
+                          {isHi ? '6-अंकीय ओटीपी कोड' : 'ENTER 6-DIGIT OTP'}
                         </label>
-                        {demoOtpChip && (
-                          <span className="text-[11px] text-emerald-400 font-mono">
-                            Demo OTP: <strong className="text-white underline">{demoOtpChip}</strong>
-                          </span>
-                        )}
                       </div>
                       <input
                         type="text"

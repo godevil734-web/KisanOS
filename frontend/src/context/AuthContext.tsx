@@ -9,8 +9,8 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<void>;
   register: (userData: any) => Promise<void>;
   loginWithPassword: (identifier: string, pass: string, expectedRole?: string) => Promise<any>;
-  loginWithOtp: (phone: string, code: string, expectedRole?: string) => Promise<any>;
-  sendOtp: (phone: string) => Promise<any>;
+  loginWithOtp: (phoneOrEmail: string, code: string, expectedRole?: string) => Promise<any>;
+  sendOtp: (phoneOrEmail: string) => Promise<any>;
   signupFarmer: (data: { name: string; phone: string; villageDistrict: string; mainCrops: string[]; password?: string }) => Promise<any>;
   signupBusiness: (data: any) => Promise<any>;
   googleInit: (data: { credential?: string; googleUser?: any }) => Promise<any>;
@@ -100,16 +100,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res.user;
   };
 
-  const sendOtp = async (phone: string) => {
-    return await api.sendOtp(phone);
+  const sendOtp = async (phoneOrEmail: string) => {
+    return await api.sendOtp(phoneOrEmail);
   };
 
-  const loginWithOtp = async (phone: string, code: string, expectedRole?: string) => {
-    const res = await api.verifyOtp({ phone, code, expectedRole });
-    localStorage.setItem('kc_token', res.token);
-    setToken(res.token);
-    setUser(res.user);
-    await refreshNotifications();
+  const loginWithOtp = async (phoneOrEmail: string, code: string, expectedRole?: string) => {
+    const isEmail = phoneOrEmail.includes('@');
+    const res = await api.verifyOtp({ 
+      phone: isEmail ? undefined : phoneOrEmail, 
+      email: isEmail ? phoneOrEmail : undefined, 
+      code, 
+      expectedRole 
+    });
+    if (res.token) {
+      localStorage.setItem('kc_token', res.token);
+      setToken(res.token);
+      setUser(res.user);
+      await refreshNotifications();
+    }
     return res.user;
   };
 

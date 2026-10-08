@@ -79,25 +79,27 @@ app.use((req, res, next) => {
 // 1. AUTHENTICATION & ROLE-PROTECTED ACCESS
 // ---------------------------------------------
 
-// OTP Send (Farmer & Mobile authentication) - Fails CLOSED (503) on DB error
+// OTP Send (Mobile or Email) - Real Brevo Delivery for Emails
 app.post('/api/auth/otp/send', otpSendLimiter, async (req, res) => {
   try {
-    const { phone } = req.body;
-    if (!phone) {
-      return res.status(400).json({ error: 'Mobile number is required' });
+    const { phone, email } = req.body;
+    const identifier = (email || phone || '').trim();
+    if (!identifier) {
+      return res.status(400).json({ error: 'Mobile number or email address is required' });
     }
 
-    const result = await otpProvider.sendOtp(phone);
+    const result = await otpProvider.sendOtp(identifier);
     if (!result.success) {
       return res.status(400).json({ error: result.error });
     }
 
     res.json({
       success: true,
-      message: 'OTP sent successfully',
-      demoOtp: result.demoCode,
+      message: result.message || 'OTP sent successfully',
+      demoOtp: result.isEmail ? undefined : result.demoCode,
       expiresInSeconds: result.expiresInSeconds,
-      isDemo: result.isDemo
+      isDemo: result.isDemo,
+      isEmail: result.isEmail
     });
   } catch (err) {
     console.error('[OTP SEND] Database error:', err.message);
@@ -105,26 +107,116 @@ app.post('/api/auth/otp/send', otpSendLimiter, async (req, res) => {
   }
 });
 
-// OTP Verify & Login / Auto-Registration for Farmer - Fails CLOSED (503) on DB error
-app.post('/api/auth/otp/verify', authLimiter, async (req, res) => {
+// Dedicated Send Email OTP API (Brevo Delivery)
+app.post('/api/auth/send-email-otp', otpSendLimiter, async (req, res) => {
   try {
-    const { phone, code, expectedRole } = req.body;
-    if (!phone || !code) {
-      return res.status(400).json({ error: 'Mobile number and OTP code are required' });
+    const { email } = req.body;
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address' });
     }
 
-    const result = await otpProvider.verifyOtp(phone, code);
+    const result = await otpProvider.sendOtp(cleanEmail);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+
+    return res.json({
+      success: true,
+      message: 'OTP sent successfully to your email',
+      expiresInSeconds: result.expiresInSeconds
+    });
+  } catch (err) {
+    console.error('[SEND EMAIL OTP] Error:', err.message);
+    return res.status(503).json({ success: false, error: 'Unable to send OTP. Please try again.' });
+  }
+});
+
+// Dedicated Verify Email OTP API
+app.post('/api/auth/verify-email-otp', authLimiter, async (req, res) => {
+  try {
+    const { email, otp, code, expectedRole } = req.body;
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const inputCode = (otp || code || '').trim();
+
+    if (!cleanEmail || !inputCode) {
+      return res.status(400).json({ success: false, message: 'Email and OTP code are required' });
+    }
+
+    const result = await otpProvider.verifyOtp(cleanEmail, inputCode);
+    if (!result.valid) {
+      return res.status(400).json({ success: false, message: result.error || 'Invalid OTP' });
+    }
+
+    let user = await findUserByIdentifier(cleanEmail);
+    if (!user) {
+      const tempToken = jwt.sign(
+        { type: 'email_register_verified', email: cleanEmail },
+        JWT_SECRET,
+        { expiresIn: '30m' }
+      );
+      return res.json({
+        success: true,
+        status: 'REGISTER_REQUIRED',
+        email: cleanEmail,
+        tempToken,
+        message: 'Email verified. Please complete your registration.'
+      });
+    }
+
+    if (expectedRole && user.role !== expectedRole) {
+      const roleLabels = { farmer: 'Farmer', aggregator: 'Aggregator', dealer: 'Big Dealer', buyer: 'Big Dealer' };
+      return res.status(400).json({
+        success: false,
+        error: 'ROLE_MISMATCH',
+        message: `This account is registered as a ${roleLabels[user.role] || user.role}. Please switch to the ${roleLabels[user.role] || user.role} tab to log in.`
+      });
+    }
+
+    if (user.status === 'blocked') {
+      return res.status(403).json({ success: false, error: 'ACCOUNT_BLOCKED', message: 'Your account has been suspended by administration.' });
+    }
+
+    if (user.status === 'rejected') {
+      return res.status(403).json({ success: false, error: 'ACCOUNT_REJECTED', message: 'Your account registration was not approved.' });
+    }
+
+    const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('token', token, getCookieOptions());
+    res.cookie('kc_session', token, getCookieOptions());
+
+    const { password: _, ...userSafe } = user;
+    return res.json({ success: true, token, user: userSafe });
+  } catch (err) {
+    console.error('[VERIFY EMAIL OTP] Error:', err.message);
+    return res.status(503).json({ success: false, message: 'Service Unavailable. Database error during OTP verification.' });
+  }
+});
+
+// OTP Verify & Login / Auto-Registration - Fails CLOSED (503) on DB error
+app.post('/api/auth/otp/verify', authLimiter, async (req, res) => {
+  try {
+    const { phone, email, code, otp, expectedRole } = req.body;
+    const identifier = (email || phone || '').trim();
+    const inputCode = (code || otp || '').trim();
+
+    if (!identifier || !inputCode) {
+      return res.status(400).json({ error: 'Identifier (phone/email) and OTP code are required' });
+    }
+
+    const result = await otpProvider.verifyOtp(identifier, inputCode);
     if (!result.valid) {
       return res.status(400).json({ error: result.error });
     }
 
-    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
-    let user = await findUserByIdentifier(cleanPhone);
+    const isEmail = identifier.includes('@');
+    const cleanId = isEmail ? identifier.toLowerCase() : identifier.replace(/\D/g, '').slice(-10);
+    let user = await findUserByIdentifier(cleanId);
 
     if (!user) {
       return res.status(404).json({
         error: 'NO_ACCOUNT_FOUND',
-        message: 'No account found with this mobile number. Please complete Sign Up first.'
+        message: `No account found with this ${isEmail ? 'email' : 'mobile number'}. Please complete Sign Up first.`
       });
     }
 
@@ -133,7 +225,7 @@ app.post('/api/auth/otp/verify', authLimiter, async (req, res) => {
       const roleLabels = { farmer: 'Farmer', aggregator: 'Aggregator', dealer: 'Big Dealer', buyer: 'Big Dealer' };
       return res.status(400).json({
         error: 'ROLE_MISMATCH',
-        message: `This mobile number is registered as a ${roleLabels[user.role] || user.role}. Please switch to the ${roleLabels[user.role] || user.role} tab to log in.`
+        message: `This ${isEmail ? 'email' : 'mobile number'} is registered as a ${roleLabels[user.role] || user.role}. Please switch to the ${roleLabels[user.role] || user.role} tab to log in.`
       });
     }
 
@@ -312,8 +404,6 @@ app.post('/api/auth/google/init', authLimiter, async (req, res) => {
         tempToken,
         email: cleanEmail,
         maskedEmail: maskEmail(cleanEmail),
-        demoOtp: otpRes.demoCode,
-        isDemo: otpRes.isDemo,
         googleProfile: {
           googleId: googleData.googleId,
           email: cleanEmail,
@@ -368,8 +458,6 @@ app.post('/api/auth/google/init', authLimiter, async (req, res) => {
       tempToken,
       maskedEmail,
       email: targetEmail,
-      demoOtp: otpRes.demoCode,
-      isDemo: otpRes.isDemo,
       role: user.role,
       user: {
         id: user.id,
@@ -587,8 +675,6 @@ app.post('/api/auth/google/resend-otp', authLimiter, async (req, res) => {
     return res.json({
       success: true,
       maskedEmail: maskEmail(cleanEmail),
-      demoOtp: otpRes.demoCode,
-      isDemo: otpRes.isDemo,
       message: `A new verification code was sent to ${maskEmail(cleanEmail)}`
     });
   } catch (err) {

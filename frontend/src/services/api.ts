@@ -44,9 +44,17 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   // Auth
-  sendOtp: (phone: string) => request<any>('/auth/otp/send', { method: 'POST', body: JSON.stringify({ phone }) }),
-  verifyOtp: (data: { phone: string; code: string; expectedRole?: string }) => 
+  sendOtp: (identifier: string) => 
+    request<any>('/auth/otp/send', { 
+      method: 'POST', 
+      body: JSON.stringify(identifier.includes('@') ? { email: identifier } : { phone: identifier }) 
+    }),
+  sendEmailOtp: (email: string) =>
+    request<any>('/auth/send-email-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+  verifyOtp: (data: { phone?: string; email?: string; code: string; otp?: string; expectedRole?: string }) => 
     request<any>('/auth/otp/verify', { method: 'POST', body: JSON.stringify(data) }),
+  verifyEmailOtp: (data: { email: string; otp: string; expectedRole?: string }) =>
+    request<any>('/auth/verify-email-otp', { method: 'POST', body: JSON.stringify(data) }),
   signupFarmer: (data: { name: string; phone: string; villageDistrict: string; mainCrops: string[]; password?: string }) =>
     request<any>('/auth/signup/farmer', { method: 'POST', body: JSON.stringify(data) }),
   signupBusiness: (data: { role: string; businessName: string; contactPerson: string; mobile: string; email: string; city: string; password: string }) =>

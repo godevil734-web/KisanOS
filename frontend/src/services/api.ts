@@ -55,6 +55,12 @@ export const api = {
     request<any>('/auth/otp/verify', { method: 'POST', body: JSON.stringify(data) }),
   verifyEmailOtp: (data: { email: string; otp: string; expectedRole?: string }) =>
     request<any>('/auth/verify-email-otp', { method: 'POST', body: JSON.stringify(data) }),
+  initSignup: (data: any) =>
+    request<any>('/auth/signup/init', { method: 'POST', body: JSON.stringify(data) }),
+  resendSignupOtp: (signupToken: string) =>
+    request<any>('/auth/signup/resend', { method: 'POST', body: JSON.stringify({ signupToken }) }),
+  verifySignup: (data: { signupToken: string; code: string }) =>
+    request<any>('/auth/signup/verify', { method: 'POST', body: JSON.stringify(data) }),
   signupFarmer: (data: { name: string; phone: string; villageDistrict: string; mainCrops: string[]; password?: string }) =>
     request<any>('/auth/signup/farmer', { method: 'POST', body: JSON.stringify(data) }),
   signupBusiness: (data: { role: string; businessName: string; contactPerson: string; mobile: string; email: string; city: string; password: string }) =>

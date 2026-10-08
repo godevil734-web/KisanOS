@@ -13,6 +13,9 @@ interface AuthContextType {
   sendOtp: (phoneOrEmail: string) => Promise<any>;
   signupFarmer: (data: { name: string; phone: string; villageDistrict: string; mainCrops: string[]; password?: string }) => Promise<any>;
   signupBusiness: (data: any) => Promise<any>;
+  initSignup: (data: any) => Promise<any>;
+  resendSignupOtp: (signupToken: string) => Promise<any>;
+  verifySignup: (data: { signupToken: string; code: string }) => Promise<any>;
   googleInit: (data: { credential?: string; googleUser?: any }) => Promise<any>;
   googleVerifyOtp: (tempToken: string, code: string) => Promise<any>;
   googleRegister: (data: any) => Promise<any>;
@@ -134,6 +137,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   };
 
+  const initSignup = async (data: any) => {
+    return await api.initSignup(data);
+  };
+
+  const resendSignupOtp = async (signupToken: string) => {
+    return await api.resendSignupOtp(signupToken);
+  };
+
+  const verifySignup = async (data: { signupToken: string; code: string }) => {
+    const res = await api.verifySignup(data);
+    if (res.token) {
+      localStorage.setItem('kc_token', res.token);
+      setToken(res.token);
+      setUser(res.user);
+      await refreshNotifications();
+    }
+    return res.user;
+  };
+
   const googleInit = async (data: { credential?: string; googleUser?: any }) => {
     return await api.googleInit(data);
   };
@@ -229,6 +251,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendOtp,
         signupFarmer,
         signupBusiness,
+        initSignup,
+        resendSignupOtp,
+        verifySignup,
         googleInit,
         googleVerifyOtp,
         googleRegister,

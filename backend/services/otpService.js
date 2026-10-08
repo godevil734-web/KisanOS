@@ -125,6 +125,9 @@ async function sendBrevoEmail({ toEmail, code, recipientName = 'KisanConnect Use
   </html>
   `;
 
+  console.log('[OTP] Brevo request starting');
+  console.log(`[OTP] Email: ${toEmail}`);
+
   try {
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
@@ -142,20 +145,32 @@ async function sendBrevoEmail({ toEmail, code, recipientName = 'KisanConnect Use
       })
     });
 
+    console.log(`[OTP] Brevo response status: ${response.status}`);
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[BREVO] Transactional email failed with HTTP ${response.status}:`, errorText);
+      console.error(`[OTP] Brevo error response (${response.status}):`, errorText);
+
+      let userFriendlyError = 'Unable to send verification code. Please try again.';
+      if (errorText.includes('unrecognised IP address') || errorText.includes('authorised_ips')) {
+        console.error('[OTP] ACTION REQUIRED: Your current IP is not authorized in Brevo. Visit https://app.brevo.com/security/authorised_ips to add this IP or deactivate API IP blocking.');
+        userFriendlyError = 'Brevo blocked API request due to unrecognized IP address. Please deactivate IP blocking in Brevo settings (https://app.brevo.com/security/authorised_ips).';
+      } else if (response.status === 401) {
+        userFriendlyError = 'Brevo authentication failed (invalid API key or unauthorized IP).';
+      }
+
       return { 
         success: false, 
-        error: 'Unable to send OTP email at this time. Please verify your email or try again.' 
+        error: userFriendlyError,
+        statusCode: response.status
       };
     }
 
     const data = await response.json().catch(() => ({}));
-    console.log(`[BREVO] Verification email delivered to ${maskEmail(toEmail)} (messageId: ${data.messageId || 'ok'})`);
+    console.log(`[OTP] Verification email delivered to ${maskEmail(toEmail)} (messageId: ${data.messageId || 'ok'})`);
     return { success: true, messageId: data.messageId };
   } catch (err) {
-    console.error('[BREVO] Network exception during email dispatch:', err.message);
+    console.error('[OTP] Network exception during Brevo email dispatch:', err.message);
     return { 
       success: false, 
       error: 'Unable to reach email delivery service. Please try again in a few moments.' 

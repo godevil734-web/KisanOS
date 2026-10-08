@@ -107,6 +107,52 @@ app.post('/api/auth/otp/send', otpSendLimiter, async (req, res) => {
   }
 });
 
+// Development / Verification Health Check for Brevo Email OTP
+app.get('/api/auth/email-otp/health', async (req, res) => {
+  const apiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL;
+  const senderName = process.env.BREVO_SENDER_NAME;
+
+  const isConfigured = Boolean(apiKey && apiKey.trim() !== '' && apiKey !== 'YOUR_BREVO_API_KEY');
+  const isSenderConfigured = Boolean(senderEmail && senderEmail.trim() !== '');
+
+  let brevoStatus = null;
+  let brevoMessage = null;
+  let brevoReachable = false;
+
+  if (isConfigured) {
+    try {
+      const response = await fetch('https://api.brevo.com/v3/account', {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json',
+          'api-key': apiKey.trim()
+        }
+      });
+      brevoStatus = response.status;
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        brevoReachable = true;
+        brevoMessage = 'Brevo API connected successfully';
+      } else {
+        brevoMessage = data.message || `HTTP ${response.status}`;
+      }
+    } catch (err) {
+      brevoMessage = err.message;
+    }
+  }
+
+  return res.json({
+    brevoConfigured: isConfigured,
+    senderConfigured: isSenderConfigured,
+    senderEmail: isSenderConfigured ? senderEmail : null,
+    senderName: senderName || 'KisanConnect',
+    brevoStatus,
+    brevoReachable,
+    brevoMessage: brevoMessage ? brevoMessage.replace(/xkeysib-[a-zA-Z0-9_-]+/g, '[REDACTED]') : null
+  });
+});
+
 // Dedicated Send Email OTP API (Brevo Delivery)
 app.post('/api/auth/send-email-otp', otpSendLimiter, async (req, res) => {
   try {
@@ -115,6 +161,9 @@ app.post('/api/auth/send-email-otp', otpSendLimiter, async (req, res) => {
     if (!cleanEmail || !cleanEmail.includes('@')) {
       return res.status(400).json({ success: false, error: 'Please enter a valid email address' });
     }
+
+    console.log('[OTP] Send request received (send-email-otp)');
+    console.log(`[OTP] Email: ${cleanEmail}`);
 
     const result = await otpProvider.sendOtp(cleanEmail);
     if (!result.success) {
@@ -255,6 +304,298 @@ app.post('/api/auth/otp/verify', authLimiter, async (req, res) => {
   } catch (err) {
     console.error('[OTP VERIFY] Database error:', err.message);
     return res.status(503).json({ error: 'Service Unavailable. Database error during OTP verify.' });
+  }
+});
+
+// Unified Sign Up Step 1: Validate Registration Data & Send Real Brevo Email OTP
+app.post('/api/auth/signup/init', authLimiter, async (req, res) => {
+  try {
+    const { 
+      role, 
+      name, 
+      email, 
+      phone, 
+      password, 
+      state, 
+      district, 
+      village, 
+      mainCrops, 
+      businessName, 
+      operatingArea, 
+      capacity, 
+      buyerType, 
+      procurementCrops 
+    } = req.body;
+
+    // 1. Role validation
+    const targetRole = (role === 'buyer' || role === 'dealer') ? 'dealer' : (role === 'aggregator' ? 'aggregator' : 'farmer');
+
+    // 2. Name validation
+    const cleanName = (name || '').trim();
+    if (!cleanName || cleanName.length < 2) {
+      return res.status(400).json({ error: 'Please enter your full name (minimum 2 characters)' });
+    }
+
+    // 3. Email validation
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    // 4. Phone validation
+    const cleanPhone = (phone || '').replace(/\D/g, '').slice(-10);
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number' });
+    }
+
+    // 5. Password strength validation (Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char)
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+    const hasMinLength = password.length >= 8;
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+    if (!hasMinLength || !hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+      return res.status(400).json({ 
+        error: 'Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.' 
+      });
+    }
+
+    // 6. Check duplicate email and phone
+    const existingEmail = await findUserByIdentifier(cleanEmail);
+    if (existingEmail) {
+      return res.status(400).json({ error: 'An account with this email address already exists. Please log in.' });
+    }
+
+    const existingPhone = await findUserByIdentifier(cleanPhone);
+    if (existingPhone) {
+      return res.status(400).json({ error: 'An account with this mobile number already exists. Please log in.' });
+    }
+
+    // 7. Dispatch real 6-digit OTP to user's real email through Brevo
+    console.log('[OTP] Send request received (signup/init)');
+    console.log(`[OTP] Role: ${targetRole}, Email: ${cleanEmail}`);
+
+    const otpRes = await otpProvider.sendOtp(cleanEmail, { recipientName: cleanName });
+    if (!otpRes.success) {
+      return res.status(400).json({ error: otpRes.error || 'Failed to send verification code to email' });
+    }
+
+    // 8. Sign temporary payload token (15-min expiration) to preserve validated data safely
+    const signupToken = jwt.sign(
+      {
+        type: 'signup_pending',
+        role: targetRole,
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        password,
+        state: (state || '').trim(),
+        district: (district || '').trim(),
+        village: (village || '').trim(),
+        mainCrops: Array.isArray(mainCrops) ? mainCrops : [],
+        businessName: (businessName || '').trim(),
+        operatingArea: (operatingArea || '').trim(),
+        capacity: (capacity || '').trim(),
+        buyerType: (buyerType || '').trim(),
+        procurementCrops: Array.isArray(procurementCrops) ? procurementCrops : []
+      },
+      JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Verification code sent to your email.',
+      signupToken,
+      email: cleanEmail,
+      maskedEmail: maskEmail(cleanEmail)
+    });
+  } catch (err) {
+    console.error('[SIGNUP INIT] Error:', err.message);
+    return res.status(503).json({ error: 'Service Unavailable. Failed to initiate registration.' });
+  }
+});
+
+// Unified Sign Up Step 1b: Resend Real Email OTP
+app.post('/api/auth/signup/resend', authLimiter, async (req, res) => {
+  try {
+    const { signupToken } = req.body;
+    if (!signupToken) {
+      return res.status(400).json({ error: 'Registration session token is required' });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(signupToken, JWT_SECRET);
+      if (payload.type !== 'signup_pending' || !payload.email) {
+        throw new Error('Invalid signup payload');
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'Registration session expired. Please start again.' });
+    }
+
+    console.log('[OTP] Resend request received (signup/resend)');
+    console.log(`[OTP] Email: ${payload.email}`);
+
+    const otpRes = await otpProvider.sendOtp(payload.email, { recipientName: payload.name });
+    if (!otpRes.success) {
+      return res.status(400).json({ error: otpRes.error || 'Failed to resend verification code' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Verification code resent to your email.',
+      maskedEmail: maskEmail(payload.email)
+    });
+  } catch (err) {
+    console.error('[SIGNUP RESEND] Error:', err.message);
+    return res.status(503).json({ error: 'Failed to resend verification code' });
+  }
+});
+
+// Unified Sign Up Step 2: Verify 6-Digit Email OTP & Create User in PostgreSQL
+app.post('/api/auth/signup/verify', authLimiter, async (req, res) => {
+  try {
+    const { signupToken, code } = req.body;
+    if (!signupToken || !code) {
+      return res.status(400).json({ error: 'Signup token and 6-digit verification code are required' });
+    }
+
+    const cleanCode = code.trim();
+    if (cleanCode.length !== 6) {
+      return res.status(400).json({ error: 'Please enter all 6 digits of the verification code' });
+    }
+
+    // Decode & verify temporary token
+    let payload;
+    try {
+      payload = jwt.verify(signupToken, JWT_SECRET);
+      if (payload.type !== 'signup_pending' || !payload.email) {
+        throw new Error('Invalid signup payload');
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'Registration session expired or invalid. Please start again.' });
+    }
+
+    console.log('[OTP] Verify request received (signup/verify)');
+    console.log(`[OTP] Email: ${payload.email}`);
+
+    // Verify OTP through existing database otpProvider
+    const otpResult = await otpProvider.verifyOtp(payload.email, cleanCode);
+    if (!otpResult.valid) {
+      return res.status(400).json({ error: otpResult.error || 'Invalid or expired verification code' });
+    }
+
+    // Re-check uniqueness right before insertion
+    const doubleCheckEmail = await findUserByIdentifier(payload.email);
+    if (doubleCheckEmail) {
+      return res.status(400).json({ error: 'An account with this email already exists. Please log in.' });
+    }
+
+    // Construct new user row
+    const role = payload.role;
+    let newUser;
+    const authMethods = ['email', 'password', 'phone'];
+
+    if (role === 'farmer') {
+      newUser = {
+        id: `usr-farmer-${Date.now()}`,
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+        password: hashPassword(payload.password),
+        role: 'farmer',
+        status: 'active',
+        location: `${payload.village ? payload.village + ', ' : ''}${payload.district || 'Agra'}, ${payload.state || 'UP'}`,
+        rating: 5.0,
+        reviewsCount: 0,
+        verified: true,
+        emailVerified: true,
+        phoneVerified: true,
+        authMethods,
+        completedOrders: 0,
+        createdAt: new Date().toISOString(),
+        farmerProfile: {
+          villageDistrict: `${payload.village || ''} ${payload.district || 'Agra'}, ${payload.state || 'UP'}`.trim(),
+          mainCrops: payload.mainCrops?.length ? payload.mainCrops : ['Potato']
+        }
+      };
+    } else if (role === 'aggregator') {
+      newUser = {
+        id: `usr-agg-${Date.now()}`,
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+        password: hashPassword(payload.password),
+        role: 'aggregator',
+        status: 'active',
+        location: `${payload.operatingArea ? payload.operatingArea + ', ' : ''}${payload.district || 'Agra'}, ${payload.state || 'UP'}`,
+        rating: 5.0,
+        reviewsCount: 0,
+        verified: true,
+        emailVerified: true,
+        phoneVerified: true,
+        authMethods,
+        completedOrders: 0,
+        createdAt: new Date().toISOString(),
+        businessProfile: {
+          businessName: (payload.businessName || payload.name).trim(),
+          contactPerson: payload.name,
+          operatingArea: payload.operatingArea || payload.district || 'Agra',
+          capacity: payload.capacity || 'Standard Hub',
+          city: `${payload.district || 'Agra'}, ${payload.state || 'UP'}`
+        }
+      };
+    } else {
+      // Buyer (role = 'dealer')
+      newUser = {
+        id: `usr-dea-${Date.now()}`,
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+        password: hashPassword(payload.password),
+        role: 'dealer',
+        status: 'active',
+        location: `${payload.district || 'Delhi'}, ${payload.state || 'India'}`,
+        rating: 5.0,
+        reviewsCount: 0,
+        verified: true,
+        emailVerified: true,
+        phoneVerified: true,
+        authMethods,
+        completedOrders: 0,
+        createdAt: new Date().toISOString(),
+        businessProfile: {
+          businessName: (payload.businessName || payload.name).trim(),
+          contactPerson: payload.name,
+          buyerType: payload.buyerType || 'Wholesale Buyer',
+          procurementCrops: payload.procurementCrops || [],
+          city: `${payload.district || 'Delhi'}, ${payload.state || 'India'}`
+        }
+      };
+    }
+
+    await db.insert('users', newUser);
+
+    const token = jwt.sign({ id: newUser.id, role: newUser.role, email: newUser.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.cookie('token', token, getCookieOptions());
+    res.cookie('kc_session', token, getCookieOptions());
+
+    const { password: _, ...userSafe } = newUser;
+    return res.status(200).json({
+      success: true,
+      token,
+      user: userSafe,
+      message: 'Account created and email verified successfully! Welcome to KisanConnect.'
+    });
+  } catch (err) {
+    console.error('[SIGNUP VERIFY] Error:', err.message);
+    return res.status(503).json({ error: 'Service Unavailable. Failed to complete registration.' });
   }
 });
 

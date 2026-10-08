@@ -14,8 +14,8 @@
 
 const https = require('https');
 
-// Read API key from environment, with provided key as verified default
-const DATA_GOV_API_KEY = process.env.DATA_GOV_IN_API_KEY || '579b464db66ec23bdd000001cb20ec94e2a8436a53084f770f55c4ad';
+// Read API key strictly from environment variable
+const DATA_GOV_API_KEY = process.env.DATA_GOV_IN_API_KEY || '';
 
 // In-memory cache for government API responses (TTL: 15 minutes)
 const cache = new Map();

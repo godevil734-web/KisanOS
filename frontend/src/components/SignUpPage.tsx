@@ -531,7 +531,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
       {/* ========================================================================= */}
       {/* MAIN TWO-COLUMN CONTAINER                                                 */}
       {/* ========================================================================= */}
-      <div className="relative z-10 w-full max-w-6xl min-h-[660px] rounded-3xl border border-emerald-900/50 bg-[#07130C]/90 backdrop-blur-2xl shadow-2xl shadow-black/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
+      <div className="relative z-10 w-full max-w-6xl 2xl:max-w-7xl min-h-[660px] rounded-3xl border border-emerald-900/50 bg-[#07130C]/90 backdrop-blur-2xl shadow-2xl shadow-black/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
         
         {/* ======================================================================= */}
         {/* LEFT COLUMN: Agricultural Brand & Dynamic Role Value Proposition       */}

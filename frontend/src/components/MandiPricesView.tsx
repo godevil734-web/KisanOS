@@ -210,7 +210,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
   }, [farmerListings, mandiData]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 w-full max-w-7xl 2xl:max-w-[1536px] mx-auto pb-12">
       {/* ------------------------------------------------------------- */}
       {/* 1. HEADER SECTION & OFFICIAL GOVERNMENT SOURCE BADGE */}
       {/* ------------------------------------------------------------- */}

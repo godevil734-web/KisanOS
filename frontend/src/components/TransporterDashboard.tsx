@@ -107,7 +107,7 @@ export const TransporterDashboard: React.FC = () => {
           {t('transport.fleetDirectory')}
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 2xl:gap-5">
           {currentTransporter?.vehicles?.map((veh) => (
             <div key={veh.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
               <div className="flex items-start justify-between">

@@ -422,7 +422,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
       {/* ========================================================================= */}
       {/* MAIN TWO-COLUMN CONTAINER (Inspired by Reference Screenshots)            */}
       {/* ========================================================================= */}
-      <div className="relative z-10 w-full max-w-6xl min-h-[640px] rounded-3xl border border-emerald-500/20 bg-[#07130C]/90 backdrop-blur-2xl shadow-2xl shadow-black/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
+      <div className="relative z-10 w-full max-w-6xl 2xl:max-w-7xl min-h-[640px] rounded-3xl border border-emerald-500/20 bg-[#07130C]/90 backdrop-blur-2xl shadow-2xl shadow-black/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
         
         {/* ======================================================================= */}
         {/* LEFT COLUMN: Agricultural Brand & Information Highlights (50% Desktop) */}

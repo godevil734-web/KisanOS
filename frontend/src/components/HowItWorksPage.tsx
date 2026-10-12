@@ -120,7 +120,7 @@ export const HowItWorksPage: React.FC<HowItWorksPageProps> = ({ onSelectTab, onO
       
       {/* Top Banner Navigation */}
       <div className="bg-[#315C45] text-white py-3 px-4 sm:px-8 shadow-sm sticky top-16 z-30">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+        <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -144,7 +144,7 @@ export const HowItWorksPage: React.FC<HowItWorksPageProps> = ({ onSelectTab, onO
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-12">
+      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 pt-8 space-y-12">
         
         {/* ========================================================================= */}
         {/* 1. ARCHITECTURE HERO                                                      */}

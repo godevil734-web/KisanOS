@@ -912,7 +912,7 @@ export const AggregatorDashboard: React.FC = () => {
               <p className="text-xs text-slate-500 mt-1">Farmers in your region will appear here as they register crop listings.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 2xl:gap-5">
               {farmerSupply
                 .filter(s => cropFilter === 'All' || s.cropName?.toLowerCase() === cropFilter.toLowerCase())
                 .map((supplyItem) => {

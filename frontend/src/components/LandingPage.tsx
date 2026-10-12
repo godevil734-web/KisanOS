@@ -69,23 +69,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 1. HERO SECTION — Farmer-First & Benefit-Driven                           */}
       {/* ========================================================================= */}
-      <section id="hero" className="relative pt-6 sm:pt-10 md:pt-12 pb-8 sm:pb-12 border-b border-[#D8D2C4]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section id="hero" className="relative pt-6 sm:pt-8 md:pt-10 pb-8 sm:pb-12 border-b border-[#D8D2C4]">
+        <div className="w-full max-w-5xl xl:max-w-6xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 text-center">
           
           {/* Eyebrow Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#EFECE4] text-[#1E3A2B] text-xs sm:text-sm font-bold uppercase tracking-wider border border-[#D8D2C4] shadow-2xs mb-4">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-[#1E3A2B]" />
-            <span>{t('landing.heroBadge')}</span>
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full bg-[#EFECE4] text-[#1E3A2B] text-[11px] sm:text-xs md:text-sm font-bold uppercase tracking-wider border border-[#D8D2C4] shadow-2xs mb-4 max-w-full">
+            <span className="flex h-2 w-2 sm:h-2.5 sm:w-2.5 shrink-0 rounded-full bg-[#1E3A2B]" />
+            <span className="truncate">{t('landing.heroBadge')}</span>
           </div>
 
           {/* Headline */}
-          <h1 className={`text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-[#1C2B23] ${headingTracking} leading-tight mb-3 sm:mb-4`}>
+          <h1 className={`text-2xl sm:text-4xl md:text-5xl lg:text-6xl 2xl:text-7xl font-black text-[#1C2B23] ${headingTracking} leading-tight mb-3 sm:mb-4 max-w-4xl 2xl:max-w-5xl mx-auto`}>
             {t('landing.heroTitlePart1')}{' '}
             <span className="text-[#315C45]">{t('landing.heroTitleHighlight')}</span>
           </h1>
 
           {/* Supporting Text */}
-          <p className="text-base sm:text-lg md:text-xl text-[#2B3B32] max-w-2xl mx-auto leading-relaxed mb-6 sm:mb-8 font-medium">
+          <p className="text-base sm:text-lg md:text-xl 2xl:text-2xl text-[#2B3B32] max-w-2xl 2xl:max-w-3xl mx-auto leading-relaxed mb-6 sm:mb-8 font-medium">
             {t('landing.heroSubtitle')}
           </p>
 
@@ -111,14 +111,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
             </button>
           </div>
 
-          {/* Authentic Agricultural Hero Image */}
-          <div className="relative mx-auto max-w-3xl rounded-2xl sm:rounded-3xl overflow-hidden border border-[#D8D2C4] shadow-sm bg-white mt-2">
+          {/* Authentic Agricultural Hero Image — Expands proportionally on 1080p and 1440p */}
+          <div className="relative mx-auto w-full max-w-4xl xl:max-w-5xl 2xl:max-w-[1360px] rounded-2xl sm:rounded-3xl overflow-hidden border border-[#D8D2C4] shadow-md bg-white mt-3 sm:mt-6">
             <img 
               src="/kisan_hero_agritech.jpg" 
               alt={t('landing.heroImageAlt')} 
-              className="w-full h-52 sm:h-72 md:h-[320px] object-cover object-center"
+              className="w-full h-56 sm:h-72 md:h-96 lg:h-[400px] xl:h-[460px] 2xl:h-[500px] object-cover object-center transition-all duration-300"
             />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1C2B23]/90 via-[#1C2B23]/40 to-transparent p-4 sm:p-5 text-left">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1C2B23]/90 via-[#1C2B23]/40 to-transparent p-4 sm:p-6 text-left">
               <div className="flex items-center gap-2 text-white">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#8BAE97]" />
                 <span className="text-sm sm:text-base font-bold text-white">
@@ -135,8 +135,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 2. HOW IT WORKS (CONSOLIDATED) — 4 Steps + Folded Worked Example          */}
       {/* ========================================================================= */}
-      <section id="how-it-works" className="py-12 sm:py-16 bg-white/85 backdrop-blur-xs border-b border-[#D8D2C4]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+      <section id="how-it-works" className="py-10 sm:py-14 2xl:py-16 bg-white/85 backdrop-blur-xs border-b border-[#D8D2C4]">
+        <div className="w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 space-y-8 sm:space-y-10">
           
           {/* Section Header */}
           <div className="text-center max-w-2xl mx-auto">
@@ -149,7 +149,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
           </div>
 
           {/* 4 Large Clean Steps — Icon-First Layout with 1 Large Icon, 1 Short Label, 1 Button */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 2xl:gap-6">
             
             {/* Step 1 */}
             <div className="bg-[#FAF9F5] rounded-3xl p-6 border-2 border-[#D8D2C4] hover:border-[#1E3A2B] transition-all flex flex-col justify-between shadow-2xs">
@@ -260,7 +260,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
           </div>
 
           {/* Folded Worked Example: Real-life 20 Quintals Potato Walkthrough */}
-          <div className="bg-[#FAF9F5] rounded-3xl p-6 sm:p-8 border-2 border-[#D8D2C4] shadow-xs">
+          <div className="bg-[#FAF9F5] rounded-3xl p-6 sm:p-8 2xl:p-10 border-2 border-[#D8D2C4] shadow-xs">
             <div className="text-center max-w-2xl mx-auto mb-6">
               <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#1E3A2B] bg-[#EEF5F2] px-3.5 py-1 rounded-full border border-[#C5DDD2]">
                 {t('landing.exampleHeading')}
@@ -271,7 +271,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
             </div>
 
             {/* 5-Stage Worked Example Flow with Baseline Alignment and Directional Arrows */}
-            <div className="flex flex-col md:flex-row items-stretch justify-between gap-3 sm:gap-2">
+            <div className="flex flex-col md:flex-row items-stretch justify-between gap-3 sm:gap-2.5 2xl:gap-4">
               
               {/* 1. 20 Quintals Potato */}
               <div className="w-full md:w-auto flex-1 bg-white rounded-2xl p-4 text-center border-2 border-[#D8D2C4] flex flex-col justify-between shadow-2xs min-h-[140px]">
@@ -374,10 +374,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 3. SIMPLE CROP DIRECTORY — Direct Demand Discovery                        */}
       {/* ========================================================================= */}
-      <section id="crop-directory" className="py-12 sm:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs border-b border-[#D8D2C4]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="crop-directory" className="py-10 sm:py-14 2xl:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs border-b border-[#D8D2C4]">
+        <div className="w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12">
           
-          <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-10">
+          <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-10">
             <h2 className={`text-2xl sm:text-3xl md:text-4xl font-black text-[#1C2B23] ${headingTracking}`}>
               {t('landing.cropsHeading')}
             </h2>
@@ -387,24 +387,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
           </div>
 
           {/* Detailed Crop Cards with Large Crop Icons, Big Numbers & Dedicated 48px Buttons */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4 items-stretch">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3.5 sm:gap-4 lg:gap-5 2xl:gap-5 items-stretch">
             {cropsList.map((crop) => (
               <div 
                 key={crop.id}
                 onClick={() => handleOpenCropBuyers(crop.id)}
-                className="bg-white rounded-2xl p-3.5 sm:p-4 border-2 border-[#D8D2C4] hover:border-[#1E3A2B] transition-all flex flex-col justify-between text-center cursor-pointer shadow-2xs group hover:shadow-sm"
+                className="bg-white rounded-2xl p-4 sm:p-4.5 2xl:p-5 border-2 border-[#D8D2C4] hover:border-[#1E3A2B] transition-all flex flex-col justify-between text-center cursor-pointer shadow-2xs group hover:shadow-md h-full"
               >
                 <div>
-                  <div className="h-10 sm:h-12 flex items-center justify-center text-3xl sm:text-4xl my-1 sm:my-2 group-hover:scale-110 transition-transform">
+                  <div className="h-12 sm:h-14 2xl:h-16 flex items-center justify-center text-3xl sm:text-4xl 2xl:text-5xl my-1 sm:my-2 group-hover:scale-110 transition-transform">
                     {crop.icon}
                   </div>
 
-                  <div className="font-black text-[#1C2B23] text-sm sm:text-base leading-tight min-h-[38px] flex items-center justify-center">
+                  <div className="font-black text-[#1C2B23] text-sm sm:text-base 2xl:text-lg leading-tight min-h-[38px] flex items-center justify-center">
                     {t('crops.' + crop.id)}
                   </div>
 
                   {/* Big Numbers for price */}
-                  <div className="text-sm sm:text-base font-black text-[#1E3A2B] mt-2 leading-tight">
+                  <div className="text-sm sm:text-base 2xl:text-lg font-black text-[#1E3A2B] mt-2 leading-tight">
                     {crop.samplePriceRange} / {unitQ}
                   </div>
 
@@ -413,14 +413,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
                   </div>
                 </div>
 
-                <div className="mt-3 pt-2.5 border-t border-[#D8D2C4]">
+                <div className="mt-3.5 pt-2.5 border-t border-[#D8D2C4]">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleOpenCropBuyers(crop.id);
                     }}
-                    className="w-full min-h-[48px] px-2 py-2 rounded-xl bg-[#EEF5F2] hover:bg-[#1E3A2B] text-[#1E3A2B] hover:text-white font-extrabold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1 cursor-pointer border border-[#C5DDD2]"
+                    className="w-full min-h-[44px] sm:min-h-[48px] px-2 py-2 rounded-xl bg-[#EEF5F2] hover:bg-[#1E3A2B] text-[#1E3A2B] hover:text-white font-extrabold text-xs sm:text-sm transition-colors flex items-center justify-center gap-1 cursor-pointer border border-[#C5DDD2]"
                   >
                     <span>{t('landing.cropViewDemand')}</span>
                   </button>
@@ -452,8 +452,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 4. INTERACTIVE CALCULATOR — What Will I Take Home?                        */}
       {/* ========================================================================= */}
-      <section id="net-calculator" className="py-12 sm:py-16 bg-white/85 backdrop-blur-xs border-b border-[#D8D2C4]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+      <section id="net-calculator" className="py-10 sm:py-14 2xl:py-16 bg-white/85 backdrop-blur-xs border-b border-[#D8D2C4]">
+        <div className="w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 space-y-8 sm:space-y-10">
           
           <div className="text-center max-w-2xl mx-auto">
             <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#1E3A2B] bg-[#EEF5F2] px-3.5 py-1 rounded-full border border-[#C5DDD2]">
@@ -468,8 +468,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
           </div>
 
           {/* Calculator Container: Inputs on Left, Realization Breakdown on Right */}
-          <div className="bg-[#FAF9F5] rounded-3xl p-6 sm:p-8 border-2 border-[#D8D2C4] shadow-xs">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="bg-[#FAF9F5] rounded-3xl p-6 sm:p-8 2xl:p-10 border-2 border-[#D8D2C4] shadow-xs">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 2xl:gap-12 items-start">
               
               {/* Controls Column (7 Cols on desktop) */}
               <div className="lg:col-span-7 space-y-6">
@@ -796,8 +796,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 5. SUPPLY POOLING — Small Lots, Big Order                                 */}
       {/* ========================================================================= */}
-      <section id="supply-pooling" className="py-12 sm:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs border-b border-[#D8D2C4]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+      <section id="supply-pooling" className="py-10 sm:py-14 2xl:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs border-b border-[#D8D2C4]">
+        <div className="w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 space-y-8 sm:space-y-10">
           
           <div className="text-center max-w-2xl mx-auto">
             <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#1E3A2B] bg-[#EEF5F2] px-3.5 py-1 rounded-full border border-[#C5DDD2]">
@@ -812,9 +812,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
           </div>
 
           {/* Visual: Farmer A 20Q + Farmer B 30Q + Farmer C 50Q = 100Q Bulk Order */}
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-[#D8D2C4] shadow-xs">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 2xl:p-10 border-2 border-[#D8D2C4] shadow-xs">
             
-            <div className="grid grid-cols-1 lg:grid-cols-11 gap-5 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-11 gap-5 2xl:gap-8 items-center">
               
               {/* Left Column: 3 Small Farmers (4 Cols) */}
               <div className="lg:col-span-4 space-y-3">
@@ -922,10 +922,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 6. IMPORTANT SECONDARY LINK — Connected Ecosystem                         */}
       {/* ========================================================================= */}
-      <section id="secondary-supply-chain-link" className="py-10 sm:py-14 bg-white/85 backdrop-blur-xs border-y border-[#D8D2C4]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="secondary-supply-chain-link" className="py-10 sm:py-12 2xl:py-14 bg-white/85 backdrop-blur-xs border-y border-[#D8D2C4]">
+        <div className="w-full max-w-5xl xl:max-w-6xl 2xl:max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12">
           
-          <div className="bg-[#FAF9F5] rounded-3xl p-6 sm:p-8 border-2 border-[#D8D2C4] text-center space-y-4">
+          <div className="bg-[#FAF9F5] rounded-3xl p-6 sm:p-8 2xl:p-10 border-2 border-[#D8D2C4] text-center space-y-4">
             <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-[#1E3A2B] bg-[#EEF5F2] px-3.5 py-1 rounded-full border border-[#C5DDD2]">
               {t('landing.ecosystemBadge')}
             </span>
@@ -934,7 +934,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
               {t('landing.ecosystemHeading')}
             </h3>
 
-            <p className="text-[18px] sm:text-xl text-[#2B3B32] max-w-2xl mx-auto leading-relaxed font-medium">
+            <p className="text-[18px] sm:text-xl text-[#2B3B32] max-w-2xl 2xl:max-w-3xl mx-auto leading-relaxed font-medium">
               {t('landing.ecosystemText')}
             </p>
 
@@ -959,8 +959,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {/* 7. SMALL FINAL CTA — Action-Oriented                                      */}
       {/* ========================================================================= */}
-      <section id="final-cta" className="py-12 sm:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs text-center">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+      <section id="final-cta" className="py-10 sm:py-14 2xl:py-16 bg-[#FAF9F5]/80 backdrop-blur-xs text-center">
+        <div className="w-full max-w-3xl xl:max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-[#EEF5F2] text-[#1E3A2B] border border-[#C5DDD2] flex items-center justify-center text-3xl mx-auto shadow-2xs">
             🌱
           </div>
@@ -991,7 +991,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab, onOpenGet
       {/* ========================================================================= */}
       {isBuyerModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto border-2 border-[#D8D2C4] shadow-2xl">
+          <div className="bg-white rounded-3xl max-w-4xl 2xl:max-w-5xl w-full p-6 sm:p-8 2xl:p-10 max-h-[90vh] overflow-y-auto border-2 border-[#D8D2C4] shadow-2xl">
             
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-[#D8D2C4]">

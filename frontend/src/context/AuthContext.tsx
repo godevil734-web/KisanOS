@@ -33,7 +33,21 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('kc_token'));
+  const [token, setToken] = useState<string | null>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const urlToken = new URLSearchParams(window.location.search).get('auth_token');
+        if (urlToken) {
+          localStorage.setItem('kc_token', urlToken);
+          return urlToken;
+        }
+        return localStorage.getItem('kc_token');
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 

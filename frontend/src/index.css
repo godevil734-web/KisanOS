@@ -113,8 +113,8 @@
   transform: translate(-50%, -50%);
   width: 90vw;
   height: 90vh;
-  max-width: 880px;
-  max-height: 880px;
+  max-width: 960px;
+  max-height: 960px;
   background-image: url('/india_map_farm_preview.jpg');
   background-repeat: no-repeat;
   background-position: center center;
@@ -124,6 +124,49 @@
   pointer-events: none;
   z-index: 0;
   transition: opacity 0.3s ease;
+}
+
+@media (min-width: 1536px) {
+  .watermark-india-map::before {
+    max-width: 1200px;
+    max-height: 1200px;
+  }
+}
+
+/* Consistent Responsive Container System */
+.kisan-container {
+  width: 100%;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+@media (min-width: 640px) {
+  .kisan-container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .kisan-container {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+@media (min-width: 1536px) {
+  .kisan-container {
+    max-width: 1536px;
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+}
+@media (min-width: 1920px) {
+  .kisan-container {
+    max-width: 1600px;
+    padding-left: 3rem;
+    padding-right: 3rem;
+  }
 }
 
 /* Dedicated subtle cream/white calming layer between illustration and UI cards */

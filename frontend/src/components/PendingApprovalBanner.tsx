@@ -12,7 +12,7 @@ export const PendingApprovalBanner: React.FC = () => {
       className="bg-amber-50 border-b border-amber-200 px-4 py-3 text-amber-900 shadow-xs"
       role="alert"
     >
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700">
             <Clock className="w-4 h-4" />

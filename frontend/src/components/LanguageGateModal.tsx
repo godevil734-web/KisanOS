@@ -22,6 +22,16 @@ export const LanguageGateModal: React.FC<LanguageGateModalProps> = ({
       return;
     }
 
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('gate') === 'skip' || params.has('lang')) {
+      const langParam = params.get('lang');
+      if (langParam === 'hi' || langParam === 'en') {
+        setLanguage(langParam);
+      }
+      setIsOpen(false);
+      return;
+    }
+
     try {
       const gatePassed = localStorage.getItem(GATE_PASSED_STORAGE_KEY);
       if (!gatePassed) {

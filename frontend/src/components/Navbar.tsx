@@ -83,7 +83,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
 
       {/* Main Public Navigation */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12">
         <div className="flex items-center justify-between h-16 sm:h-18">
           
           {/* Brand Logo */}

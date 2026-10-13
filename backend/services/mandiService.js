@@ -103,9 +103,20 @@ function getApiKeyDiagnostics() {
     }
   }
 
-  // SAFE: List only variable names (keys), NEVER values, matching data / gov / mandi / agri / resource
-  const detectedMatchingEnvVars = Object.keys(process.env).filter(k => 
-    /data|gov|mandi|agri|resource/i.test(k)
+  // SAFE: List only variable names (keys), NEVER values, of user-defined custom variables
+  const configuredCustomEnvNames = Object.keys(process.env).filter(k => 
+    !k.startsWith('npm_') && 
+    !k.startsWith('VERCEL') && 
+    !k.startsWith('AWS') && 
+    !k.startsWith('LAMBDA') && 
+    !k.startsWith('LD_') && 
+    !k.startsWith('NODE_') && 
+    !k.startsWith('PATH') && 
+    !k.startsWith('LANG') &&
+    !k.startsWith('HOME') &&
+    !k.startsWith('SHLVL') &&
+    !k.startsWith('PWD') &&
+    !k.startsWith('_')
   );
 
   return {
@@ -113,7 +124,7 @@ function getApiKeyDiagnostics() {
     envVarName: foundVar || 'NONE',
     keyLength: keyVal.length,
     keyPreview: keyVal.length >= 8 ? `${keyVal.slice(0, 4)}...${keyVal.slice(-4)}` : (keyVal ? '***' : null),
-    detectedMatchingEnvVars
+    configuredCustomEnvNames
   };
 }
 

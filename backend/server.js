@@ -68,6 +68,14 @@ const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 15, mess
 const publicSimulationLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, message: 'Rate limit exceeded for simulation and calculation APIs. Please try again later.' });
 const aiLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 30, message: 'Rate limit exceeded for AI advisory requests. Please wait a moment.' });
 
+// URL prefix normalization for serverless / Vercel rewrites
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api') && !req.url.startsWith('/health')) {
+    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+  }
+  next();
+});
+
 // Request logger (never logs passwords or OTPs)
 app.use((req, res, next) => {
   console.log(`[API] ${req.method} ${req.path}`);
@@ -3075,8 +3083,11 @@ app.get('/api/mandi-prices', optionalAuth, async (req, res) => {
       }
     }
 
-    if (!targetState) {
-      targetState = 'Uttar Pradesh';
+    if (!targetState || typeof targetState !== 'string' || !targetState.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'State parameter is required to query official government mandi prices.'
+      });
     }
 
     const data = await getMandiPrices({
@@ -3088,10 +3099,13 @@ app.get('/api/mandi-prices', optionalAuth, async (req, res) => {
       refresh: req.query.refresh === 'true'
     });
 
+    console.log(`[API] /api/mandi-prices response: state=${targetState}, records=${data.records.length}, total=${data.totalRecords}, date=${data.reportDate}, cache=${data.cacheStatus}`);
     res.json(data);
   } catch (error) {
-    console.error('[API] /api/mandi-prices error:', error);
-    res.status(502).json({
+    const isValidation = error.message && error.message.includes('State is required');
+    const status = isValidation ? 400 : 502;
+    console.error(`[API] /api/mandi-prices error (${status}):`, error.message);
+    res.status(status).json({
       success: false,
       error: error.message || 'Failed to fetch government mandi prices from official servers.'
     });

@@ -47,6 +47,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
 
   const [selectedState, setSelectedState] = useState<string>(defaultState);
   const [selectedDistrict, setSelectedDistrict] = useState<string>(defaultDistrict);
+  const [selectedCommodity, setSelectedCommodity] = useState<string>('all');
   const [statesList, setStatesList] = useState<MandiLocationState[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState<boolean>(true);
 
@@ -97,14 +98,44 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
     return st ? st.districts : [];
   }, [statesList, selectedState]);
 
+  // Dynamic available commodities list
+  const availableCommodities = useMemo(() => {
+    const set = new Set<string>();
+    if (mandiData?.records) {
+      mandiData.records.forEach(r => {
+        if (r.commodity) set.add(r.commodity.trim());
+      });
+    }
+    if (mandiData?.commoditySummaries) {
+      mandiData.commoditySummaries.forEach(c => {
+        if (c.commodity) set.add(c.commodity.trim());
+      });
+    }
+    // Also include standard common crops
+    const standardCrops = [
+      'Potato', 'Tomato', 'Onion', 'Wheat', 'Rice', 'Paddy(Dhan)', 'Mustard',
+      'Soyabean', 'Maize', 'Garlic', 'Gram', 'Cotton', 'Apple', 'Banana',
+      'Ginger(Green)', 'Cabbage', 'Cauliflower', 'Brinjal', 'Green Chilli',
+      'Peas Wet', 'Carrot', 'Groundnut', 'Barley', 'Bajra', 'Jowar', 'Arhar (Tur)'
+    ];
+    standardCrops.forEach(c => set.add(c));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [mandiData]);
+
   // Fetch prices function
-  const fetchPrices = async (stateToFetch: string, districtToFetch: string, forceRefresh = false) => {
+  const fetchPrices = async (
+    stateToFetch: string,
+    districtToFetch: string,
+    commodityToFetch = 'all',
+    forceRefresh = false
+  ) => {
     setIsLoadingPrices(true);
     setErrorMessage(null);
     try {
       const res = await api.getMandiPrices({
         state: stateToFetch,
         district: districtToFetch === 'all' ? undefined : districtToFetch,
+        commodity: commodityToFetch === 'all' ? undefined : commodityToFetch,
         refresh: forceRefresh
       });
       if (res && res.success) {
@@ -154,10 +185,10 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
     }
   };
 
-  // Fetch prices on initial load or when state/district changes
+  // Fetch prices on initial load or when state/district/commodity changes
   useEffect(() => {
-    fetchPrices(selectedState, selectedDistrict);
-  }, [selectedState, selectedDistrict]);
+    fetchPrices(selectedState, selectedDistrict, selectedCommodity);
+  }, [selectedState, selectedDistrict, selectedCommodity]);
 
   // Filtered commodity summaries
   const filteredCommodities = useMemo(() => {
@@ -282,7 +313,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
           {/* Quick Refresh Button */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => fetchPrices(selectedState, selectedDistrict, true)}
+              onClick={() => fetchPrices(selectedState, selectedDistrict, selectedCommodity, true)}
               disabled={isLoadingPrices}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold transition-all border border-white/15 backdrop-blur-md cursor-pointer disabled:opacity-50"
             >
@@ -302,6 +333,11 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
                   <strong className="text-white">{lang === 'hi' ? 'स्रोत: ' : 'Source: '}</strong>
                   {mandiData.source}
                 </span>
+                {mandiData.resourceId && (
+                  <span className="hidden sm:inline font-mono text-[10px] text-slate-400 bg-black/20 px-1.5 py-0.5 rounded">
+                    ID: {mandiData.resourceId.slice(0, 8)}...
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-1.5">
@@ -315,13 +351,13 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
                   <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
                     <span>
-                      {lang === 'hi' ? 'अंतिम सत्यापन: ' : 'Last Checked: '}
+                      {lang === 'hi' ? 'अंतिम सर्वर सत्यापन: ' : 'Last Fetched: '}
                       {formatCheckedTime(mandiData.lastChecked || mandiData.lastUpdated)}
                     </span>
                     {mandiData.cacheStatus && (
-                      <span className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] text-slate-300">
+                      <span className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] text-slate-300 font-mono">
                         {mandiData.cacheStatus === 'BYPASS' 
-                          ? (lang === 'hi' ? 'ताज़ा' : 'Fresh') 
+                          ? (lang === 'hi' ? 'ताज़ा API कॉल' : 'Live API Call') 
                           : `${lang === 'hi' ? 'कैश' : 'Cached'}${mandiData.cacheAgeSeconds !== undefined ? ` (${mandiData.cacheAgeSeconds}s)` : ''}`}
                       </span>
                     )}
@@ -330,10 +366,23 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
               </div>
             </div>
 
+            {/* Daily Reported Price Transparency Notice */}
+            <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/20 text-emerald-200 text-xs flex items-start gap-2.5">
+              <Info className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div className="text-[11px] sm:text-xs">
+                <span className="font-bold text-white">
+                  {lang === 'hi' ? 'दैनिक आधिकारिक मंडी भाव की प्रकृति:' : 'Daily Reported Wholesale Prices Note:'}
+                </span>{' '}
+                {lang === 'hi'
+                  ? 'सरकारी पोर्टल (data.gov.in) पर प्रदर्शित भाव APMC कृषि मंडियों के दैनिक थोक सत्र के मॉडल भाव हैं, न कि पल-पल बदलने वाले शेयर बाज़ार टिकर। नए दैनिक सत्र के आंकड़े एपीएमसी सचिवों द्वारा दैनिक मंडी बंद होने के बाद अपलोड किए जाते हैं।'
+                  : 'Official mandi prices reflect daily reported wholesale closing/modal rates from APMC market yards, not real-time intraday trading tickers. Fresh daily session figures are recorded by market authorities after trading concludes.'}
+              </div>
+            </div>
+
             {/* Clear explanation banner when latest government record date is from an earlier date */}
             {isReportDateOlder && (
               <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2.5">
-                <Info className="h-4 w-4 text-amber-300 shrink-0 mt-0.5" />
+                <AlertCircle className="h-4 w-4 text-amber-300 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold text-amber-200">
                     {lang === 'hi'
@@ -342,8 +391,8 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
                   </span>
                   <p className="mt-0.5 text-amber-200/90 leading-relaxed text-[11px] sm:text-xs">
                     {lang === 'hi'
-                      ? `कृषि मंत्रालय (data.gov.in) द्वारा दैनिक थोक आवक व भाव पिछले व्यापारिक सत्र (${mandiData.reportDate}) के अनुसार उपलब्ध हैं। आज के नए सत्र के आंकड़े दैनिक मंडी बंद होने के बाद जारी किए जाते हैं।`
-                      : `Official wholesale mandi prices and arrival figures reflect the latest completed trading session (${mandiData.reportDate}). Current day data is officially released by the Ministry of Agriculture after markets close.`}
+                      ? `कृषि मंत्रालय द्वारा दैनिक थोक आवक व भाव पिछले पूर्ण सत्र (${mandiData.reportDate}) के अनुसार उपलब्ध हैं।`
+                      : `Official wholesale mandi prices and arrival figures reflect the latest completed trading session (${mandiData.reportDate}).`}
                   </p>
                 </div>
               </div>
@@ -353,12 +402,12 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 2. STATE & DISTRICT SELECTOR CARD */}
+      {/* 2. STATE, DISTRICT & COMMODITY SELECTOR CARD */}
       {/* ------------------------------------------------------------- */}
       <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-            {/* State Selector */}
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+            {/* 1. State Selector */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 text-emerald-600" />
@@ -370,7 +419,8 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
                   onChange={(e) => {
                     const newState = e.target.value;
                     setSelectedState(newState);
-                    setSelectedDistrict('all'); // Reset district when state changes
+                    setSelectedDistrict('all');
+                    setSelectedCommodity('all');
                   }}
                   className="w-full appearance-none bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all pr-10 cursor-pointer"
                 >
@@ -384,7 +434,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
               </div>
             </div>
 
-            {/* District Selector */}
+            {/* 2. District Selector */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 text-teal-600" />
@@ -396,7 +446,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
                   onChange={(e) => setSelectedDistrict(e.target.value)}
                   className="w-full appearance-none bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all pr-10 cursor-pointer"
                 >
-                  <option value="all">{lang === 'hi' ? 'सभी ज़िले (संपूर्ण राज्य)' : 'All Districts (Whole State)'}</option>
+                  <option value="all">{lang === 'hi' ? 'सभी ज़िले (All Districts)' : 'All Districts (Whole State)'}</option>
                   {availableDistricts.map((d) => (
                     <option key={d} value={d}>
                       {d}
@@ -406,16 +456,53 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
                 <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               </div>
             </div>
+
+            {/* 3. Commodity Selector */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center gap-1.5">
+                <Package className="h-3.5 w-3.5 text-amber-600" />
+                <span>{lang === 'hi' ? 'फसल चुनें (Commodity)' : 'Select Commodity'}</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedCommodity}
+                  onChange={(e) => setSelectedCommodity(e.target.value)}
+                  className="w-full appearance-none bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all pr-10 cursor-pointer"
+                >
+                  <option value="all">{lang === 'hi' ? 'सभी उपलब्ध फसलें (All Commodities)' : 'All Available Commodities'}</option>
+                  {availableCommodities.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
           </div>
 
-          {/* Location Action Status */}
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            <span>
-              {selectedDistrict === 'all' 
-                ? `${selectedState} (${availableDistricts.length} ${lang === 'hi' ? 'ज़िले' : 'Districts'})`
-                : `${selectedDistrict}, ${selectedState}`}
-            </span>
+          {/* Location & Filter Status Pill with Reset Option */}
+          <div className="flex items-center justify-between lg:justify-end gap-3 text-xs font-semibold text-slate-600 px-3 py-2 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+              <span>
+                {selectedDistrict === 'all' 
+                  ? selectedState 
+                  : `${selectedDistrict}, ${selectedState}`}
+                {selectedCommodity !== 'all' && ` • ${selectedCommodity}`}
+              </span>
+            </div>
+            {(selectedDistrict !== 'all' || selectedCommodity !== 'all') && (
+              <button
+                onClick={() => {
+                  setSelectedDistrict('all');
+                  setSelectedCommodity('all');
+                }}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 underline ml-2 cursor-pointer"
+              >
+                {lang === 'hi' ? 'रीसेट' : 'Reset'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -677,42 +764,64 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
           <div className="flex items-start gap-3">
             <AlertCircle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
             <div>
-              <h3 className="text-sm font-bold">{lang === 'hi' ? 'सरकारी डेटा उपलब्धता सूचना' : 'Government Data Availability Notice'}</h3>
+              <h3 className="text-sm font-bold">{lang === 'hi' ? 'सरकारी डेटा उपलब्धता सूचना' : 'Government Mandi Data Status'}</h3>
               <p className="text-xs text-amber-800 mt-1">{errorMessage}</p>
               <p className="text-xs text-amber-700 mt-2">
                 {lang === 'hi' 
-                  ? 'सुझाव: ज़िले में "सभी ज़िले" का विकल्प चुनें या कुछ देर बाद पुनः प्रयास करें।'
-                  : 'Tip: Select "All Districts" or refresh in a few minutes as daily mandi reports are published.'}
+                  ? 'सुझाव: ज़िले में "सभी ज़िले" का विकल्प चुनें, कमोडिटी रीसेट करें, या पुनः प्रयास करें।'
+                  : 'Tip: Select "All Districts", reset commodity filter, or click Retry below.'}
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setSelectedDistrict('all')}
-            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 cursor-pointer"
-          >
-            {lang === 'hi' ? 'संपूर्ण राज्य का भाव देखें' : 'View All State Mandis'}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => fetchPrices(selectedState, selectedDistrict, selectedCommodity, true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer transition-all shadow-xs"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+              <span>{lang === 'hi' ? 'पुनः प्रयास करें (Retry)' : 'Retry Request'}</span>
+            </button>
+            <button
+              onClick={() => {
+                setSelectedDistrict('all');
+                setSelectedCommodity('all');
+              }}
+              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer transition-all"
+            >
+              {lang === 'hi' ? 'सभी फ़िल्टर हटाएं' : 'Reset All Filters'}
+            </button>
+          </div>
         </div>
       )}
 
       {/* Zero Records Case */}
       {!isLoadingPrices && !errorMessage && mandiData && mandiData.records.length === 0 && (
-        <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
+        <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-4">
           <Landmark className="h-12 w-12 text-slate-300 mx-auto" />
           <h3 className="text-base font-bold text-slate-800">
-            {lang === 'hi' ? 'इस ज़िले में इस सत्र का कोई मंडी व्यापार दर्ज नहीं हुआ' : 'No Mandi Trading Recorded for this District in Latest Session'}
+            {lang === 'hi' ? 'इस चयन के लिए नवीनतम सत्र में कोई मंडी रिकॉर्ड नहीं मिला' : 'No Mandi Trading Records Found for this Selection'}
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
             {lang === 'hi'
-              ? 'इस ज़िले की मंडियों में इस सत्र में कोई आवक दर्ज नहीं हुई अथवा रिपोर्टिंग अभी जारी है। आप पूरे राज्य की अन्य सक्रिय मंडियां देख सकते हैं।'
-              : 'Mandis in this district may have had no arrivals in this recorded session, or reporting may still be underway. You can browse all active mandis across the state.'}
+              ? `${selectedCommodity !== 'all' ? `"${selectedCommodity}" की ` : ''}${selectedDistrict !== 'all' ? `"${selectedDistrict}" ज़िले में ` : `"${selectedState}" में `}इस सत्र में कोई आवक दर्ज नहीं हुई अथवा रिपोर्टिंग अभी जारी है। आप पूरे राज्य की अन्य फसलें देख सकते हैं।`
+              : `No arrivals recorded for ${selectedCommodity !== 'all' ? `"${selectedCommodity}" in ` : ''}${selectedDistrict !== 'all' ? `district "${selectedDistrict}", ` : ''}${selectedState} in this official reporting session. You can browse all active crops across the state.`}
           </p>
-          <div className="pt-2">
+          <div className="pt-2 flex items-center justify-center gap-3">
             <button
-              onClick={() => setSelectedDistrict('all')}
+              onClick={() => fetchPrices(selectedState, selectedDistrict, selectedCommodity, true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+            >
+              <RotateCw className="h-3.5 w-3.5" />
+              <span>{lang === 'hi' ? 'पुनः प्रयास करें (Retry)' : 'Retry'}</span>
+            </button>
+            <button
+              onClick={() => {
+                setSelectedDistrict('all');
+                setSelectedCommodity('all');
+              }}
               className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
             >
-              {lang === 'hi' ? 'संपूर्ण राज्य की मंडियां देखें' : 'Browse All State Mandis'}
+              {lang === 'hi' ? 'संपूर्ण राज्य व सभी फसलें देखें' : 'View All State Commodities'}
             </button>
           </div>
         </div>
@@ -790,10 +899,22 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
                         <span className="font-bold text-slate-700">{item.totalArrivals} {item.arrivalsUnit || 'MT'}</span>
                       </div>
                     )}
+
+                    {/* Location, Date & Official Source Metadata */}
+                    <div className="mt-3 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between text-[11px] text-slate-500 gap-1.5">
+                      <div className="flex items-center gap-1 font-medium">
+                        <MapPin className="h-3 w-3 text-slate-400" />
+                        <span>{selectedDistrict === 'all' ? selectedState : `${selectedDistrict}, ${selectedState}`}</span>
+                      </div>
+                      <div className="flex items-center gap-1 font-medium">
+                        <Calendar className="h-3 w-3 text-slate-400" />
+                        <span>{mandiData.reportDate}</span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Quick Farmer Decision Actions */}
-                  <div className="mt-5 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
+                  <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
                     <button
                       onClick={() => onFindBuyersForCrop(item.commodity)}
                       className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all cursor-pointer"
@@ -835,39 +956,58 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                  <th className="py-3 px-4">{lang === 'hi' ? 'मंडी केंद्र (Market)' : 'Mandi Market'}</th>
-                  <th className="py-3 px-4">{lang === 'hi' ? 'ज़िला (District)' : 'District'}</th>
-                  <th className="py-3 px-4">{lang === 'hi' ? 'फसल (Commodity)' : 'Commodity'}</th>
-                  <th className="py-3 px-4">{lang === 'hi' ? 'किस्म (Variety)' : 'Variety'}</th>
-                  <th className="py-3 px-4 text-right">{lang === 'hi' ? 'मॉडल भाव (Modal)' : 'Modal Price'}</th>
-                  <th className="py-3 px-4 text-right">{lang === 'hi' ? 'न्यूनतम / अधिकतम' : 'Min / Max Range'}</th>
-                  <th className="py-3 px-4 text-right">{lang === 'hi' ? 'आवक (Arrivals)' : 'Arrivals'}</th>
-                  <th className="py-3 px-4 text-center">{lang === 'hi' ? 'कार्यवाही' : 'Action'}</th>
+                  <th className="py-3 px-3">{lang === 'hi' ? 'मंडी केंद्र (Market)' : 'Mandi Market'}</th>
+                  <th className="py-3 px-3">{lang === 'hi' ? 'राज्य व ज़िला (Location)' : 'State & District'}</th>
+                  <th className="py-3 px-3">{lang === 'hi' ? 'फसल (Commodity)' : 'Commodity'}</th>
+                  <th className="py-3 px-3">{lang === 'hi' ? 'किस्म (Variety)' : 'Variety'}</th>
+                  <th className="py-3 px-3 text-right">{lang === 'hi' ? 'न्यूनतम भाव (Min)' : 'Min Price'}</th>
+                  <th className="py-3 px-3 text-right">{lang === 'hi' ? 'मॉडल भाव (Modal)' : 'Modal Price'}</th>
+                  <th className="py-3 px-3 text-right">{lang === 'hi' ? 'अधिकतम भाव (Max)' : 'Max Price'}</th>
+                  <th className="py-3 px-3 text-center">{lang === 'hi' ? 'रिपोर्ट दिनांक' : 'Reported Date'}</th>
+                  <th className="py-3 px-3 text-right">{lang === 'hi' ? 'आवक (Arrivals)' : 'Arrivals'}</th>
+                  <th className="py-3 px-3 text-center">{lang === 'hi' ? 'डेटा स्रोत' : 'Source'}</th>
+                  <th className="py-3 px-3 text-center">{lang === 'hi' ? 'कार्यवाही' : 'Action'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
                 {filteredRecords.slice(0, 100).map((record) => (
                   <tr key={record.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-1.5">
+                    <td className="py-3 px-3 font-bold text-slate-900 flex items-center gap-1.5">
                       <Landmark className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                       <span>{record.market}</span>
                     </td>
-                    <td className="py-3 px-4 text-slate-600">{record.district}</td>
-                    <td className="py-3 px-4 font-bold text-emerald-950">
+                    <td className="py-3 px-3 text-slate-600">
+                      <div>{record.district}</div>
+                      <div className="text-[10px] text-slate-400">{record.state}</div>
+                    </td>
+                    <td className="py-3 px-3 font-bold text-emerald-950">
                       {record.commodity}
                     </td>
-                    <td className="py-3 px-4 text-slate-500">{record.variety || 'Standard'}</td>
-                    <td className="py-3 px-4 text-right font-black text-slate-900">
+                    <td className="py-3 px-3 text-slate-500">{record.variety || 'Standard'}</td>
+                    <td className="py-3 px-3 text-right text-slate-600 font-semibold">
+                      ₹{record.minPrice.toLocaleString()}
+                      <div className="text-[10px] text-slate-400">₹{record.minPricePerKg || (record.minPrice / 100).toFixed(1)}/kg</div>
+                    </td>
+                    <td className="py-3 px-3 text-right font-black text-slate-900">
                       ₹{record.modalPrice.toLocaleString()} / Q
                       <div className="text-[10px] font-bold text-emerald-700">₹{record.modalPricePerKg}/kg</div>
                     </td>
-                    <td className="py-3 px-4 text-right text-slate-600">
-                      ₹{record.minPrice} - ₹{record.maxPrice}
+                    <td className="py-3 px-3 text-right text-slate-600 font-semibold">
+                      ₹{record.maxPrice.toLocaleString()}
+                      <div className="text-[10px] text-slate-400">₹{record.maxPricePerKg || (record.maxPrice / 100).toFixed(1)}/kg</div>
                     </td>
-                    <td className="py-3 px-4 text-right text-slate-600">
+                    <td className="py-3 px-3 text-center text-slate-600 font-mono text-[11px]">
+                      {record.arrivalDate || mandiData.reportDate}
+                    </td>
+                    <td className="py-3 px-3 text-right text-slate-600">
                       {record.arrivals ? `${record.arrivals} ${record.arrivalsUnit || 'MT'}` : '-'}
                     </td>
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3 px-3 text-center text-[10px] text-slate-500 font-medium">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200">
+                        {record.source || mandiData.source || 'data.gov.in'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => onFindBuyersForCrop(record.commodity)}

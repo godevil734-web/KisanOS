@@ -261,7 +261,9 @@ export interface MandiPriceRecord {
   minPrice: number;
   maxPrice: number;
   modalPrice: number;
+  minPricePerKg?: string;
   modalPricePerKg: string;
+  maxPricePerKg?: string;
   unit: string;
   arrivals?: number | null;
   arrivalsUnit?: string;
@@ -285,6 +287,7 @@ export interface MandiCommoditySummary {
 export interface MandiPricesResponse {
   success: boolean;
   source: string;
+  resourceId?: string;
   reportDate: string;
   lastChecked?: string;
   cacheStatus?: 'HIT' | 'MISS' | 'BYPASS';
@@ -292,6 +295,7 @@ export interface MandiPricesResponse {
   apiDurationMs?: number;
   state: string;
   district: string;
+  commodity?: string;
   totalRecords: number;
   distinctCommoditiesCount: number;
   commoditySummaries: MandiCommoditySummary[];

@@ -18,9 +18,13 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const https = require('https');
 
-// Read API key strictly from environment variable
+// Read API key and resource ID strictly from environment variables
 function getDataGovApiKey() {
-  return process.env.DATA_GOV_IN_API_KEY || '';
+  return process.env.DATA_GOV_API_KEY || process.env.DATA_GOV_IN_API_KEY || '';
+}
+
+function getDataGovResourceId() {
+  return process.env.DATA_GOV_RESOURCE_ID || process.env.DATA_GOV_IN_RESOURCE_ID || '9ef84268-d588-465a-a308-a864a43d0070';
 }
 
 // In-memory cache for government API responses (TTL: 15 minutes)
@@ -355,9 +359,13 @@ function extractLatestArrivalDate(records) {
 /**
  * Fetch real mandi prices from data.gov.in
  */
-async function fetchFromDataGovIn(state, district, limit = 200) {
+async function fetchFromDataGovIn(state, district, commodity, limit = 200) {
   const apiKey = getDataGovApiKey();
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.warn('[MandiService] data.gov.in API key is missing from environment (checked DATA_GOV_API_KEY and DATA_GOV_IN_API_KEY).');
+    return null;
+  }
+  const resourceId = getDataGovResourceId();
 
   const params = new URLSearchParams({
     'api-key': apiKey,
@@ -365,16 +373,29 @@ async function fetchFromDataGovIn(state, district, limit = 200) {
     'limit': String(limit)
   });
 
-  if (state) params.append('filters[state]', state);
-  if (district && district.toLowerCase() !== 'all') params.append('filters[district]', district);
+  if (state) params.append('filters[state]', state.trim());
+  if (district && district.toLowerCase() !== 'all') params.append('filters[district]', district.trim());
+  if (commodity && commodity.toLowerCase() !== 'all') params.append('filters[commodity]', commodity.trim());
 
-  const url = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?${params.toString()}`;
+  const url = `https://api.data.gov.in/resource/${resourceId}?${params.toString()}`;
 
   const fetchStart = Date.now();
-  const json = await fetchGovtJson(url, { timeout: 4500 });
+  let json = null;
+  try {
+    json = await fetchGovtJson(url, { timeout: 15000 });
+  } catch (err) {
+    console.warn(`[MandiService] data.gov.in primary attempt failed (${err.message}), retrying once...`);
+    try {
+      json = await fetchGovtJson(url, { timeout: 15000 });
+    } catch (retryErr) {
+      console.warn(`[MandiService] data.gov.in retry also failed (${retryErr.message}).`);
+      throw retryErr;
+    }
+  }
   const durationMs = Date.now() - fetchStart;
-  if (json && Array.isArray(json.records) && json.records.length > 0) {
-    const mapped = json.records.map((r, index) => {
+
+  const mapRecords = (rawRecords) => {
+    return rawRecords.map((r, index) => {
       const modal = Number(r.modal_price) || 0;
       const min = Number(r.min_price) || modal;
       const max = Number(r.max_price) || modal;
@@ -390,17 +411,49 @@ async function fetchFromDataGovIn(state, district, limit = 200) {
         minPrice: min,
         maxPrice: max,
         modalPrice: modal,
+        minPricePerKg: (min / 100).toFixed(2),
         modalPricePerKg: (modal / 100).toFixed(2),
+        maxPricePerKg: (max / 100).toFixed(2),
         unit: '₹/Quintal',
         arrivals: Number(r.arrivals) || null,
         arrivalsUnit: r.arrival_unit || 'Quintals',
         source: 'data.gov.in (OGD Platform, Ministry of Agriculture)'
       };
     });
-    return { records: mapped, durationMs };
+  };
+
+  if (json && Array.isArray(json.records) && json.records.length > 0) {
+    return { records: mapRecords(json.records), durationMs, total: json.total || json.records.length };
   }
 
-  return null;
+  // If exact commodity filter returned 0 records, fallback to state/district broad query to allow partial match
+  if (commodity && commodity.toLowerCase() !== 'all') {
+    try {
+      const fallbackParams = new URLSearchParams({
+        'api-key': apiKey,
+        'format': 'json',
+        'limit': String(limit)
+      });
+      if (state) fallbackParams.append('filters[state]', state.trim());
+      if (district && district.toLowerCase() !== 'all') fallbackParams.append('filters[district]', district.trim());
+      const fallbackUrl = `https://api.data.gov.in/resource/${resourceId}?${fallbackParams.toString()}`;
+      const fbJson = await fetchGovtJson(fallbackUrl, { timeout: 8000 });
+      if (fbJson && Array.isArray(fbJson.records) && fbJson.records.length > 0) {
+        const target = commodity.toLowerCase().trim();
+        const matched = fbJson.records.filter(r => 
+          (r.commodity || '').toLowerCase().includes(target) || 
+          (r.variety || '').toLowerCase().includes(target)
+        );
+        if (matched.length > 0) {
+          return { records: mapRecords(matched), durationMs: Date.now() - fetchStart, total: matched.length };
+        }
+      }
+    } catch (fbErr) {
+      console.warn(`[MandiService] data.gov.in fallback query failed: ${fbErr.message}`);
+    }
+  }
+
+  return { records: [], durationMs, total: 0 };
 }
 
 /**
@@ -522,7 +575,9 @@ async function fetchFromAgmarknet(stateName, districtName, targetDate) {
             minPrice: min,
             maxPrice: max,
             modalPrice: modal,
+            minPricePerKg: (min / 100).toFixed(2),
             modalPricePerKg: (modal / 100).toFixed(2),
+            maxPricePerKg: (max / 100).toFixed(2),
             unit: entry.unitOfPrice || '₹/Quintal',
             arrivals: Number(entry.arrivals) || null,
             arrivalsUnit: entry.unitOfArrivals || 'Metric Tonnes',
@@ -553,10 +608,10 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
 
   const cleanState = state.trim();
   const cleanDistrict = (district || 'all').trim();
-  const cleanCommodity = commodity ? commodity.trim().toLowerCase() : null;
+  const cleanCommodity = commodity && commodity.toLowerCase() !== 'all' ? commodity.trim().toLowerCase() : null;
 
-  // Cache key
-  const cacheKey = `${cleanState.toLowerCase()}:${cleanDistrict.toLowerCase()}:${date || 'latest'}`;
+  // Cache key includes state, district, commodity, and date to prevent cross-contamination
+  const cacheKey = `${cleanState.toLowerCase()}:${cleanDistrict.toLowerCase()}:${cleanCommodity || 'all'}:${date || 'latest'}`;
   const now = Date.now();
 
   if (refresh) {
@@ -584,9 +639,9 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
 
     // 1. Try Primary: data.gov.in
     try {
-      const fetchLimit = cleanDistrict === 'all' ? Math.max(limit, 300) : limit;
-      const dataGovResult = await fetchFromDataGovIn(cleanState, cleanDistrict, fetchLimit);
-      if (dataGovResult && dataGovResult.records && dataGovResult.records.length > 0) {
+      const fetchLimit = cleanDistrict === 'all' && !cleanCommodity ? Math.max(limit, 300) : Math.max(limit, 200);
+      const dataGovResult = await fetchFromDataGovIn(cleanState, cleanDistrict, cleanCommodity, fetchLimit);
+      if (dataGovResult && Array.isArray(dataGovResult.records)) {
         resultRecords = dataGovResult.records;
         apiDurationMs = dataGovResult.durationMs;
         source = 'data.gov.in (OGD Platform, Ministry of Agriculture)';
@@ -596,11 +651,11 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
         }
       }
     } catch (e) {
-      console.warn(`[MandiService] data.gov.in unavailable (${e.message}), switching to Agmarknet 2.0...`);
+      console.warn(`[MandiService] data.gov.in query failed (${e.message}), attempting Agmarknet 2.0 fallback...`);
     }
 
-    // 2. If data.gov.in didn't return records, use official Agmarknet 2.0
-    if (!resultRecords) {
+    // 2. Fallback to Agmarknet 2.0 only if data.gov.in returned null (e.g. key missing or connection error)
+    if (resultRecords === null) {
       try {
         const agmarkStart = Date.now();
         const agmarkRes = await fetchFromAgmarknet(cleanState, cleanDistrict, date);
@@ -614,8 +669,8 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
       }
     }
 
-    // Cache the raw unfiltered district records
-    if (resultRecords) {
+    // Cache the retrieved records only if real records were returned
+    if (resultRecords && resultRecords.length > 0) {
       cache.set(cacheKey, {
         records: resultRecords,
         source,
@@ -627,7 +682,7 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     }
   }
 
-  // Filter by commodity if requested
+  // Filter by commodity if requested and records were fetched broadly
   let filtered = resultRecords || [];
   if (cleanCommodity) {
     filtered = filtered.filter((r) => 
@@ -684,6 +739,7 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
   return {
     success: true,
     source,
+    resourceId: getDataGovResourceId(),
     reportDate,
     lastChecked: new Date().toISOString(),
     cacheStatus,
@@ -691,6 +747,7 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     apiDurationMs,
     state: cleanState,
     district: cleanDistrict === 'all' ? 'All Districts' : cleanDistrict,
+    commodity: commodity && commodity.toLowerCase() !== 'all' ? commodity : 'All Commodities',
     totalRecords: filtered.length,
     distinctCommoditiesCount: summaries.length,
     commoditySummaries: summaries,

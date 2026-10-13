@@ -148,9 +148,9 @@ async function fetchGovtData(url, options = {}) {
   const timeoutMs = options.timeout || 12000;
   let lastStatus = null;
   let lastBody = null;
-  let lastError = null;
+  const transportErrors = [];
 
-  // 1. Try native fetch first (standard in Node 18+ and Vercel Serverless)
+  // 1. Try native fetch first
   if (typeof globalThis.fetch === 'function') {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -158,7 +158,7 @@ async function fetchGovtData(url, options = {}) {
       const res = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal)',
+          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal; gzip, deflate)',
           'Accept': 'application/json',
           ...(options.headers || {})
         }
@@ -177,52 +177,61 @@ async function fetchGovtData(url, options = {}) {
       return { data, status: res.status, transport: 'native-fetch' };
     } catch (err) {
       clearTimeout(timer);
-      lastError = err;
       // If server responded with an HTTP status code (e.g. 401, 403, 404, 429), rethrow immediately
-      // without retrying IPv4 since the host was reached and returned a definitive response
       if (err.status && err.status >= 400) {
         throw err;
       }
+      const causeMsg = err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : '';
+      transportErrors.push(`native-fetch: ${err.message}${causeMsg ? ` (${causeMsg})` : ''}`);
     }
   }
 
-  // 2. Fallback to https.get with IPv4 force (useful if IPv6 routing to NIC hangs)
-  return new Promise((resolve, reject) => {
-    const req = https.get(
-      url,
-      {
-        rejectUnauthorized: false,
-        family: 4,
-        timeout: timeoutMs,
-        headers: {
-          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal)',
-          'Accept': 'application/json',
-          ...(options.headers || {})
-        }
-      },
-      (res) => {
-        lastStatus = res.statusCode;
-        let body = '';
-        res.on('data', (chunk) => { body += chunk; });
-        res.on('end', () => {
-          if (res.statusCode >= 400) {
-            lastBody = body.slice(0, 200);
-            const err = new Error(`Govt API HTTP error: ${res.statusCode} ${res.statusMessage}`);
-            err.status = res.statusCode;
-            err.body = lastBody;
-            return reject(err);
-          }
-          try {
-            const parsed = JSON.parse(body);
-            resolve({ data: parsed, status: res.statusCode, transport: 'https-ipv4' });
-          } catch (e) {
-            const err = new Error(`Failed to parse government JSON: ${e.message}`);
-            err.status = res.statusCode;
-            reject(err);
-          }
-        });
+  // 2. Helper for https.get request
+  const tryHttpsGet = (familyOption) => new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const agent = new https.Agent({
+      rejectUnauthorized: false,
+      keepAlive: false,
+      ...(familyOption ? { family: familyOption } : {})
+    });
+
+    const reqOptions = {
+      protocol: parsedUrl.protocol,
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || 443,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      agent,
+      timeout: timeoutMs,
+      headers: {
+        'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal)',
+        'Accept': 'application/json',
+        ...(options.headers || {})
       }
-    );
+    };
+
+    const req = https.request(reqOptions, (res) => {
+      lastStatus = res.statusCode;
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 400) {
+          lastBody = body.slice(0, 200);
+          const err = new Error(`Govt API HTTP error: ${res.statusCode} ${res.statusMessage}`);
+          err.status = res.statusCode;
+          err.body = lastBody;
+          return reject(err);
+        }
+        try {
+          const parsed = JSON.parse(body);
+          resolve({ data: parsed, status: res.statusCode, transport: `https-agent${familyOption ? `-ipv${familyOption}` : ''}` });
+        } catch (e) {
+          const err = new Error(`Failed to parse government JSON: ${e.message}`);
+          err.status = res.statusCode;
+          reject(err);
+        }
+      });
+    });
 
     req.on('timeout', () => {
       req.destroy();
@@ -232,13 +241,32 @@ async function fetchGovtData(url, options = {}) {
     });
 
     req.on('error', (err) => {
-      if (lastError && !err.status) {
-        reject(lastError);
-      } else {
-        reject(err);
-      }
+      reject(err);
     });
+
+    req.end();
   });
+
+  // 2a. Try standard https.request
+  try {
+    return await tryHttpsGet(null);
+  } catch (err) {
+    if (err.status && err.status >= 400) throw err;
+    transportErrors.push(`https-default: ${err.message}${err.code ? ` (${err.code})` : ''}`);
+  }
+
+  // 2b. Try https.request with IPv4 force
+  try {
+    return await tryHttpsGet(4);
+  } catch (err) {
+    if (err.status && err.status >= 400) throw err;
+    transportErrors.push(`https-ipv4: ${err.message}${err.code ? ` (${err.code})` : ''}`);
+  }
+
+  const finalError = new Error(`All government API network transports failed: ${transportErrors.join(' | ')}`);
+  finalError.status = 502;
+  finalError.transportErrors = transportErrors;
+  throw finalError;
 }
 
 function fetchGovtJson(url, options = {}) {

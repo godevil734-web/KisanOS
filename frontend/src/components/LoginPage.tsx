@@ -975,7 +975,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
                   {otpDigits.map((digit, idx) => (
                     <input
                       key={idx}
-                      ref={(el) => (otpInputRefs.current[idx] = el)}
+                      ref={(el) => { otpInputRefs.current[idx] = el; }}
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"

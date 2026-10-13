@@ -184,13 +184,14 @@ export const api = {
 
   // Real Government Mandi Prices (Agmarknet & data.gov.in)
   getMandiLocations: () => request<{ success: boolean; states: MandiLocationState[] }>('/mandi-locations'),
-  getMandiPrices: (params: { state: string; district?: string; commodity?: string; date?: string; limit?: number }) => {
+  getMandiPrices: (params: { state: string; district?: string; commodity?: string; date?: string; limit?: number; refresh?: boolean }) => {
     const q = new URLSearchParams();
     if (params.state) q.append('state', params.state);
     if (params.district) q.append('district', params.district);
     if (params.commodity) q.append('commodity', params.commodity);
     if (params.date) q.append('date', params.date);
     if (params.limit) q.append('limit', String(params.limit));
+    if (params.refresh) q.append('refresh', 'true');
     return request<MandiPricesResponse>(`/mandi-prices?${q.toString()}`);
   },
 
@@ -285,6 +286,10 @@ export interface MandiPricesResponse {
   success: boolean;
   source: string;
   reportDate: string;
+  lastChecked?: string;
+  cacheStatus?: 'HIT' | 'MISS' | 'BYPASS';
+  cacheAgeSeconds?: number;
+  apiDurationMs?: number;
   state: string;
   district: string;
   totalRecords: number;

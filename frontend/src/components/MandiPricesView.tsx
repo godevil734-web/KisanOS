@@ -98,13 +98,14 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
   }, [statesList, selectedState]);
 
   // Fetch prices function
-  const fetchPrices = async (stateToFetch: string, districtToFetch: string) => {
+  const fetchPrices = async (stateToFetch: string, districtToFetch: string, forceRefresh = false) => {
     setIsLoadingPrices(true);
     setErrorMessage(null);
     try {
       const res = await api.getMandiPrices({
         state: stateToFetch,
-        district: districtToFetch === 'all' ? undefined : districtToFetch
+        district: districtToFetch === 'all' ? undefined : districtToFetch,
+        refresh: forceRefresh
       });
       if (res && res.success) {
         setMandiData(res);
@@ -116,6 +117,40 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
       setErrorMessage(err.message || 'Government Mandi server is currently updating. Please try again.');
     } finally {
       setIsLoadingPrices(false);
+    }
+  };
+
+  const isReportDateOlder = useMemo(() => {
+    if (!mandiData?.reportDate) return false;
+    try {
+      let repDateStr = mandiData.reportDate;
+      if (repDateStr.includes('/')) {
+        const parts = repDateStr.split('/');
+        if (parts.length === 3) {
+          repDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+      }
+      const repDate = new Date(repDateStr);
+      const today = new Date();
+      const repIso = repDate.toISOString().split('T')[0];
+      const todayIso = today.toISOString().split('T')[0];
+      return repIso < todayIso;
+    } catch (e) {
+      return false;
+    }
+  }, [mandiData?.reportDate]);
+
+  const formatCheckedTime = (isoString?: string) => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString(lang === 'hi' ? 'hi-IN' : 'en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch (e) {
+      return isoString;
     }
   };
 
@@ -247,7 +282,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
           {/* Quick Refresh Button */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => fetchPrices(selectedState, selectedDistrict)}
+              onClick={() => fetchPrices(selectedState, selectedDistrict, true)}
               disabled={isLoadingPrices}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white text-xs font-bold transition-all border border-white/15 backdrop-blur-md cursor-pointer disabled:opacity-50"
             >
@@ -259,21 +294,60 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
 
         {/* Source Attribution & Report Date Banner */}
         {mandiData && (
-          <div className="mt-6 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between text-xs text-slate-300 gap-3">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-emerald-400" />
-              <span>
-                <strong className="text-white">{lang === 'hi' ? 'स्रोत: ' : 'Source: '}</strong>
-                {mandiData.source}
-              </span>
+          <div className="mt-6 pt-4 border-t border-white/10 space-y-3">
+            <div className="flex flex-wrap items-center justify-between text-xs text-slate-300 gap-3">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-emerald-400" />
+                <span>
+                  <strong className="text-white">{lang === 'hi' ? 'स्रोत: ' : 'Source: '}</strong>
+                  {mandiData.source}
+                </span>
+              </div>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-teal-400" />
+                  <span>
+                    <strong className="text-white">{lang === 'hi' ? 'सरकारी रिकॉर्ड दिनांक: ' : 'Govt Record Date: '}</strong>
+                    <span className="font-mono font-bold text-teal-200">{mandiData.reportDate}</span>
+                  </span>
+                </div>
+                {(mandiData.lastChecked || mandiData.lastUpdated) && (
+                  <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                    <span>
+                      {lang === 'hi' ? 'अंतिम सत्यापन: ' : 'Last Checked: '}
+                      {formatCheckedTime(mandiData.lastChecked || mandiData.lastUpdated)}
+                    </span>
+                    {mandiData.cacheStatus && (
+                      <span className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] text-slate-300">
+                        {mandiData.cacheStatus === 'BYPASS' 
+                          ? (lang === 'hi' ? 'ताज़ा' : 'Fresh') 
+                          : `${lang === 'hi' ? 'कैश' : 'Cached'}${mandiData.cacheAgeSeconds !== undefined ? ` (${mandiData.cacheAgeSeconds}s)` : ''}`}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-teal-400" />
-              <span>
-                <strong className="text-white">{lang === 'hi' ? 'मंडी सत्र दिनांक: ' : 'Report Session: '}</strong>
-                {mandiData.reportDate}
-              </span>
-            </div>
+
+            {/* Clear explanation banner when latest government record date is from an earlier date */}
+            {isReportDateOlder && (
+              <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2.5">
+                <Info className="h-4 w-4 text-amber-300 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-200">
+                    {lang === 'hi'
+                      ? `नवीनतम आधिकारिक सरकारी मंडी सत्र: ${mandiData.reportDate}`
+                      : `Latest Official Trading Session: ${mandiData.reportDate}`}
+                  </span>
+                  <p className="mt-0.5 text-amber-200/90 leading-relaxed text-[11px] sm:text-xs">
+                    {lang === 'hi'
+                      ? `कृषि मंत्रालय (data.gov.in) द्वारा दैनिक थोक आवक व भाव पिछले व्यापारिक सत्र (${mandiData.reportDate}) के अनुसार उपलब्ध हैं। आज के नए सत्र के आंकड़े दैनिक मंडी बंद होने के बाद जारी किए जाते हैं।`
+                      : `Official wholesale mandi prices and arrival figures reflect the latest completed trading session (${mandiData.reportDate}). Current day data is officially released by the Ministry of Agriculture after markets close.`}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -426,7 +500,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
               <span className="text-xs text-slate-500">{lang === 'hi' ? 'केंद्र' : 'Centers'}</span>
             </div>
             <p className="mt-1 text-[11px] text-slate-500">
-              {lang === 'hi' ? 'आज व्यापार दर्ज कराने वाली मंडियां' : 'Mandis reporting trade today'}
+              {lang === 'hi' ? 'सत्र में व्यापार दर्ज कराने वाली मंडियां' : 'Mandis reporting in recorded session'}
             </p>
           </div>
 
@@ -626,12 +700,12 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-3">
           <Landmark className="h-12 w-12 text-slate-300 mx-auto" />
           <h3 className="text-base font-bold text-slate-800">
-            {lang === 'hi' ? 'इस ज़िले में आज कोई मंडी व्यापार दर्ज नहीं हुआ' : 'No Mandi Trading Recorded for this District Today'}
+            {lang === 'hi' ? 'इस ज़िले में इस सत्र का कोई मंडी व्यापार दर्ज नहीं हुआ' : 'No Mandi Trading Recorded for this District in Latest Session'}
           </h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto">
             {lang === 'hi'
-              ? 'आज मंडी बंद हो सकती है (जैसे रविवार या अवकाश) अथवा दैनिक रिपोर्टिंग अभी जारी है। आप पूरे राज्य की अन्य सक्रिय मंडियां देख सकते हैं।'
-              : 'Mandis may be closed today (such as weekends or market holidays) or reporting may still be underway. You can browse all active mandis across the state.'}
+              ? 'इस ज़िले की मंडियों में इस सत्र में कोई आवक दर्ज नहीं हुई अथवा रिपोर्टिंग अभी जारी है। आप पूरे राज्य की अन्य सक्रिय मंडियां देख सकते हैं।'
+              : 'Mandis in this district may have had no arrivals in this recorded session, or reporting may still be underway. You can browse all active mandis across the state.'}
           </p>
           <div className="pt-2">
             <button

@@ -12,10 +12,16 @@
  * - Only genuine government records
  */
 
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
+
 const https = require('https');
 
 // Read API key strictly from environment variable
-const DATA_GOV_API_KEY = process.env.DATA_GOV_IN_API_KEY || '';
+function getDataGovApiKey() {
+  return process.env.DATA_GOV_IN_API_KEY || '';
+}
 
 // In-memory cache for government API responses (TTL: 15 minutes)
 const cache = new Map();
@@ -322,13 +328,39 @@ async function getMarketDistrictMapping() {
 }
 
 /**
+ * Extract latest arrival date across records (handling DD/MM/YYYY and YYYY-MM-DD)
+ */
+function extractLatestArrivalDate(records) {
+  if (!records || records.length === 0) return null;
+  let latestIso = '';
+  let latestDateStr = null;
+  for (const r of records) {
+    const raw = r.arrivalDate || r.arrival_date;
+    if (!raw) continue;
+    let iso = raw;
+    if (raw.includes('/')) {
+      const parts = raw.split('/');
+      if (parts.length === 3) {
+        iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+    if (iso > latestIso) {
+      latestIso = iso;
+      latestDateStr = raw;
+    }
+  }
+  return latestDateStr;
+}
+
+/**
  * Fetch real mandi prices from data.gov.in
  */
-async function fetchFromDataGovIn(state, district, limit = 100) {
-  if (!DATA_GOV_API_KEY) return null;
+async function fetchFromDataGovIn(state, district, limit = 200) {
+  const apiKey = getDataGovApiKey();
+  if (!apiKey) return null;
 
   const params = new URLSearchParams({
-    'api-key': DATA_GOV_API_KEY,
+    'api-key': apiKey,
     'format': 'json',
     'limit': String(limit)
   });
@@ -338,9 +370,11 @@ async function fetchFromDataGovIn(state, district, limit = 100) {
 
   const url = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?${params.toString()}`;
 
-  const json = await fetchGovtJson(url, { timeout: 3500 });
+  const fetchStart = Date.now();
+  const json = await fetchGovtJson(url, { timeout: 4500 });
+  const durationMs = Date.now() - fetchStart;
   if (json && Array.isArray(json.records) && json.records.length > 0) {
-    return json.records.map((r, index) => {
+    const mapped = json.records.map((r, index) => {
       const modal = Number(r.modal_price) || 0;
       const min = Number(r.min_price) || modal;
       const max = Number(r.max_price) || modal;
@@ -363,6 +397,7 @@ async function fetchFromDataGovIn(state, district, limit = 100) {
         source: 'data.gov.in (OGD Platform, Ministry of Agriculture)'
       };
     });
+    return { records: mapped, durationMs };
   }
 
   return null;
@@ -511,7 +546,7 @@ async function fetchFromAgmarknet(stateName, districtName, targetDate) {
  * @param {string} [options.date] - Optional date YYYY-MM-DD
  * @param {number} [options.limit] - Max records
  */
-async function getMandiPrices({ state, district, commodity, date, limit = 200 }) {
+async function getMandiPrices({ state, district, commodity, date, limit = 200, refresh = false }) {
   if (!state) {
     throw new Error('State is required to retrieve official government mandi prices.');
   }
@@ -523,23 +558,42 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200 })
   // Cache key
   const cacheKey = `${cleanState.toLowerCase()}:${cleanDistrict.toLowerCase()}:${date || 'latest'}`;
   const now = Date.now();
+
+  if (refresh) {
+    cache.delete(cacheKey);
+  }
+
   const cached = cache.get(cacheKey);
 
   let resultRecords = null;
   let source = null;
   let reportDate = date || formatDate(new Date());
+  let cacheStatus = 'MISS';
+  let cacheAgeSeconds = 0;
+  let apiDurationMs = null;
 
-  if (cached && now < cached.expiresAt) {
+  if (!refresh && cached && now < cached.expiresAt) {
     resultRecords = cached.records;
     source = cached.source;
     reportDate = cached.reportDate;
+    cacheStatus = 'HIT';
+    cacheAgeSeconds = Math.round((now - (cached.cachedAt || now)) / 1000);
+    apiDurationMs = cached.apiDurationMs || null;
   } else {
+    cacheStatus = refresh ? 'BYPASS' : 'MISS';
+
     // 1. Try Primary: data.gov.in
     try {
-      const dataGovRecords = await fetchFromDataGovIn(cleanState, cleanDistrict, limit);
-      if (dataGovRecords && dataGovRecords.length > 0) {
-        resultRecords = dataGovRecords;
+      const fetchLimit = cleanDistrict === 'all' ? Math.max(limit, 300) : limit;
+      const dataGovResult = await fetchFromDataGovIn(cleanState, cleanDistrict, fetchLimit);
+      if (dataGovResult && dataGovResult.records && dataGovResult.records.length > 0) {
+        resultRecords = dataGovResult.records;
+        apiDurationMs = dataGovResult.durationMs;
         source = 'data.gov.in (OGD Platform, Ministry of Agriculture)';
+        const latestFromRecords = extractLatestArrivalDate(resultRecords);
+        if (latestFromRecords) {
+          reportDate = latestFromRecords;
+        }
       }
     } catch (e) {
       console.warn(`[MandiService] data.gov.in unavailable (${e.message}), switching to Agmarknet 2.0...`);
@@ -548,7 +602,9 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200 })
     // 2. If data.gov.in didn't return records, use official Agmarknet 2.0
     if (!resultRecords) {
       try {
+        const agmarkStart = Date.now();
         const agmarkRes = await fetchFromAgmarknet(cleanState, cleanDistrict, date);
+        apiDurationMs = Date.now() - agmarkStart;
         resultRecords = agmarkRes.records;
         reportDate = agmarkRes.reportDate;
         source = 'Agmarknet 2.0 (Directorate of Marketing & Inspection, Ministry of Agriculture)';
@@ -564,7 +620,9 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200 })
         records: resultRecords,
         source,
         reportDate,
-        expiresAt: now + CACHE_TTL_MS
+        cachedAt: now,
+        expiresAt: now + CACHE_TTL_MS,
+        apiDurationMs
       });
     }
   }
@@ -627,6 +685,10 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200 })
     success: true,
     source,
     reportDate,
+    lastChecked: new Date().toISOString(),
+    cacheStatus,
+    cacheAgeSeconds,
+    apiDurationMs,
     state: cleanState,
     district: cleanDistrict === 'all' ? 'All Districts' : cleanDistrict,
     totalRecords: filtered.length,

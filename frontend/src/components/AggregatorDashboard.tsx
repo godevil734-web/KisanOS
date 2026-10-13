@@ -136,8 +136,8 @@ export const AggregatorDashboard: React.FC = () => {
         api.getDeals().catch(() => [])
       ]);
 
-      setBuyerDemands(demandRes.demands || demandRes || []);
-      setFarmerSupply(supplyRes.supply || supplyRes || []);
+      setBuyerDemands(Array.isArray(demandRes) ? demandRes : []);
+      setFarmerSupply(Array.isArray(supplyRes) ? supplyRes : []);
       setProcurementPlans(planRes || []);
       setBatches(batchRes || []);
       setPlans(subPlanRes || []);
@@ -1703,7 +1703,7 @@ export const AggregatorDashboard: React.FC = () => {
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="text-base font-black text-slate-900">₹{p.pricePerMonth}</span>
+                    <span className="text-base font-black text-slate-900">₹{p.monthlyPrice}</span>
                     <span className="text-[10px] text-slate-400 block">/ month</span>
                   </div>
                 </div>

@@ -3084,7 +3084,8 @@ app.get('/api/mandi-prices', optionalAuth, async (req, res) => {
       district: targetDistrict || 'all',
       commodity: commodity || undefined,
       date: date || undefined,
-      limit: limit ? Number(limit) : 200
+      limit: limit ? Number(limit) : 200,
+      refresh: req.query.refresh === 'true'
     });
 
     res.json(data);

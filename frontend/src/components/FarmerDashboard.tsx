@@ -103,7 +103,7 @@ export const FarmerDashboard: React.FC = () => {
     const confirmed = Number(l.confirmedQuantityTons ?? 0);
     const avail = Number(l.availableQuantityTons ?? (total - confirmed));
     const hasOrder = orders.some(o => (o.listingId === l.id || (o as any).listing_id === l.id) && o.status !== 'CANCELLED');
-    return l.status === 'SOLD' || l.status === 'DEAL_COMPLETED' || (confirmed > 0 && avail <= 0) || (hasOrder && avail <= 0);
+    return l.status === 'SOLD' || l.status === 'FULFILLED' || (confirmed > 0 && avail <= 0) || (hasOrder && avail <= 0);
   };
 
   const activeListings = useMemo(() => {
@@ -214,7 +214,7 @@ export const FarmerDashboard: React.FC = () => {
             const total = Number(l.totalQuantityTons ?? l.quantityTons ?? 0);
             const confirmed = Number(l.confirmedQuantityTons ?? 0);
             const avail = Number(l.availableQuantityTons ?? (total - confirmed));
-            return l.status !== 'SOLD' && l.status !== 'DEAL_COMPLETED' && (avail > 0);
+            return l.status !== 'SOLD' && l.status !== 'FULFILLED' && (avail > 0);
           });
           const initial = activeOnly.length > 0 ? activeOnly[0] : listRes[0];
           handleViewMatches(initial);

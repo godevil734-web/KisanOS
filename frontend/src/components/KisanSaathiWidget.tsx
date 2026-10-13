@@ -31,7 +31,7 @@ interface KisanSaathiWidgetProps {
 export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigateTab, onNavigate }) => {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const isHi = language === 'hi' || language === 'hinglish';
+  const isHi = language === 'hi';
   const role = (user?.role || 'farmer').toLowerCase();
 
   // Strictly on-demand: NEVER open automatically on load or dashboard entry

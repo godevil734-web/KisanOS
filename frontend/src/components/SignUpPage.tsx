@@ -1220,7 +1220,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                   {otpDigits.map((digit, idx) => (
                     <input
                       key={idx}
-                      ref={(el) => (otpInputRefs.current[idx] = el)}
+                      ref={(el) => { otpInputRefs.current[idx] = el; }}
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
@@ -1323,7 +1323,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                     {otpDigits.map((digit, idx) => (
                       <input
                         key={idx}
-                        ref={(el) => (otpInputRefs.current[idx] = el)}
+                        ref={(el) => { otpInputRefs.current[idx] = el; }}
                         type="text"
                         maxLength={1}
                         value={digit}

@@ -42,6 +42,28 @@ async function runMandiTests() {
   assert(potatoPrices.records.every(r => r.commodity.toLowerCase().includes('potato')), 'All records must match commodity filter');
   console.log('✅ Test 4 Passed: Potato filter returned', potatoPrices.records.length, 'matching records.');
 
+  // Test 5: Cache hit vs Cache refresh bypass
+  console.log('\n[Test 5] Testing cache hit and force refresh bypass...');
+  const cachedCall = await getMandiPrices({ state: 'Uttar Pradesh', district: 'Agra', commodity: 'Potato' });
+  assert.strictEqual(cachedCall.cacheStatus, 'HIT', 'Second call should be cache HIT');
+  assert(cachedCall.cacheAgeSeconds >= 0, 'Cache age should be reported');
+
+  const refreshedCall = await getMandiPrices({ state: 'Uttar Pradesh', district: 'Agra', commodity: 'Potato', refresh: true });
+  assert.strictEqual(refreshedCall.cacheStatus, 'BYPASS', 'Refresh call should BYPASS cache');
+  console.log('✅ Test 5 Passed: Verified cache HIT and force refresh BYPASS.');
+
+  // Test 6: Error handling when invalid state is supplied
+  console.log('\n[Test 6] Testing error handling for invalid input...');
+  let caughtError = false;
+  try {
+    await getMandiPrices({ state: '' });
+  } catch (err) {
+    caughtError = true;
+    assert(err.message.includes('State is required'), 'Should throw state required error');
+  }
+  assert.strictEqual(caughtError, true, 'Invalid input must throw validation error');
+  console.log('✅ Test 6 Passed: Error handling verified.');
+
   console.log('\n🎉 ALL MANDI PRICES BACKEND TESTS PASSED SUCCESSFULLY!');
 }
 

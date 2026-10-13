@@ -103,20 +103,9 @@ function getApiKeyDiagnostics() {
     }
   }
 
-  // SAFE: List only variable names (keys), NEVER values, of user-defined custom variables
-  const configuredCustomEnvNames = Object.keys(process.env).filter(k => 
-    !k.startsWith('npm_') && 
-    !k.startsWith('VERCEL') && 
-    !k.startsWith('AWS') && 
-    !k.startsWith('LAMBDA') && 
-    !k.startsWith('LD_') && 
-    !k.startsWith('NODE_') && 
-    !k.startsWith('PATH') && 
-    !k.startsWith('LANG') &&
-    !k.startsWith('HOME') &&
-    !k.startsWith('SHLVL') &&
-    !k.startsWith('PWD') &&
-    !k.startsWith('_')
+  // SAFE: List only variable names matching data / gov / mandi / agri (never secrets or other env vars)
+  const detectedGovEnvVars = Object.keys(process.env).filter(k => 
+    /data|gov|mandi|agri/i.test(k)
   );
 
   return {
@@ -124,7 +113,8 @@ function getApiKeyDiagnostics() {
     envVarName: foundVar || 'NONE',
     keyLength: keyVal.length,
     keyPreview: keyVal.length >= 8 ? `${keyVal.slice(0, 4)}...${keyVal.slice(-4)}` : (keyVal ? '***' : null),
-    configuredCustomEnvNames
+    hasDataGovApiKey: Boolean(foundVar),
+    detectedGovEnvVars
   };
 }
 

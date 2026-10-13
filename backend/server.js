@@ -3125,12 +3125,14 @@ app.get('/api/mandi-diagnostics', async (req, res) => {
     res.json({
       success: diag.status === 200,
       timestamp: new Date().toISOString(),
+      region: process.env.VERCEL_REGION || process.env.NOW_REGION || 'local',
       ...diag
     });
   } catch (err) {
     res.status(502).json({
       success: false,
       error: err.message,
+      region: process.env.VERCEL_REGION || process.env.NOW_REGION || 'local',
       timestamp: new Date().toISOString()
     });
   }

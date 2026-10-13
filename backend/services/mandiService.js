@@ -139,18 +139,15 @@ let statesDistrictsCache = null;
 let statesDistrictsExpiresAt = 0;
 
 /**
- * Universal fetcher for Government Open Data (data.gov.in)
- * Tries native fetch first (standard in Node 18+ and Vercel Serverless),
- * with automatic fallback to https.get (with IPv4 force) if connection fails.
+ * Official Government Data Fetcher (data.gov.in)
+ * Uses standard Node.js fetch with normal HTTPS hostname resolution.
+ * TLS certificate verification is strictly maintained (never disabled).
  * Captures exact HTTP status and sanitized response body for diagnostics.
  */
 async function fetchGovtData(url, options = {}) {
   const timeoutMs = options.timeout || 12000;
-  let lastStatus = null;
-  let lastBody = null;
-  const transportErrors = [];
 
-  // 1. Try native fetch first
+  // 1. Primary: Standard native fetch with normal HTTPS resolution & strict TLS verification
   if (typeof globalThis.fetch === 'function') {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -158,115 +155,89 @@ async function fetchGovtData(url, options = {}) {
       const res = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal; gzip, deflate)',
+          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal; Government Open Data Client)',
           'Accept': 'application/json',
           ...(options.headers || {})
         }
       });
       clearTimeout(timer);
-      lastStatus = res.status;
+
       if (!res.ok) {
         const rawText = await res.text().catch(() => '');
-        lastBody = rawText ? rawText.slice(0, 200) : res.statusText;
-        const err = new Error(`Govt API HTTP error: ${res.status} ${res.statusText}`);
+        const bodySnippet = rawText ? rawText.slice(0, 300) : res.statusText;
+        const err = new Error(`Government API HTTP ${res.status}: ${res.statusText}`);
         err.status = res.status;
-        err.body = lastBody;
+        err.body = bodySnippet;
         throw err;
       }
+
       const data = await res.json();
       return { data, status: res.status, transport: 'native-fetch' };
     } catch (err) {
       clearTimeout(timer);
-      // If server responded with an HTTP status code (e.g. 401, 403, 404, 429), rethrow immediately
       if (err.status && err.status >= 400) {
         throw err;
       }
-      const causeMsg = err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : '';
-      transportErrors.push(`native-fetch: ${err.message}${causeMsg ? ` (${causeMsg})` : ''}`);
+      if (err.name === 'AbortError') {
+        const timeoutErr = new Error(`Government API request timed out after ${timeoutMs}ms`);
+        timeoutErr.status = 504;
+        throw timeoutErr;
+      }
+      const cause = err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : '';
+      const netErr = new Error(`Government API network error: ${err.message}${cause ? ` (${cause})` : ''}`);
+      netErr.status = 502;
+      netErr.cause = err;
+      throw netErr;
     }
   }
 
-  // 2. Helper for https.get request
-  const tryHttpsGet = (familyOption) => new Promise((resolve, reject) => {
-    const parsedUrl = new URL(url);
-    const agent = new https.Agent({
-      rejectUnauthorized: false,
-      keepAlive: false,
-      ...(familyOption ? { family: familyOption } : {})
-    });
-
-    const reqOptions = {
-      protocol: parsedUrl.protocol,
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port || 443,
-      path: parsedUrl.pathname + parsedUrl.search,
-      method: 'GET',
-      agent,
-      timeout: timeoutMs,
-      headers: {
-        'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal)',
-        'Accept': 'application/json',
-        ...(options.headers || {})
+  // 2. Fallback for Node environments without global fetch: standard https.get with TLS verification
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      url,
+      {
+        timeout: timeoutMs,
+        headers: {
+          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal; Government Open Data Client)',
+          'Accept': 'application/json',
+          ...(options.headers || {})
+        }
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          if (res.statusCode >= 400) {
+            const err = new Error(`Government API HTTP ${res.statusCode}: ${res.statusMessage}`);
+            err.status = res.statusCode;
+            err.body = body.slice(0, 300);
+            return reject(err);
+          }
+          try {
+            const parsed = JSON.parse(body);
+            resolve({ data: parsed, status: res.statusCode, transport: 'https-get' });
+          } catch (e) {
+            const err = new Error(`Failed to parse government JSON: ${e.message}`);
+            err.status = res.statusCode;
+            reject(err);
+          }
+        });
       }
-    };
-
-    const req = https.request(reqOptions, (res) => {
-      lastStatus = res.statusCode;
-      let body = '';
-      res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => {
-        if (res.statusCode >= 400) {
-          lastBody = body.slice(0, 200);
-          const err = new Error(`Govt API HTTP error: ${res.statusCode} ${res.statusMessage}`);
-          err.status = res.statusCode;
-          err.body = lastBody;
-          return reject(err);
-        }
-        try {
-          const parsed = JSON.parse(body);
-          resolve({ data: parsed, status: res.statusCode, transport: `https-agent${familyOption ? `-ipv${familyOption}` : ''}` });
-        } catch (e) {
-          const err = new Error(`Failed to parse government JSON: ${e.message}`);
-          err.status = res.statusCode;
-          reject(err);
-        }
-      });
-    });
+    );
 
     req.on('timeout', () => {
       req.destroy();
-      const err = new Error(`Government API timeout after ${timeoutMs}ms`);
-      err.status = 408;
+      const err = new Error(`Government API request timed out after ${timeoutMs}ms`);
+      err.status = 504;
       reject(err);
     });
 
     req.on('error', (err) => {
-      reject(err);
+      const netErr = new Error(`Government API connection error: ${err.message}`);
+      netErr.status = 502;
+      reject(netErr);
     });
-
-    req.end();
   });
-
-  // 2a. Try standard https.request
-  try {
-    return await tryHttpsGet(null);
-  } catch (err) {
-    if (err.status && err.status >= 400) throw err;
-    transportErrors.push(`https-default: ${err.message}${err.code ? ` (${err.code})` : ''}`);
-  }
-
-  // 2b. Try https.request with IPv4 force
-  try {
-    return await tryHttpsGet(4);
-  } catch (err) {
-    if (err.status && err.status >= 400) throw err;
-    transportErrors.push(`https-ipv4: ${err.message}${err.code ? ` (${err.code})` : ''}`);
-  }
-
-  const finalError = new Error(`All government API network transports failed: ${transportErrors.join(' | ')}`);
-  finalError.status = 502;
-  finalError.transportErrors = transportErrors;
-  throw finalError;
 }
 
 function fetchGovtJson(url, options = {}) {
@@ -897,69 +868,21 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
 
       console.error(`[MandiPrices] data.gov.in failed (${errorCat}, HTTP ${httpStatus}): ${errorMsg}. Key configured: ${keyInfo.isConfigured} (${keyInfo.envVarName})`);
 
-      // If missing key or unauthorized, fail fast with explicit diagnostic error
-      if (errorCat === 'MISSING_API_KEY' || errorCat === 'UPSTREAM_AUTH_ERROR') {
-        const err = new Error(`Official Mandi API (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
-        err.status = httpStatus;
-        err.diagnostics = {
-          apiKeyConfigured: keyInfo.isConfigured,
-          apiKeyLength: keyInfo.keyLength,
-          configuredEnvVar: keyInfo.envVarName,
-          keyPreview: keyInfo.keyPreview,
-          resourceId: getDataGovResourceId(),
-          upstreamHttpStatus: httpStatus,
-          upstreamErrorCategory: errorCat,
-          upstreamErrorMessage: errorMsg,
-          apiDurationMs: dataGovResult?.durationMs || null
-        };
-        throw err;
-      }
-
-      // If network/server error, try Agmarknet 2.0 fallback only if genuine records are returned
-      try {
-        const agmarkStart = Date.now();
-        const agmarkRes = await fetchFromAgmarknet(cleanState, cleanDistrict, date);
-        if (agmarkRes && Array.isArray(agmarkRes.records) && agmarkRes.records.length > 0) {
-          apiDurationMs = Date.now() - agmarkStart;
-          resultRecords = agmarkRes.records;
-          reportDate = agmarkRes.reportDate;
-          source = 'Agmarknet 2.0 (Directorate of Marketing & Inspection, Ministry of Agriculture)';
-        } else {
-          // Both data.gov.in and fallback returned no records due to upstream issue
-          const err = new Error(`Official Mandi API failure (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
-          err.status = httpStatus;
-          err.diagnostics = {
-            apiKeyConfigured: keyInfo.isConfigured,
-            apiKeyLength: keyInfo.keyLength,
-            configuredEnvVar: keyInfo.envVarName,
-            keyPreview: keyInfo.keyPreview,
-            resourceId: getDataGovResourceId(),
-            upstreamHttpStatus: httpStatus,
-            upstreamErrorCategory: errorCat,
-            upstreamErrorMessage: errorMsg,
-            fallbackAttempted: true,
-            apiDurationMs: dataGovResult?.durationMs || null
-          };
-          throw err;
-        }
-      } catch (agmarkErr) {
-        console.error('[MandiService] Agmarknet fallback also failed:', agmarkErr.message);
-        const err = new Error(`Official Mandi API failure (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
-        err.status = httpStatus;
-        err.diagnostics = {
-          apiKeyConfigured: keyInfo.isConfigured,
-          apiKeyLength: keyInfo.keyLength,
-          configuredEnvVar: keyInfo.envVarName,
-          keyPreview: keyInfo.keyPreview,
-          resourceId: getDataGovResourceId(),
-          upstreamHttpStatus: httpStatus,
-          upstreamErrorCategory: errorCat,
-          upstreamErrorMessage: errorMsg,
-          fallbackError: agmarkErr.message,
-          apiDurationMs: dataGovResult?.durationMs || null
-        };
-        throw err;
-      }
+      // Fail fast and report transparent upstream status with diagnostics
+      const err = new Error(`Official Mandi API (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
+      err.status = httpStatus;
+      err.diagnostics = {
+        apiKeyConfigured: keyInfo.isConfigured,
+        apiKeyLength: keyInfo.keyLength,
+        configuredEnvVar: keyInfo.envVarName,
+        keyPreview: keyInfo.keyPreview,
+        resourceId: getDataGovResourceId(),
+        upstreamHttpStatus: httpStatus,
+        upstreamErrorCategory: errorCat,
+        upstreamErrorMessage: errorMsg,
+        apiDurationMs: dataGovResult?.durationMs || null
+      };
+      throw err;
     }
 
     // Cache the retrieved records only if real records were returned

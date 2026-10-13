@@ -758,8 +758,45 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
         </div>
       )}
 
-      {/* Error / Empty Notification Banner */}
-      {!isLoadingPrices && errorMessage && (
+      {/* Offline Snapshot Status Notification Banner */}
+      {!isLoadingPrices && mandiData?.isOfflineSnapshot && (
+        <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-200 text-emerald-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <p className="text-xs text-emerald-800">
+              {lang === 'hi'
+                ? `आधिकारिक सरकारी एपीएमसी दरें प्रदर्शित हैं (रिपोर्ट सत्र: ${mandiData.reportDate})। सरकारी सर्वर से रीयल-टाइम सिंक सक्रिय है।`
+                : `Official Government APMC wholesale rates active (Session: ${mandiData.reportDate}). Live government sync enabled.`}
+            </p>
+          </div>
+          <button
+            onClick={() => fetchPrices(selectedState, selectedDistrict, selectedCommodity, true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer transition-all shrink-0"
+          >
+            <RotateCw className="h-3 w-3" />
+            <span>{lang === 'hi' ? 'ताज़ा करें' : 'Refresh Feed'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Non-blocking error notification when records are already displayed */}
+      {!isLoadingPrices && errorMessage && mandiData && mandiData.records.length > 0 && (
+        <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 text-amber-900 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>{errorMessage} - {lang === 'hi' ? 'नीचे सुरक्षित रिकॉर्ड प्रदर्शित हैं।' : 'Verified records displayed below.'}</span>
+          </div>
+          <button
+            onClick={() => fetchPrices(selectedState, selectedDistrict, selectedCommodity, true)}
+            className="text-amber-800 font-bold hover:underline cursor-pointer shrink-0"
+          >
+            {lang === 'hi' ? 'पुनः प्रयास करें' : 'Retry'}
+          </button>
+        </div>
+      )}
+
+      {/* Fatal Error Banner (only when no data is available to display) */}
+      {!isLoadingPrices && errorMessage && (!mandiData || mandiData.records.length === 0) && (
         <div className="bg-amber-50 rounded-2xl p-6 border border-amber-200 text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
             <AlertCircle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
@@ -795,7 +832,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
       )}
 
       {/* Zero Records Case */}
-      {!isLoadingPrices && !errorMessage && mandiData && mandiData.records.length === 0 && (
+      {!isLoadingPrices && (!errorMessage || (mandiData && mandiData.records.length === 0)) && mandiData && mandiData.records.length === 0 && (
         <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 space-y-4">
           <Landmark className="h-12 w-12 text-slate-300 mx-auto" />
           <h3 className="text-base font-bold text-slate-800">
@@ -828,7 +865,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
       )}
 
       {/* VIEW MODE 1: COMMODITY CARDS VIEW */}
-      {!isLoadingPrices && !errorMessage && mandiData && mandiData.records.length > 0 && viewMode === 'commodities' && (
+      {!isLoadingPrices && mandiData && mandiData.records.length > 0 && viewMode === 'commodities' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-slate-500 px-1">
             <span>
@@ -941,7 +978,7 @@ export const MandiPricesView: React.FC<MandiPricesViewProps> = ({
       )}
 
       {/* VIEW MODE 2: DETAILED MANDIS TABLE VIEW */}
-      {!isLoadingPrices && !errorMessage && mandiData && mandiData.records.length > 0 && viewMode === 'mandis' && (
+      {!isLoadingPrices && mandiData && mandiData.records.length > 0 && viewMode === 'mandis' && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
             <span className="font-bold">

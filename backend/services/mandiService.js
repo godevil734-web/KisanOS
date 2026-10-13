@@ -821,6 +821,129 @@ async function fetchFromAgmarknet(stateName, districtName, targetDate) {
   return { records, reportDate: usedDate };
 }
 
+// Database snapshot persistence helper (Supabase PostgreSQL)
+let dbPool = null;
+function getDbPool() {
+  if (dbPool) return dbPool;
+  try {
+    const dbModule = require('../db');
+    dbPool = dbModule.pool;
+  } catch (e) {
+    try {
+      const dbModule = require('../../backend/db');
+      dbPool = dbModule.pool;
+    } catch (err) {}
+  }
+  return dbPool;
+}
+
+async function saveMandiSnapshot(cacheKey, state, district, commodity, source, reportDate, payload) {
+  const pool = getDbPool();
+  if (!pool) return;
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mandi_price_snapshots (
+        cache_key VARCHAR(255) PRIMARY KEY,
+        state VARCHAR(100) NOT NULL,
+        district VARCHAR(100) NOT NULL,
+        commodity VARCHAR(100) NOT NULL,
+        source VARCHAR(255) NOT NULL,
+        report_date VARCHAR(50),
+        total_records INTEGER DEFAULT 0,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_mandi_snapshots_lookup ON mandi_price_snapshots(state, district, commodity);
+    `);
+    await pool.query(`
+      INSERT INTO mandi_price_snapshots (cache_key, state, district, commodity, source, report_date, total_records, data, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      ON CONFLICT (cache_key) DO UPDATE
+      SET source = EXCLUDED.source,
+          report_date = EXCLUDED.report_date,
+          total_records = EXCLUDED.total_records,
+          data = EXCLUDED.data,
+          updated_at = NOW()
+    `, [
+      cacheKey,
+      state,
+      district,
+      commodity || 'all',
+      source || 'data.gov.in (OGD Platform, Ministry of Agriculture)',
+      reportDate,
+      payload.totalRecords || (payload.records ? payload.records.length : 0),
+      JSON.stringify(payload)
+    ]);
+  } catch (err) {
+    console.warn('[MandiService] Failed to save snapshot to database:', err.message);
+  }
+}
+
+async function getMandiSnapshotFromDb(state, district, commodity) {
+  const pool = getDbPool();
+  if (!pool) return null;
+  const cleanState = (state || '').trim().toLowerCase();
+  const cleanDistrict = (district || 'all').trim().toLowerCase();
+  const cleanCommodity = (commodity || 'all').trim().toLowerCase();
+
+  try {
+    // 1. Exact match
+    const exactRes = await pool.query(`
+      SELECT data, report_date, source, updated_at
+      FROM mandi_price_snapshots
+      WHERE LOWER(state) = $1 AND LOWER(district) = $2 AND LOWER(commodity) = $3
+      LIMIT 1
+    `, [cleanState, cleanDistrict, cleanCommodity]);
+
+    if (exactRes.rows.length > 0) {
+      return { row: exactRes.rows[0], matchType: 'EXACT' };
+    }
+
+    // 2. District broad match
+    if (cleanCommodity !== 'all') {
+      const distRes = await pool.query(`
+        SELECT data, report_date, source, updated_at
+        FROM mandi_price_snapshots
+        WHERE LOWER(state) = $1 AND LOWER(district) = $2 AND LOWER(commodity) = 'all'
+        LIMIT 1
+      `, [cleanState, cleanDistrict]);
+
+      if (distRes.rows.length > 0) {
+        return { row: distRes.rows[0], matchType: 'DISTRICT_BROAD' };
+      }
+    }
+
+    // 3. State-wide broad match
+    const stateRes = await pool.query(`
+      SELECT data, report_date, source, updated_at
+      FROM mandi_price_snapshots
+      WHERE LOWER(state) = $1 AND LOWER(district) = 'all' AND LOWER(commodity) = 'all'
+      LIMIT 1
+    `, [cleanState]);
+
+    if (stateRes.rows.length > 0) {
+      return { row: stateRes.rows[0], matchType: 'STATE_BROAD' };
+    }
+
+    // 4. Any recent snapshot for this state
+    const anyStateRes = await pool.query(`
+      SELECT data, report_date, source, updated_at
+      FROM mandi_price_snapshots
+      WHERE LOWER(state) = $1
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `, [cleanState]);
+
+    if (anyStateRes.rows.length > 0) {
+      return { row: anyStateRes.rows[0], matchType: 'STATE_RECENT' };
+    }
+  } catch (err) {
+    console.warn('[MandiService] Failed to query database snapshot:', err.message);
+  }
+
+  return null;
+}
+
 /**
  * Main Public API: Get Real Mandi Prices
  * 
@@ -856,6 +979,8 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
   let cacheStatus = 'MISS';
   let cacheAgeSeconds = 0;
   let apiDurationMs = null;
+  let isOfflineSnapshot = false;
+  let snapshotUpdatedAt = null;
 
   if (!refresh && cached && now < cached.expiresAt) {
     resultRecords = cached.records;
@@ -864,10 +989,11 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     cacheStatus = 'HIT';
     cacheAgeSeconds = Math.round((now - (cached.cachedAt || now)) / 1000);
     apiDurationMs = cached.apiDurationMs || null;
+    isOfflineSnapshot = Boolean(cached.isOfflineSnapshot);
+    snapshotUpdatedAt = cached.snapshotUpdatedAt || null;
   } else {
     cacheStatus = refresh ? 'BYPASS' : 'MISS';
 
-    // 1. Try Primary: data.gov.in
     // 1. Try Primary: data.gov.in
     const fetchLimit = cleanDistrict === 'all' && !cleanCommodity ? Math.max(limit, 300) : Math.max(limit, 200);
     const dataGovResult = await fetchFromDataGovIn(cleanState, cleanDistrict, cleanCommodity, fetchLimit);
@@ -881,29 +1007,64 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
         reportDate = latestFromRecords;
       }
     } else {
-      // data.gov.in query failed or missing API key
-      const errorCat = dataGovResult?.errorCategory || 'UPSTREAM_ERROR';
-      const errorMsg = dataGovResult?.errorMessage || 'Government data.gov.in API is unreachable';
-      const httpStatus = dataGovResult?.status || 502;
-      const keyInfo = dataGovResult?.keyDiag || getApiKeyDiagnostics();
+      // Primary upstream connection failed (e.g. NIC firewall ECONNREFUSED or timeout).
+      // Check for persistent authentic government snapshot in PostgreSQL before failing.
+      const snapshotResult = await getMandiSnapshotFromDb(cleanState, cleanDistrict, cleanCommodity);
+      if (snapshotResult && snapshotResult.row && snapshotResult.row.data) {
+        const { row: snapshotRow, matchType } = snapshotResult;
+        const snapData = snapshotRow.data;
+        let snapRecords = Array.isArray(snapData.records) ? snapData.records : [];
 
-      console.error(`[MandiPrices] data.gov.in failed (${errorCat}, HTTP ${httpStatus}): ${errorMsg}. Key configured: ${keyInfo.isConfigured} (${keyInfo.envVarName})`);
+        // If snapshot was broad (whole state), filter by district if district was requested
+        if (cleanDistrict !== 'all' && (matchType === 'STATE_BROAD' || matchType === 'STATE_RECENT')) {
+          const matchedByDist = snapRecords.filter(r => (r.district || '').toLowerCase() === cleanDistrict.toLowerCase());
+          if (matchedByDist.length > 0) {
+            snapRecords = matchedByDist;
+          }
+        }
 
-      // Fail fast and report transparent upstream status with diagnostics
-      const err = new Error(`Official Mandi API (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
-      err.status = httpStatus;
-      err.diagnostics = {
-        apiKeyConfigured: keyInfo.isConfigured,
-        apiKeyLength: keyInfo.keyLength,
-        configuredEnvVar: keyInfo.envVarName,
-        keyPreview: keyInfo.keyPreview,
-        resourceId: getDataGovResourceId(),
-        upstreamHttpStatus: httpStatus,
-        upstreamErrorCategory: errorCat,
-        upstreamErrorMessage: errorMsg,
-        apiDurationMs: dataGovResult?.durationMs || null
-      };
-      throw err;
+        // If commodity was requested, filter by commodity
+        if (cleanCommodity) {
+          const matchedByCmdt = snapRecords.filter(r => 
+            (r.commodity || '').toLowerCase().includes(cleanCommodity) ||
+            (r.variety || '').toLowerCase().includes(cleanCommodity)
+          );
+          if (matchedByCmdt.length > 0) {
+            snapRecords = matchedByCmdt;
+          }
+        }
+
+        resultRecords = snapRecords;
+        source = snapshotRow.source || 'data.gov.in (OGD Platform, Ministry of Agriculture)';
+        reportDate = snapshotRow.report_date || snapData.reportDate || formatDate(new Date());
+        cacheStatus = 'CACHED_SNAPSHOT';
+        isOfflineSnapshot = true;
+        snapshotUpdatedAt = snapshotRow.updated_at;
+        console.log(`[MandiPrices] Live upstream failed, served authentic snapshot (${resultRecords.length} records, ${reportDate}) from PostgreSQL`);
+      } else {
+        // No cached snapshot exists in database either. Report transparent upstream status.
+        const errorCat = dataGovResult?.errorCategory || 'UPSTREAM_ERROR';
+        const errorMsg = dataGovResult?.errorMessage || 'Government data.gov.in API is unreachable';
+        const httpStatus = dataGovResult?.status || 502;
+        const keyInfo = dataGovResult?.keyDiag || getApiKeyDiagnostics();
+
+        console.error(`[MandiPrices] data.gov.in failed and no snapshot exists (${errorCat}, HTTP ${httpStatus}): ${errorMsg}`);
+
+        const err = new Error(`Official Mandi API (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
+        err.status = httpStatus;
+        err.diagnostics = {
+          apiKeyConfigured: keyInfo.isConfigured,
+          apiKeyLength: keyInfo.keyLength,
+          configuredEnvVar: keyInfo.envVarName,
+          keyPreview: keyInfo.keyPreview,
+          resourceId: getDataGovResourceId(),
+          upstreamHttpStatus: httpStatus,
+          upstreamErrorCategory: errorCat,
+          upstreamErrorMessage: errorMsg,
+          apiDurationMs: dataGovResult?.durationMs || null
+        };
+        throw err;
+      }
     }
 
     // Cache the retrieved records only if real records were returned
@@ -914,7 +1075,9 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
         reportDate,
         cachedAt: now,
         expiresAt: now + CACHE_TTL_MS,
-        apiDurationMs
+        apiDurationMs,
+        isOfflineSnapshot,
+        snapshotUpdatedAt
       });
     }
   }
@@ -973,7 +1136,7 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     };
   }).sort((a, b) => b.reportingMandisCount - a.reportingMandisCount || a.commodity.localeCompare(b.commodity));
 
-  return {
+  const responsePayload = {
     success: true,
     source,
     resourceId: getDataGovResourceId(),
@@ -982,6 +1145,8 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     cacheStatus,
     cacheAgeSeconds,
     apiDurationMs,
+    isOfflineSnapshot,
+    snapshotUpdatedAt,
     state: cleanState,
     district: cleanDistrict === 'all' ? 'All Districts' : cleanDistrict,
     commodity: commodity && commodity.toLowerCase() !== 'all' ? commodity : 'All Commodities',
@@ -993,10 +1158,20 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
       apiKeyConfigured: true,
       envVarSource: getApiKeyDiagnostics().envVarName,
       resourceId: getDataGovResourceId(),
-      sourceSelected: source
+      sourceSelected: source,
+      isOfflineSnapshot
     },
     lastUpdated: new Date().toISOString()
   };
+
+  // If live fetch succeeded, asynchronously save/refresh snapshot in PostgreSQL
+  if (!isOfflineSnapshot && resultRecords && resultRecords.length > 0) {
+    saveMandiSnapshot(cacheKey, cleanState, cleanDistrict, cleanCommodity || 'all', source, reportDate, responsePayload).catch(e => {
+      console.warn('[MandiPrices] Async snapshot save error:', e.message);
+    });
+  }
+
+  return responsePayload;
 }
 
 /**

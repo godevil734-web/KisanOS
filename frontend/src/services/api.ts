@@ -290,9 +290,11 @@ export interface MandiPricesResponse {
   resourceId?: string;
   reportDate: string;
   lastChecked?: string;
-  cacheStatus?: 'HIT' | 'MISS' | 'BYPASS';
+  cacheStatus?: 'HIT' | 'MISS' | 'BYPASS' | 'CACHED_SNAPSHOT';
   cacheAgeSeconds?: number;
   apiDurationMs?: number;
+  isOfflineSnapshot?: boolean;
+  snapshotUpdatedAt?: string;
   state: string;
   district: string;
   commodity?: string;

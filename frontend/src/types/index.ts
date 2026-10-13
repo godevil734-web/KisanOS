@@ -13,6 +13,14 @@ export interface User {
   phoneMasked?: string;
   rejectionReason?: string;
   isDemo?: boolean;
+  avatar?: string;
+  avatarUrl?: string;
+  profileImage?: string;
+  profile_image?: string;
+  village?: string;
+  district?: string;
+  state?: string;
+  preferred_language?: string;
   location: string;
   rating: number;
   reviewsCount: number;

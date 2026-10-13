@@ -1,3 +1,11 @@
+import { 
+  FarmerField, 
+  FarmerCropRecord, 
+  KisanPointsLedgerEntry, 
+  FarmerTrustMetrics, 
+  FarmerDigitalProfile 
+} from '../types';
+
 function resolveApiBase(): string {
   let base = (import.meta as any).env?.VITE_API_BASE || '/api';
   if (base && !base.startsWith('http') && !base.startsWith('/')) {
@@ -241,7 +249,33 @@ export const api = {
   updateActivity: (id: string, data: any) => request<any>(`/activities/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteActivity: (id: string) => request<any>(`/activities/${id}`, { method: 'DELETE' }),
   getListingTraceability: (listingId: string) => request<any>(`/listings/${listingId}/traceability`),
-  getNaLamKIManifest: () => request<any>('/activities/standards/nalamki-manifest')
+  getNaLamKIManifest: () => request<any>('/activities/standards/nalamki-manifest'),
+
+  // Farmer Digital Profile, My Fields, Crop Records & Kisan Points
+  getFarmerProfile: (userId?: string) => 
+    request<{ success: boolean; profile: FarmerDigitalProfile }>(`/farmer/profile${userId ? `?userId=${userId}` : ''}`),
+  updateFarmerProfile: (data: Partial<FarmerDigitalProfile>) => 
+    request<{ success: boolean; profile: FarmerDigitalProfile }>('/farmer/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  getFarmerFields: (userId?: string) => 
+    request<{ success: boolean; fields: FarmerField[] }>(`/farmer/fields${userId ? `?userId=${userId}` : ''}`),
+  addFarmerField: (data: Partial<FarmerField>) => 
+    request<{ success: boolean; field: FarmerField }>('/farmer/fields', { method: 'POST', body: JSON.stringify(data) }),
+  updateFarmerField: (id: string, data: Partial<FarmerField>) => 
+    request<{ success: boolean; field: FarmerField }>(`/farmer/fields/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteFarmerField: (id: string) => 
+    request<{ success: boolean; deletedId: string }>(`/farmer/fields/${id}`, { method: 'DELETE' }),
+  getFarmerCropRecords: (userId?: string) => 
+    request<{ success: boolean; crops: FarmerCropRecord[] }>(`/farmer/crops${userId ? `?userId=${userId}` : ''}`),
+  addFarmerCropRecord: (data: Partial<FarmerCropRecord>) => 
+    request<{ success: boolean; crop: FarmerCropRecord }>('/farmer/crops', { method: 'POST', body: JSON.stringify(data) }),
+  updateFarmerCropRecord: (id: string, data: Partial<FarmerCropRecord>) => 
+    request<{ success: boolean; crop: FarmerCropRecord }>(`/farmer/crops/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteFarmerCropRecord: (id: string) => 
+    request<{ success: boolean; deletedId: string }>(`/farmer/crops/${id}`, { method: 'DELETE' }),
+  getFarmerPoints: (userId?: string) => 
+    request<{ success: boolean; balance: number; ledger: KisanPointsLedgerEntry[]; rules: any }>(`/farmer/points${userId ? `?userId=${userId}` : ''}`),
+  getFarmerSales: (userId?: string) => 
+    request<{ success: boolean; trust: FarmerTrustMetrics; sales: any[]; totalCount: number }>(`/farmer/sales${userId ? `?userId=${userId}` : ''}`)
 };
 
 export interface MandiLocationState {

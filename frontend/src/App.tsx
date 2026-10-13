@@ -63,8 +63,8 @@ const MainApp: React.FC = () => {
     if (!loading && !user) {
       if (pathname === '/list-crop') {
         navigate('/login?next=/list-crop');
-      } else if (pathname === '/dashboard') {
-        navigate('/login?next=/dashboard');
+      } else if (pathname === '/dashboard' || pathname === '/profile' || pathname === '/fields' || pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points') {
+        navigate(`/login?next=${pathname}`);
       } else if (pathname === '/aggregator') {
         navigate('/login?next=/aggregator');
       } else if (pathname === '/dealer') {
@@ -107,7 +107,8 @@ const MainApp: React.FC = () => {
   // Grouped route definitions to prevent blank pages
   const isFarmerRoute = pathname === '/list-crop' || pathname === '/farmer' || pathname === '/dashboard' ||
     pathname === '/buyers' || pathname === '/listings' || pathname === '/crops' || pathname === '/offers' ||
-    pathname === '/orders' || pathname === '/deals' || pathname === '/aggregator-info' || pathname === '/storage-farmer';
+    pathname === '/orders' || pathname === '/deals' || pathname === '/aggregator-info' || pathname === '/storage-farmer' ||
+    pathname === '/profile' || pathname === '/fields' || pathname === '/kisan-points' || pathname === '/sales';
 
   const isAggregatorRoute = pathname === '/aggregator' || pathname === '/demand' || pathname === '/supply' ||
     pathname === '/procurement' || pathname === '/aggregation' || pathname === '/batches' || pathname === '/logistics' ||

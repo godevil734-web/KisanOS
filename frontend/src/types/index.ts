@@ -572,6 +572,120 @@ export interface KisanSaathiMessage {
   isFallback?: boolean;
 }
 
+// -------------------------------------------------------------
+// FARMER DIGITAL PROFILE, MY FIELDS, CROP RECORDS & KISAN POINTS
+// -------------------------------------------------------------
+
+export interface FarmerField {
+  id: string;
+  farmerId: string;
+  name: string;
+  areaAcres: number;
+  village: string;
+  district: string;
+  state: string;
+  ownershipStatus: 'owned' | 'leased';
+  irrigationSource: string;
+  soilType?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  verificationStatus: 'self_declared' | 'pending_verification' | 'verified';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FarmerCropRecord {
+  id: string;
+  farmerId: string;
+  fieldId?: string | null;
+  fieldName?: string;
+  fieldAcres?: number;
+  cropName: string;
+  variety?: string;
+  season: 'Kharif' | 'Rabi' | 'Zaid';
+  sowingDate?: string;
+  expectedHarvestDate?: string;
+  estimatedYield: number;
+  yieldUnit: string;
+  actualHarvestedQuantity: number;
+  quantityForSale: number;
+  status: 'Planned' | 'Growing' | 'Ready to Harvest' | 'Harvested' | 'Sold';
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KisanPointsLedgerEntry {
+  id: string;
+  userId: string;
+  points: number;
+  reason: string;
+  referenceId?: string;
+  referenceType?: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface FarmerTrustMetrics {
+  trustScore: number;
+  trustTier: 'GOLD_PRODUCER' | 'VERIFIED_FARMER' | 'VERIFIED_IDENTITY' | 'NEW_MEMBER' | string;
+  trustBadge: string;
+  completedOrders: number;
+  totalOrders: number;
+  cancelledOrders: number;
+  fulfillmentRate: number;
+  totalQuantitySoldTons: number;
+  averageRating: number;
+  reviewsCount: number;
+  identityVerification: {
+    phoneVerified: boolean;
+    emailVerified: boolean;
+    adminKycVerified: boolean;
+    verifiedAt?: string;
+  };
+}
+
+export interface FarmerProfileMetrics {
+  totalCultivatedAcres: number;
+  registeredFieldsCount: number;
+  activeCropsCount: number;
+  totalCropRecordsCount: number;
+  totalHarvestedTons: number;
+  totalAvailableForSaleTons: number;
+  totalCompletedSales: number;
+  totalVerifiedQuantitySoldTons: number;
+  totalSalesRevenue: number;
+  kisanPointsBalance: number;
+}
+
+export interface FarmerDigitalProfile {
+  id: string;
+  name: string;
+  email?: string;
+  phone: string;
+  role: string;
+  avatarUrl?: string | null;
+  village: string;
+  district: string;
+  state: string;
+  preferredLanguage: string;
+  status: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+  metrics: FarmerProfileMetrics;
+  completion: {
+    percentage: number;
+    checks: { name: string; weight: number; met: boolean }[];
+    isEligibleForCompletionPoints: boolean;
+  };
+  trust: FarmerTrustMetrics;
+  fields: FarmerField[];
+  cropRecords: FarmerCropRecord[];
+  recentSales: any[];
+}
+
+
 
 
 

@@ -1312,6 +1312,161 @@ async function sanitizeListing(listing, reqUser) {
   return safeListing;
 }
 
+// -------------------------------------------------------------
+// FARMER DIGITAL PROFILE, MY FIELDS, CROP RECORDS & KISAN POINTS
+// -------------------------------------------------------------
+const farmerProfileService = require('./services/farmerProfileService');
+const kisanPointsService = require('./services/kisanPointsService');
+
+// Get Farmer Profile (self or admin)
+app.get('/api/farmer/profile', authMiddleware, async (req, res) => {
+  try {
+    const targetUserId = (req.query.userId && req.user.role === 'admin') ? req.query.userId : req.user.id;
+    const profile = await farmerProfileService.getFarmerProfile(targetUserId);
+    res.json({ success: true, profile });
+  } catch (err) {
+    console.error('[API] /api/farmer/profile error:', err.message);
+    res.status(err.message.includes('not found') ? 404 : 500).json({ success: false, error: err.message });
+  }
+});
+
+// Update Farmer Profile
+app.put('/api/farmer/profile', authMiddleware, async (req, res) => {
+  try {
+    const updated = await farmerProfileService.updateFarmerProfile(req.user.id, req.body);
+    res.json({ success: true, profile: updated });
+  } catch (err) {
+    console.error('[API] PUT /api/farmer/profile error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// My Fields - List
+app.get('/api/farmer/fields', authMiddleware, async (req, res) => {
+  try {
+    const targetUserId = (req.query.userId && req.user.role === 'admin') ? req.query.userId : req.user.id;
+    const fields = await farmerProfileService.getFarmerFields(targetUserId);
+    res.json({ success: true, fields });
+  } catch (err) {
+    console.error('[API] /api/farmer/fields error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// My Fields - Create
+app.post('/api/farmer/fields', authMiddleware, async (req, res) => {
+  try {
+    const newField = await farmerProfileService.addFarmerField(req.user.id, req.body);
+    res.status(201).json({ success: true, field: newField });
+  } catch (err) {
+    console.error('[API] POST /api/farmer/fields error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// My Fields - Update
+app.put('/api/farmer/fields/:id', authMiddleware, async (req, res) => {
+  try {
+    const updated = await farmerProfileService.updateFarmerField(req.user.id, req.params.id, req.body);
+    res.json({ success: true, field: updated });
+  } catch (err) {
+    console.error('[API] PUT /api/farmer/fields/:id error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// My Fields - Delete
+app.delete('/api/farmer/fields/:id', authMiddleware, async (req, res) => {
+  try {
+    const result = await farmerProfileService.deleteFarmerField(req.user.id, req.params.id);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[API] DELETE /api/farmer/fields/:id error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// My Crop Records - List
+app.get('/api/farmer/crops', authMiddleware, async (req, res) => {
+  try {
+    const targetUserId = (req.query.userId && req.user.role === 'admin') ? req.query.userId : req.user.id;
+    const crops = await farmerProfileService.getFarmerCropRecords(targetUserId);
+    res.json({ success: true, crops });
+  } catch (err) {
+    console.error('[API] /api/farmer/crops error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// My Crop Records - Create
+app.post('/api/farmer/crops', authMiddleware, async (req, res) => {
+  try {
+    const newCrop = await farmerProfileService.addFarmerCropRecord(req.user.id, req.body);
+    res.status(201).json({ success: true, crop: newCrop });
+  } catch (err) {
+    console.error('[API] POST /api/farmer/crops error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// My Crop Records - Update
+app.put('/api/farmer/crops/:id', authMiddleware, async (req, res) => {
+  try {
+    const updated = await farmerProfileService.updateFarmerCropRecord(req.user.id, req.params.id, req.body);
+    res.json({ success: true, crop: updated });
+  } catch (err) {
+    console.error('[API] PUT /api/farmer/crops/:id error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// My Crop Records - Delete
+app.delete('/api/farmer/crops/:id', authMiddleware, async (req, res) => {
+  try {
+    const result = await farmerProfileService.deleteFarmerCropRecord(req.user.id, req.params.id);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[API] DELETE /api/farmer/crops/:id error:', err.message);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Kisan Points - Balance & Ledger
+app.get('/api/farmer/points', authMiddleware, async (req, res) => {
+  try {
+    const targetUserId = (req.query.userId && req.user.role === 'admin') ? req.query.userId : req.user.id;
+    const balance = await kisanPointsService.getPointsBalance(targetUserId);
+    const ledger = await kisanPointsService.getPointsLedger(targetUserId);
+    res.json({
+      success: true,
+      balance,
+      ledger,
+      rules: kisanPointsService.POINTS_RULES
+    });
+  } catch (err) {
+    console.error('[API] /api/farmer/points error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Farmer Sales History & Evidence-Backed Trust
+app.get('/api/farmer/sales', authMiddleware, async (req, res) => {
+  try {
+    const targetUserId = (req.query.userId && req.user.role === 'admin') ? req.query.userId : req.user.id;
+    const trust = await kisanPointsService.calculateFarmerTrust(targetUserId);
+    const completedOrders = await db.find('orders', o => o.sellerId === targetUserId && o.status === 'COMPLETED');
+    res.json({
+      success: true,
+      trust,
+      sales: completedOrders,
+      totalCount: completedOrders.length
+    });
+  } catch (err) {
+    console.error('[API] /api/farmer/sales error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/listings', optionalAuth, async (req, res) => {
   try {
     const { crop, farmerId, listingType, grade } = req.query;
@@ -2757,6 +2912,11 @@ app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
   const updates = { status, timeline };
   if (status === 'COMPLETED') {
     updates.paymentStatus = 'RELEASED_TO_SELLER';
+    try {
+      await kisanPointsService.checkAndAwardSalePoints(req.params.id);
+    } catch (ptErr) {
+      console.warn('[Orders] Points awarding error on completion:', ptErr.message);
+    }
   }
 
   const updatedOrder = await db.updateById('orders', req.params.id, updates);

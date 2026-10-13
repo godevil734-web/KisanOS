@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { api } from '../services/api';
 import { UserRole } from '../types';
 import { 
   Sprout, 
@@ -15,7 +16,15 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  UserPlus
+  UserPlus,
+  Layers,
+  TrendingUp,
+  Coins,
+  Award,
+  Edit3,
+  CheckCircle2,
+  MapPin,
+  Sparkles
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -40,8 +49,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [pointsBalance, setPointsBalance] = useState<number | null>(null);
+
   const langMenuRef = useRef<HTMLDivElement>(null);
   const roleSwitcherRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -52,10 +65,47 @@ export const Navbar: React.FC<NavbarProps> = ({
       if (roleSwitcherRef.current && !roleSwitcherRef.current.contains(event.target as Node)) {
         setRoleSwitcherOpen(false);
       }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Fetch points balance for farmer
+  useEffect(() => {
+    if (user?.role === 'farmer') {
+      api.getFarmerPoints()
+        .then(res => {
+          if (res?.success && typeof res.balance === 'number') {
+            setPointsBalance(res.balance);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.id, user?.role]);
+
+  // Listen to points updates dispatched by actions
+  useEffect(() => {
+    const handlePointsUpdate = (e: any) => {
+      if (typeof e.detail?.balance === 'number') {
+        setPointsBalance(e.detail.balance);
+      }
+    };
+    window.addEventListener('kisan-points-updated', handlePointsUpdate);
+    return () => window.removeEventListener('kisan-points-updated', handlePointsUpdate);
+  }, []);
+
+  // Helper to get initials from user name
+  const getInitials = (name?: string): string => {
+    if (!name) return 'U';
+    const clean = name.trim().replace(/[^a-zA-Z0-9\s]/g, '');
+    if (!clean) return name.slice(0, 1).toUpperCase();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   const rolesList: { role: UserRole; labelKey: string; icon: string; name: string; tab: string }[] = [
     { role: 'farmer', labelKey: 'roles.farmer', icon: '🌾', name: 'Ramesh (Agra)', tab: 'farmer' },
@@ -73,6 +123,30 @@ export const Navbar: React.FC<NavbarProps> = ({
       window.location.href = path;
     }
     setMobileMenuOpen(false);
+  };
+
+  const handleProfileItemClick = (tabOrSubTab: string, isEdit = false) => {
+    setProfileMenuOpen(false);
+    setMobileMenuOpen(false);
+    if (user?.role === 'farmer') {
+      const targetSub = tabOrSubTab === 'profile' ? 'overview' : tabOrSubTab;
+      handleNav(`/dashboard?tab=${tabOrSubTab}${isEdit ? '&edit=1' : ''}`);
+      window.dispatchEvent(
+        new CustomEvent('farmer-navigate-tab', {
+          detail: {
+            tab: 'profile',
+            subTab: targetSub,
+            edit: isEdit
+          }
+        })
+      );
+    } else {
+      if (tabOrSubTab === 'profile') {
+        handleNav('/dashboard');
+      } else {
+        handleNav(`/${user?.role || 'dashboard'}`);
+      }
+    }
   };
 
   const isPublicLanding = currentTab === 'landing';
@@ -229,33 +303,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 )}
 
-                {/* Logged In: Name + Role Badge */}
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-[#D8D2C4] shadow-2xs">
-                  <div className="w-6 h-6 rounded-full bg-[#EEF5F2] flex items-center justify-center text-[#315C45]">
-                    <User className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex flex-col text-left leading-tight">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-extrabold text-xs text-[#26332C]">{user.name}</span>
-                      {user.status === 'pending' && (
-                        <span className="px-1.5 py-0.2 rounded text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
-                          {language === 'hi' ? 'लंबित' : 'Pending'}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] font-bold text-[#637067] uppercase tracking-wider">
-                      {t(`roles.${user.role}`) || user.role}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Role Indicator: Static Badge for Regular Users, Switcher ONLY for SuperAdmin */}
-                {user.role === 'admin' ? (
+                {/* Admin Persona Switcher (SuperAdmin only) */}
+                {user.role === 'admin' && (
                   <div className="relative" ref={roleSwitcherRef}>
                     <button
                       type="button"
                       onClick={() => setRoleSwitcherOpen(!roleSwitcherOpen)}
-                      className="min-h-[44px] px-3 py-1.5 rounded-xl border flex items-center gap-2 transition-all cursor-pointer shadow-2xs bg-slate-900 text-white border-slate-700 hover:bg-slate-800"
+                      className="min-h-[40px] sm:min-h-[44px] px-3 py-1.5 rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs bg-slate-900 text-white border-slate-700 hover:bg-slate-800"
                       aria-label="Admin Persona Switcher"
                       title={isHi ? 'व्यवस्थापक स्विच' : 'Admin Persona Switcher'}
                     >
@@ -365,32 +419,182 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                     )}
                   </div>
-                ) : (
-                  /* Regular Logged-In User: Verified, Static Role Pill (No switching into Buyer/Admin) */
-                  <div 
-                    className="min-h-[44px] px-3.5 py-1.5 rounded-xl border flex items-center gap-2 bg-white text-[#26332C] border-[#D8D2C4] shadow-2xs select-none"
-                    title={isHi ? `सत्यापित खाता: ${t(`roles.${user.role}`) || user.role}` : `Verified Account: ${t(`roles.${user.role}`) || user.role}`}
-                  >
-                    <div className="flex items-center gap-1.5 text-xs font-black">
-                      <span>{user.role === 'farmer' ? '🌾' : user.role === 'aggregator' ? '📦' : (user.role === 'buyer' || user.role === 'dealer') ? '🏢' : '👤'}</span>
-                      <span className="capitalize">{t(`roles.${user.role}`) || user.role}</span>
-                    </div>
-                  </div>
                 )}
 
-                {/* Logged In: Logout Button */}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    logout();
-                    handleNav('/');
-                  }}
-                  className="min-h-[44px] px-3 py-2 rounded-xl bg-[#FAF9F5] hover:bg-rose-50 text-rose-700 hover:text-rose-800 font-extrabold text-xs sm:text-sm border border-[#D8D2C4] hover:border-rose-300 transition-colors flex items-center gap-1.5 cursor-pointer"
-                  title={t('navbar.logout')}
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span className="hidden md:inline">{t('navbar.logout')}</span>
-                </button>
+                {/* TOP-RIGHT CIRCULAR AVATAR PROFILE MENU */}
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                    className="relative flex items-center gap-2 p-1 rounded-full hover:ring-2 hover:ring-[#315C45]/30 focus:outline-none transition-all cursor-pointer group select-none"
+                    aria-label="User Profile Menu"
+                    aria-expanded={profileMenuOpen}
+                  >
+                    {user.avatar || (user as any).profile_image || (user as any).profileImage ? (
+                      <img
+                        src={user.avatar || (user as any).profile_image || (user as any).profileImage}
+                        alt={user.name}
+                        className="w-10 h-10 rounded-full object-cover border-2 border-[#315C45] shadow-xs group-hover:scale-105 transition-transform"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#315C45] to-[#1E3A2B] text-white flex items-center justify-center font-black text-sm tracking-wide shadow-xs border-2 border-[#E5E0D5] group-hover:border-[#315C45] group-hover:scale-105 transition-transform">
+                        {getInitials(user.name)}
+                      </div>
+                    )}
+
+                    {/* Online status indicator badge */}
+                    <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow-2xs" />
+                  </button>
+
+                  {/* Profile Dropdown Menu */}
+                  {profileMenuOpen && (
+                    <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-2xl bg-white border border-[#E5E0D5] shadow-2xl p-2 z-50 animate-in fade-in duration-150">
+                      {/* Dropdown Header Card */}
+                      <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#EBE6DC] mb-2">
+                        <div className="flex items-center gap-3">
+                          {user.avatar || (user as any).profile_image || (user as any).profileImage ? (
+                            <img
+                              src={user.avatar || (user as any).profile_image || (user as any).profileImage}
+                              alt={user.name}
+                              className="w-11 h-11 rounded-full object-cover border-2 border-[#315C45] shrink-0"
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#315C45] to-[#1E3A2B] text-white flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
+                              {getInitials(user.name)}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-black text-sm text-[#26332C] truncate flex items-center gap-1.5">
+                              <span>{user.name}</span>
+                              {user.role === 'farmer' && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              )}
+                            </div>
+                            <div className="text-xs text-[#637067] truncate font-medium">
+                              {user.phone || user.email}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#EEF5F2] text-[#315C45] border border-[#D5E5DC]">
+                                {t(`roles.${user.role}`) || user.role}
+                              </span>
+                              {user.role === 'farmer' && pointsBalance !== null && (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1">
+                                  <span>🪙</span>
+                                  <span>{pointsBalance} pts</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dropdown Menu Items */}
+                      <div className="space-y-0.5">
+                        {user.role === 'farmer' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('profile')}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
+                            >
+                              <User className="w-4 h-4 text-[#315C45]" />
+                              <span>{isHi ? 'किसान प्रोफाइल देखें' : 'View Farmer Profile'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('fields')}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
+                            >
+                              <Layers className="w-4 h-4 text-[#315C45]" />
+                              <span>{isHi ? 'मेरे खेत (My Fields)' : 'My Fields'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('crops')}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
+                            >
+                              <Sprout className="w-4 h-4 text-[#315C45]" />
+                              <span>{isHi ? 'फसल रिकॉर्ड (My Crop Records)' : 'My Crop Records'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('sales')}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
+                            >
+                              <TrendingUp className="w-4 h-4 text-[#315C45]" />
+                              <span>{isHi ? 'मेरी बिक्री (My Sales)' : 'My Sales'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('points')}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Coins className="w-4 h-4 text-amber-600" />
+                                <span>{isHi ? 'किसान पॉइंट्स (Kisan Points)' : 'Kisan Points'}</span>
+                              </div>
+                              {pointsBalance !== null && (
+                                <span className="text-xs font-black text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded-lg border border-amber-200">
+                                  {pointsBalance} pts
+                                </span>
+                              )}
+                            </button>
+
+                            <div className="my-1 border-t border-[#F0ECE1]" />
+
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('profile', true)}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-4 h-4 text-stone-500" />
+                              <span>{isHi ? 'प्रोफाइल संपादित करें' : 'Edit Profile'}</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('profile')}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
+                            >
+                              <User className="w-4 h-4 text-[#315C45]" />
+                              <span>{isHi ? 'प्रोफाइल देखें' : 'View Profile'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleProfileItemClick('profile', true)}
+                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-4 h-4 text-stone-500" />
+                              <span>{isHi ? 'प्रोफाइल संपादित करें' : 'Edit Profile'}</span>
+                            </button>
+                          </>
+                        )}
+
+                        <div className="my-1 border-t border-[#F0ECE1]" />
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setProfileMenuOpen(false);
+                            await logout();
+                            handleNav('/');
+                          }}
+                          className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+                        >
+                          <LogOut className="w-4 h-4 text-rose-600" />
+                          <span>{t('navbar.logout') || (isHi ? 'साइन आउट' : 'Sign Out')}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </>
             )}
 
@@ -491,20 +695,69 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             ) : (
               <>
-                <div className="p-3 rounded-xl bg-[#FAF9F5] border border-[#E5E0D5] flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-[#EEF5F2] flex items-center justify-center text-[#315C45]">
-                      <User className="w-4 h-4" />
+                <div className="p-3 rounded-2xl bg-[#FAF9F5] border border-[#E5E0D5] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      {user.avatar || (user as any).profile_image || (user as any).profileImage ? (
+                        <img
+                          src={user.avatar || (user as any).profile_image || (user as any).profileImage}
+                          alt={user.name}
+                          className="w-10 h-10 rounded-full object-cover border-2 border-[#315C45]"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#315C45] to-[#1E3A2B] text-white flex items-center justify-center font-black text-xs shadow-2xs">
+                          {getInitials(user.name)}
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-extrabold text-sm text-[#26332C]">{user.name}</div>
+                        <div className="text-xs text-[#637067] font-semibold">{t(`roles.${user.role}`) || user.role}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-extrabold text-sm text-[#26332C]">{user.name}</div>
-                      <div className="text-xs text-[#637067] font-semibold">{t(`roles.${user.role}`) || user.role}</div>
-                    </div>
+                    {user.role === 'farmer' && pointsBalance !== null && (
+                      <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                        <span>🪙</span>
+                        <span>{pointsBalance} pts</span>
+                      </span>
+                    )}
                   </div>
-                  {user.status === 'pending' && (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-300">
-                      {language === 'hi' ? 'लंबित' : 'Pending'}
-                    </span>
+
+                  {/* Mobile Farmer Profile Links */}
+                  {user.role === 'farmer' && (
+                    <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-[#EAE5D8]">
+                      <button
+                        type="button"
+                        onClick={() => handleProfileItemClick('profile')}
+                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
+                      >
+                        <User className="w-3.5 h-3.5 text-[#315C45]" />
+                        <span>{isHi ? 'प्रोफाइल' : 'Profile'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProfileItemClick('fields')}
+                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-[#315C45]" />
+                        <span>{isHi ? 'मेरे खेत' : 'My Fields'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProfileItemClick('crops')}
+                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
+                      >
+                        <Sprout className="w-3.5 h-3.5 text-[#315C45]" />
+                        <span>{isHi ? 'फसल रिकॉर्ड' : 'Crop Records'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProfileItemClick('points')}
+                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
+                      >
+                        <Coins className="w-3.5 h-3.5 text-amber-600" />
+                        <span>{isHi ? 'पॉइंट्स लेजर' : 'Points Ledger'}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 

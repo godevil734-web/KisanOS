@@ -67,6 +67,10 @@ function mapRow(row) {
       v.trim() !== '' &&
       (k.includes('price') ||
        k.includes('tons') ||
+       k.includes('acres') ||
+       k.includes('yield') ||
+       k.includes('quantity') ||
+       k.includes('points') ||
        k.includes('rating') ||
        k.includes('cost') ||
        k.includes('amount') ||
@@ -106,7 +110,10 @@ const TABLE_MAP = {
   crops: 'crops',
   farmActivities: 'farm_activities',
   activities: 'farm_activities',
-  procurementPlans: 'procurement_plans'
+  procurementPlans: 'procurement_plans',
+  farmerFields: 'farmer_fields',
+  farmerCropRecords: 'farmer_crop_records',
+  kisanPointsLedger: 'kisan_points_ledger'
 };
 
 let tableColumnsCache = null;

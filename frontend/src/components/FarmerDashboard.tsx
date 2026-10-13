@@ -50,6 +50,7 @@ import { VoiceSearchInput } from './VoiceSearchInput';
 import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
 import { MandiPricesView } from './MandiPricesView';
+import { FarmerProfileView } from './FarmerProfileView';
 
 type Lang = 'hi' | 'hinglish' | 'en';
 
@@ -76,6 +77,7 @@ export const FarmerDashboard: React.FC = () => {
 
   // Farmer Navigation Tabs: 'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'
   const [activeTab, setActiveTab] = useState<'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'>('home');
+  const [profileSubTab, setProfileSubTab] = useState<'overview' | 'fields' | 'crops' | 'sales' | 'points'>('overview');
 
   // Backend Data
   const [listings, setListings] = useState<FarmerListing[]>([]);
@@ -235,9 +237,18 @@ export const FarmerDashboard: React.FC = () => {
 
   useEffect(() => {
     const handleTabNav = (e: any) => {
-      if (e.detail?.tab) {
+      if (e.detail?.tab === 'profile') {
+        setActiveTab('profile');
+        if (e.detail?.subTab) {
+          setProfileSubTab(e.detail.subTab);
+        }
+      } else if (['fields', 'crops', 'sales', 'points'].includes(e.detail?.tab)) {
+        setActiveTab('profile');
+        setProfileSubTab(e.detail.tab === 'points' ? 'points' : e.detail.tab);
+      } else if (e.detail?.tab) {
         setActiveTab(e.detail.tab);
       }
+
       if (e.detail?.cropName) {
         setBuyerFilterCrop(e.detail.cropName);
         const matchL = activeListings.find(l => l.cropName.toLowerCase() === e.detail.cropName.toLowerCase());
@@ -268,10 +279,36 @@ export const FarmerDashboard: React.FC = () => {
       }
     };
 
-    // Check URL parameters on mount
+    // Check URL parameters and pathname on mount
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
-    if (tabParam && ['home', 'listings', 'buyers', 'offers', 'orders', 'storage', 'profile', 'aggregator_info', 'activities'].includes(tabParam)) {
+    const subParam = urlParams.get('subtab');
+    const currentPath = window.location.pathname;
+
+    if (currentPath === '/fields') {
+      setActiveTab('profile');
+      setProfileSubTab('fields');
+    } else if (currentPath === '/crops') {
+      setActiveTab('profile');
+      setProfileSubTab('crops');
+    } else if (currentPath === '/sales') {
+      setActiveTab('profile');
+      setProfileSubTab('sales');
+    } else if (currentPath === '/kisan-points') {
+      setActiveTab('profile');
+      setProfileSubTab('points');
+    } else if (currentPath === '/profile') {
+      setActiveTab('profile');
+      setProfileSubTab('overview');
+    } else if (tabParam === 'fields' || tabParam === 'crops' || tabParam === 'sales' || tabParam === 'points') {
+      setActiveTab('profile');
+      setProfileSubTab(tabParam === 'points' ? 'points' : tabParam as any);
+    } else if (tabParam === 'profile') {
+      setActiveTab('profile');
+      if (subParam && ['overview', 'fields', 'crops', 'sales', 'points'].includes(subParam)) {
+        setProfileSubTab(subParam as any);
+      }
+    } else if (tabParam && ['home', 'listings', 'mandi_prices', 'buyers', 'offers', 'orders', 'storage', 'aggregator_info', 'activities'].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
 
@@ -709,7 +746,7 @@ export const FarmerDashboard: React.FC = () => {
           { id: 'orders', label: `${t.myDeals}`, count: activeOrdersCount, icon: Package },
           { id: 'storage', label: t.storage, icon: Warehouse },
           { id: 'aggregator_info', label: t.poolWithFarmers, icon: Layers },
-          { id: 'profile', label: t.profile, icon: User },
+          { id: 'profile', label: lang === 'hi' ? 'डिजिटल प्रोफाइल व खेत' : 'Digital Profile & Fields', icon: User },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -2807,104 +2844,21 @@ export const FarmerDashboard: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 👤 TAB 8: FARMER PROFILE (मेरा प्रोफाइल) */}
+      {/* 👤 TAB 8: FARMER DIGITAL PROFILE, FIELDS, CROPS & KISAN POINTS */}
       {/* ========================================================================= */}
       {activeTab === 'profile' && (
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6 animate-fadeIn">
-          <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
-            <div className="h-16 w-16 rounded-2xl bg-emerald-100 text-emerald-800 font-black text-2xl flex items-center justify-center">
-              👨‍🌾
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900">{user?.name}</h2>
-              <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                <span>{user?.phone}</span>
-                <span>•</span>
-                <span>{user?.email}</span>
-              </div>
-              <div className="text-xs text-emerald-700 font-bold mt-1">
-                ✓ आधार व बैंक खाता सत्यापित (Verified Profile)
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-              <div className="font-bold text-slate-800 text-sm">खेती की जानकारी (Farm Details)</div>
-              <div className="flex justify-between text-slate-600">
-                <span>गाँव व जिला:</span>
-                <span className="font-bold text-slate-900">{user?.location}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>कुल जमीन:</span>
-                <span className="font-bold text-slate-900">{user?.farmerProfile?.acres || 12} एकड़</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>मुख्य फसलें:</span>
-                <span className="font-bold text-slate-900">
-                  {user?.farmerProfile?.cropsGrown?.join(', ') || 'Potato, Wheat'}
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>सिंचाई साधन:</span>
-                <span className="font-bold text-slate-900">{user?.farmerProfile?.irrigationType || 'Tube well'}</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-              <div className="font-bold text-slate-800 text-sm">मंच पर रिकॉर्ड (Track Record)</div>
-              <div className="flex justify-between text-slate-600">
-                <span>सफल सौदे:</span>
-                <span className="font-bold text-emerald-700">{user?.completedOrders || 18} पूरे हुए</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>रेटिंग:</span>
-                <span className="font-bold text-amber-600">{user?.rating || 4.8} ★ ({user?.reviewsCount || 14} समीक्षाएं)</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>सक्रिय फसलें:</span>
-                <span className="font-bold text-slate-900">{listings.length} फसलें दर्ज</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Language Preference inside Profile */}
-          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div>
-              <div className="font-bold text-slate-900">पसंदीदा भाषा (App Language)</div>
-              <div className="text-slate-500">चुनें जिस भाषा में आप सहज हैं</div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => handleLangChange('hi')}
-                className={`px-3 py-1.5 rounded-lg font-bold ${lang === 'hi' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}
-              >
-                हिंदी
-              </button>
-              <button
-                onClick={() => handleLangChange('hinglish')}
-                className={`px-3 py-1.5 rounded-lg font-bold ${lang === 'hinglish' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}
-              >
-                Hinglish
-              </button>
-              <button
-                onClick={() => handleLangChange('en')}
-                className={`px-3 py-1.5 rounded-lg font-bold ${lang === 'en' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700'}`}
-              >
-                English
-              </button>
-            </div>
-          </div>
-
-          {/* Helpline box */}
-          <div className="p-4 rounded-2xl bg-slate-100 flex items-center justify-between text-xs text-slate-700">
-            <div className="flex items-center gap-2">
-              <PhoneCall className="h-4 w-4 text-emerald-600" />
-              <span>किसान सहायता नंबर: <strong>1800-123-KISAN (54726)</strong></span>
-            </div>
-            <span className="text-[11px] text-slate-400">टोल-फ्री</span>
-          </div>
-        </div>
+        <FarmerProfileView
+          initialSubTab={profileSubTab}
+          onNavigateTab={(targetTab) => {
+            if (['home', 'listings', 'mandi_prices', 'buyers', 'offers', 'orders', 'storage', 'aggregator_info', 'activities'].includes(targetTab)) {
+              setActiveTab(targetTab as any);
+            }
+          }}
+          onOpenListingWizard={() => {
+            setWizardStep(1);
+            setShowAddWizard(true);
+          }}
+        />
       )}
 
       {/* ========================================================================= */}

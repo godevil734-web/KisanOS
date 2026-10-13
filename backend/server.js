@@ -3103,11 +3103,35 @@ app.get('/api/mandi-prices', optionalAuth, async (req, res) => {
     res.json(data);
   } catch (error) {
     const isValidation = error.message && error.message.includes('State is required');
-    const status = isValidation ? 400 : 502;
+    const isAuth = error.message && (error.message.includes('MISSING_API_KEY') || error.message.includes('UPSTREAM_AUTH_ERROR'));
+    const status = isValidation ? 400 : (isAuth ? 503 : (error.status || 502));
     console.error(`[API] /api/mandi-prices error (${status}):`, error.message);
     res.status(status).json({
       success: false,
-      error: error.message || 'Failed to fetch government mandi prices from official servers.'
+      error: error.message || 'Failed to fetch government mandi prices from official servers.',
+      diagnostics: error.diagnostics || {
+        timestamp: new Date().toISOString(),
+        error: error.message
+      }
+    });
+  }
+});
+
+// Dedicated diagnostic endpoint for Mandi API health & configuration check
+app.get('/api/mandi-diagnostics', async (req, res) => {
+  const { testMandiConnection } = require('./services/mandiService');
+  try {
+    const diag = await testMandiConnection();
+    res.json({
+      success: diag.status === 200,
+      timestamp: new Date().toISOString(),
+      ...diag
+    });
+  } catch (err) {
+    res.status(502).json({
+      success: false,
+      error: err.message,
+      timestamp: new Date().toISOString()
     });
   }
 });

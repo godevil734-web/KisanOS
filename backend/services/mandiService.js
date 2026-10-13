@@ -20,11 +20,53 @@ const https = require('https');
 
 // Read API key and resource ID strictly from environment variables
 function getDataGovApiKey() {
-  return process.env.DATA_GOV_API_KEY || process.env.DATA_GOV_IN_API_KEY || '';
+  const envVars = [
+    'DATA_GOV_API_KEY',
+    'DATA_GOV_IN_API_KEY',
+    'DATAGOV_API_KEY',
+    'DATA_GOV_KEY'
+  ];
+  for (const v of envVars) {
+    const val = process.env[v];
+    if (typeof val === 'string' && val.trim().length > 0) {
+      // Remove any surrounding single or double quotes and trim whitespace
+      return val.trim().replace(/^["']|["']$/g, '').trim();
+    }
+  }
+  return '';
+}
+
+function getApiKeyDiagnostics() {
+  const envVars = [
+    'DATA_GOV_API_KEY',
+    'DATA_GOV_IN_API_KEY',
+    'DATAGOV_API_KEY',
+    'DATA_GOV_KEY'
+  ];
+  let foundVar = null;
+  let keyVal = '';
+  for (const v of envVars) {
+    const val = process.env[v];
+    if (typeof val === 'string' && val.trim().length > 0) {
+      foundVar = v;
+      keyVal = val.trim().replace(/^["']|["']$/g, '').trim();
+      break;
+    }
+  }
+  return {
+    isConfigured: Boolean(keyVal && keyVal.length > 0),
+    envVarName: foundVar || 'NONE',
+    keyLength: keyVal.length,
+    keyPreview: keyVal.length >= 8 ? `${keyVal.slice(0, 4)}...${keyVal.slice(-4)}` : (keyVal ? '***' : null)
+  };
 }
 
 function getDataGovResourceId() {
-  return process.env.DATA_GOV_RESOURCE_ID || process.env.DATA_GOV_IN_RESOURCE_ID || '9ef84268-d588-465a-a308-a864a43d0070';
+  const raw = process.env.DATA_GOV_RESOURCE_ID || 
+              process.env.DATA_GOV_IN_RESOURCE_ID || 
+              process.env.DATAGOV_RESOURCE_ID || 
+              '9ef84268-d588-465a-a308-a864a43d0070';
+  return (typeof raw === 'string' ? raw.trim().replace(/^["']|["']$/g, '').trim() : '9ef84268-d588-465a-a308-a864a43d0070');
 }
 
 // In-memory cache for government API responses (TTL: 15 minutes)
@@ -40,16 +82,60 @@ let statesDistrictsCache = null;
 let statesDistrictsExpiresAt = 0;
 
 /**
- * Standard HTTPS fetcher with timeout and SSL flexibility for Govt endpoints
+ * Universal fetcher for Government Open Data (data.gov.in)
+ * Tries native fetch first (standard in Node 18+ and Vercel Serverless),
+ * with automatic fallback to https.get (with IPv4 force) if connection fails.
+ * Captures exact HTTP status and sanitized response body for diagnostics.
  */
-function fetchGovtJson(url, options = {}) {
+async function fetchGovtData(url, options = {}) {
+  const timeoutMs = options.timeout || 12000;
+  let lastStatus = null;
+  let lastBody = null;
+  let lastError = null;
+
+  // 1. Try native fetch first (standard in Node 18+ and Vercel Serverless)
+  if (typeof globalThis.fetch === 'function') {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal)',
+          'Accept': 'application/json',
+          ...(options.headers || {})
+        }
+      });
+      clearTimeout(timer);
+      lastStatus = res.status;
+      if (!res.ok) {
+        const rawText = await res.text().catch(() => '');
+        lastBody = rawText ? rawText.slice(0, 200) : res.statusText;
+        const err = new Error(`Govt API HTTP error: ${res.status} ${res.statusText}`);
+        err.status = res.status;
+        err.body = lastBody;
+        throw err;
+      }
+      const data = await res.json();
+      return { data, status: res.status, transport: 'native-fetch' };
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = err;
+      // If server responded with an HTTP status code (e.g. 401, 403, 404, 429), rethrow immediately
+      // without retrying IPv4 since the host was reached and returned a definitive response
+      if (err.status && err.status >= 400) {
+        throw err;
+      }
+    }
+  }
+
+  // 2. Fallback to https.get with IPv4 force (useful if IPv6 routing to NIC hangs)
   return new Promise((resolve, reject) => {
-    const timeoutMs = options.timeout || 6000;
     const req = https.get(
       url,
       {
         rejectUnauthorized: false,
-        family: 4, // Force IPv4 to avoid IPv6 unreachable routes on NIC
+        family: 4,
         timeout: timeoutMs,
         headers: {
           'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal)',
@@ -58,19 +144,24 @@ function fetchGovtJson(url, options = {}) {
         }
       },
       (res) => {
+        lastStatus = res.statusCode;
         let body = '';
-        res.on('data', (chunk) => {
-          body += chunk;
-        });
+        res.on('data', (chunk) => { body += chunk; });
         res.on('end', () => {
           if (res.statusCode >= 400) {
-            return reject(new Error(`Govt API HTTP error: ${res.statusCode} ${res.statusMessage}`));
+            lastBody = body.slice(0, 200);
+            const err = new Error(`Govt API HTTP error: ${res.statusCode} ${res.statusMessage}`);
+            err.status = res.statusCode;
+            err.body = lastBody;
+            return reject(err);
           }
           try {
             const parsed = JSON.parse(body);
-            resolve(parsed);
+            resolve({ data: parsed, status: res.statusCode, transport: 'https-ipv4' });
           } catch (e) {
-            reject(new Error(`Failed to parse government JSON: ${e.message}`));
+            const err = new Error(`Failed to parse government JSON: ${e.message}`);
+            err.status = res.statusCode;
+            reject(err);
           }
         });
       }
@@ -78,13 +169,23 @@ function fetchGovtJson(url, options = {}) {
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error(`Government API timeout after ${timeoutMs}ms`));
+      const err = new Error(`Government API timeout after ${timeoutMs}ms`);
+      err.status = 408;
+      reject(err);
     });
 
     req.on('error', (err) => {
-      reject(err);
+      if (lastError && !err.status) {
+        reject(lastError);
+      } else {
+        reject(err);
+      }
     });
   });
+}
+
+function fetchGovtJson(url, options = {}) {
+  return fetchGovtData(url, options).then(r => r.data);
 }
 
 /**
@@ -361,12 +462,21 @@ function extractLatestArrivalDate(records) {
  */
 async function fetchFromDataGovIn(state, district, commodity, limit = 200) {
   const apiKey = getDataGovApiKey();
-  if (!apiKey) {
-    console.warn('[MandiService] data.gov.in API key is missing from environment (checked DATA_GOV_API_KEY and DATA_GOV_IN_API_KEY).');
-    return null;
-  }
-  const resourceId = getDataGovResourceId();
+  const keyDiag = getApiKeyDiagnostics();
 
+  if (!apiKey) {
+    console.warn('[MandiService] data.gov.in API key is missing from environment (checked DATA_GOV_API_KEY, DATA_GOV_IN_API_KEY).');
+    return {
+      records: null,
+      status: 401,
+      errorCategory: 'MISSING_API_KEY',
+      errorMessage: 'data.gov.in API key is missing from server environment variables.',
+      durationMs: 0,
+      keyDiag
+    };
+  }
+
+  const resourceId = getDataGovResourceId();
   const params = new URLSearchParams({
     'api-key': apiKey,
     'format': 'json',
@@ -378,21 +488,7 @@ async function fetchFromDataGovIn(state, district, commodity, limit = 200) {
   if (commodity && commodity.toLowerCase() !== 'all') params.append('filters[commodity]', commodity.trim());
 
   const url = `https://api.data.gov.in/resource/${resourceId}?${params.toString()}`;
-
   const fetchStart = Date.now();
-  let json = null;
-  try {
-    json = await fetchGovtJson(url, { timeout: 15000 });
-  } catch (err) {
-    console.warn(`[MandiService] data.gov.in primary attempt failed (${err.message}), retrying once...`);
-    try {
-      json = await fetchGovtJson(url, { timeout: 15000 });
-    } catch (retryErr) {
-      console.warn(`[MandiService] data.gov.in retry also failed (${retryErr.message}).`);
-      throw retryErr;
-    }
-  }
-  const durationMs = Date.now() - fetchStart;
 
   const mapRecords = (rawRecords) => {
     return rawRecords.map((r, index) => {
@@ -422,38 +518,95 @@ async function fetchFromDataGovIn(state, district, commodity, limit = 200) {
     });
   };
 
-  if (json && Array.isArray(json.records) && json.records.length > 0) {
-    return { records: mapRecords(json.records), durationMs, total: json.total || json.records.length };
-  }
+  try {
+    const { data: json, status, transport } = await fetchGovtData(url, { timeout: 12000 });
+    const durationMs = Date.now() - fetchStart;
 
-  // If exact commodity filter returned 0 records, fallback to state/district broad query to allow partial match
-  if (commodity && commodity.toLowerCase() !== 'all') {
-    try {
-      const fallbackParams = new URLSearchParams({
-        'api-key': apiKey,
-        'format': 'json',
-        'limit': String(limit)
-      });
-      if (state) fallbackParams.append('filters[state]', state.trim());
-      if (district && district.toLowerCase() !== 'all') fallbackParams.append('filters[district]', district.trim());
-      const fallbackUrl = `https://api.data.gov.in/resource/${resourceId}?${fallbackParams.toString()}`;
-      const fbJson = await fetchGovtJson(fallbackUrl, { timeout: 8000 });
-      if (fbJson && Array.isArray(fbJson.records) && fbJson.records.length > 0) {
-        const target = commodity.toLowerCase().trim();
-        const matched = fbJson.records.filter(r => 
-          (r.commodity || '').toLowerCase().includes(target) || 
-          (r.variety || '').toLowerCase().includes(target)
-        );
-        if (matched.length > 0) {
-          return { records: mapRecords(matched), durationMs: Date.now() - fetchStart, total: matched.length };
-        }
-      }
-    } catch (fbErr) {
-      console.warn(`[MandiService] data.gov.in fallback query failed: ${fbErr.message}`);
+    if (json && Array.isArray(json.records) && json.records.length > 0) {
+      return {
+        records: mapRecords(json.records),
+        durationMs,
+        total: json.total || json.records.length,
+        status: 200,
+        transport,
+        keyDiag
+      };
     }
-  }
 
-  return { records: [], durationMs, total: 0 };
+    // If exact commodity filter returned 0 records, fallback to state/district broad query to allow partial match
+    if (commodity && commodity.toLowerCase() !== 'all') {
+      try {
+        const fallbackParams = new URLSearchParams({
+          'api-key': apiKey,
+          'format': 'json',
+          'limit': String(limit)
+        });
+        if (state) fallbackParams.append('filters[state]', state.trim());
+        if (district && district.toLowerCase() !== 'all') fallbackParams.append('filters[district]', district.trim());
+        const fallbackUrl = `https://api.data.gov.in/resource/${resourceId}?${fallbackParams.toString()}`;
+        const { data: fbJson } = await fetchGovtData(fallbackUrl, { timeout: 10000 });
+        if (fbJson && Array.isArray(fbJson.records) && fbJson.records.length > 0) {
+          const target = commodity.toLowerCase().trim();
+          const matched = fbJson.records.filter(r => 
+            (r.commodity || '').toLowerCase().includes(target) || 
+            (r.variety || '').toLowerCase().includes(target)
+          );
+          if (matched.length > 0) {
+            return {
+              records: mapRecords(matched),
+              durationMs: Date.now() - fetchStart,
+              total: matched.length,
+              status: 200,
+              transport,
+              keyDiag
+            };
+          }
+        }
+      } catch (fbErr) {
+        console.warn(`[MandiService] data.gov.in fallback query failed: ${fbErr.message}`);
+      }
+    }
+
+    // Genuinely 0 records found for this selection
+    return {
+      records: [],
+      durationMs,
+      total: 0,
+      status: 200,
+      transport,
+      keyDiag
+    };
+  } catch (err) {
+    const durationMs = Date.now() - fetchStart;
+    const status = err.status || 502;
+    let errorCategory = 'UPSTREAM_SERVER_ERROR';
+    if (status === 401 || status === 403) {
+      errorCategory = 'UPSTREAM_AUTH_ERROR';
+    } else if (status === 429) {
+      errorCategory = 'UPSTREAM_RATE_LIMITED';
+    } else if (status === 408 || (err.message && err.message.toLowerCase().includes('timeout'))) {
+      errorCategory = 'UPSTREAM_TIMEOUT';
+    } else if (err.message && err.message.includes('ENOTFOUND')) {
+      errorCategory = 'UPSTREAM_DNS_ERROR';
+    }
+
+    // Sanitize error message to prevent leaking API key
+    let sanitizedMessage = err.message || 'data.gov.in request failed';
+    if (apiKey) {
+      sanitizedMessage = sanitizedMessage.split(apiKey).join('[REDACTED_API_KEY]');
+    }
+
+    console.error(`[MandiService] data.gov.in upstream failure (${status} ${errorCategory}): ${sanitizedMessage}`);
+
+    return {
+      records: null,
+      status,
+      errorCategory,
+      errorMessage: sanitizedMessage,
+      durationMs,
+      keyDiag
+    };
+  }
 }
 
 /**
@@ -638,34 +791,89 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     cacheStatus = refresh ? 'BYPASS' : 'MISS';
 
     // 1. Try Primary: data.gov.in
-    try {
-      const fetchLimit = cleanDistrict === 'all' && !cleanCommodity ? Math.max(limit, 300) : Math.max(limit, 200);
-      const dataGovResult = await fetchFromDataGovIn(cleanState, cleanDistrict, cleanCommodity, fetchLimit);
-      if (dataGovResult && Array.isArray(dataGovResult.records)) {
-        resultRecords = dataGovResult.records;
-        apiDurationMs = dataGovResult.durationMs;
-        source = 'data.gov.in (OGD Platform, Ministry of Agriculture)';
-        const latestFromRecords = extractLatestArrivalDate(resultRecords);
-        if (latestFromRecords) {
-          reportDate = latestFromRecords;
-        }
-      }
-    } catch (e) {
-      console.warn(`[MandiService] data.gov.in query failed (${e.message}), attempting Agmarknet 2.0 fallback...`);
-    }
+    // 1. Try Primary: data.gov.in
+    const fetchLimit = cleanDistrict === 'all' && !cleanCommodity ? Math.max(limit, 300) : Math.max(limit, 200);
+    const dataGovResult = await fetchFromDataGovIn(cleanState, cleanDistrict, cleanCommodity, fetchLimit);
 
-    // 2. Fallback to Agmarknet 2.0 only if data.gov.in returned null (e.g. key missing or connection error)
-    if (resultRecords === null) {
+    if (dataGovResult && dataGovResult.records !== null) {
+      resultRecords = dataGovResult.records;
+      apiDurationMs = dataGovResult.durationMs;
+      source = 'data.gov.in (OGD Platform, Ministry of Agriculture)';
+      const latestFromRecords = extractLatestArrivalDate(resultRecords);
+      if (latestFromRecords) {
+        reportDate = latestFromRecords;
+      }
+    } else {
+      // data.gov.in query failed or missing API key
+      const errorCat = dataGovResult?.errorCategory || 'UPSTREAM_ERROR';
+      const errorMsg = dataGovResult?.errorMessage || 'Government data.gov.in API is unreachable';
+      const httpStatus = dataGovResult?.status || 502;
+      const keyInfo = dataGovResult?.keyDiag || getApiKeyDiagnostics();
+
+      console.error(`[MandiPrices] data.gov.in failed (${errorCat}, HTTP ${httpStatus}): ${errorMsg}. Key configured: ${keyInfo.isConfigured} (${keyInfo.envVarName})`);
+
+      // If missing key or unauthorized, fail fast with explicit diagnostic error
+      if (errorCat === 'MISSING_API_KEY' || errorCat === 'UPSTREAM_AUTH_ERROR') {
+        const err = new Error(`Official Mandi API (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
+        err.status = httpStatus;
+        err.diagnostics = {
+          apiKeyConfigured: keyInfo.isConfigured,
+          apiKeyLength: keyInfo.keyLength,
+          configuredEnvVar: keyInfo.envVarName,
+          keyPreview: keyInfo.keyPreview,
+          resourceId: getDataGovResourceId(),
+          upstreamHttpStatus: httpStatus,
+          upstreamErrorCategory: errorCat,
+          upstreamErrorMessage: errorMsg,
+          apiDurationMs: dataGovResult?.durationMs || null
+        };
+        throw err;
+      }
+
+      // If network/server error, try Agmarknet 2.0 fallback only if genuine records are returned
       try {
         const agmarkStart = Date.now();
         const agmarkRes = await fetchFromAgmarknet(cleanState, cleanDistrict, date);
-        apiDurationMs = Date.now() - agmarkStart;
-        resultRecords = agmarkRes.records;
-        reportDate = agmarkRes.reportDate;
-        source = 'Agmarknet 2.0 (Directorate of Marketing & Inspection, Ministry of Agriculture)';
-      } catch (err) {
-        console.error('[MandiService] Agmarknet query failed:', err.message);
-        throw new Error(`Unable to reach Government Agriculture Mandi network (${err.message}). Please check network connectivity or try again shortly.`);
+        if (agmarkRes && Array.isArray(agmarkRes.records) && agmarkRes.records.length > 0) {
+          apiDurationMs = Date.now() - agmarkStart;
+          resultRecords = agmarkRes.records;
+          reportDate = agmarkRes.reportDate;
+          source = 'Agmarknet 2.0 (Directorate of Marketing & Inspection, Ministry of Agriculture)';
+        } else {
+          // Both data.gov.in and fallback returned no records due to upstream issue
+          const err = new Error(`Official Mandi API failure (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
+          err.status = httpStatus;
+          err.diagnostics = {
+            apiKeyConfigured: keyInfo.isConfigured,
+            apiKeyLength: keyInfo.keyLength,
+            configuredEnvVar: keyInfo.envVarName,
+            keyPreview: keyInfo.keyPreview,
+            resourceId: getDataGovResourceId(),
+            upstreamHttpStatus: httpStatus,
+            upstreamErrorCategory: errorCat,
+            upstreamErrorMessage: errorMsg,
+            fallbackAttempted: true,
+            apiDurationMs: dataGovResult?.durationMs || null
+          };
+          throw err;
+        }
+      } catch (agmarkErr) {
+        console.error('[MandiService] Agmarknet fallback also failed:', agmarkErr.message);
+        const err = new Error(`Official Mandi API failure (${errorCat}): ${errorMsg} (HTTP ${httpStatus})`);
+        err.status = httpStatus;
+        err.diagnostics = {
+          apiKeyConfigured: keyInfo.isConfigured,
+          apiKeyLength: keyInfo.keyLength,
+          configuredEnvVar: keyInfo.envVarName,
+          keyPreview: keyInfo.keyPreview,
+          resourceId: getDataGovResourceId(),
+          upstreamHttpStatus: httpStatus,
+          upstreamErrorCategory: errorCat,
+          upstreamErrorMessage: errorMsg,
+          fallbackError: agmarkErr.message,
+          apiDurationMs: dataGovResult?.durationMs || null
+        };
+        throw err;
       }
     }
 
@@ -752,12 +960,72 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     distinctCommoditiesCount: summaries.length,
     commoditySummaries: summaries,
     records: filtered.slice(0, limit),
+    diagnostics: {
+      apiKeyConfigured: true,
+      envVarSource: getApiKeyDiagnostics().envVarName,
+      resourceId: getDataGovResourceId(),
+      sourceSelected: source
+    },
     lastUpdated: new Date().toISOString()
   };
+}
+
+/**
+ * Direct diagnostic test for data.gov.in connectivity & authentication
+ * Safe: Never returns or logs secrets.
+ */
+async function testMandiConnection() {
+  const keyDiag = getApiKeyDiagnostics();
+  const apiKey = getDataGovApiKey();
+  const resourceId = getDataGovResourceId();
+
+  if (!apiKey) {
+    return {
+      status: 401,
+      errorCategory: 'MISSING_API_KEY',
+      errorMessage: 'data.gov.in API key is not configured in server environment variables.',
+      keyDiag,
+      resourceId
+    };
+  }
+
+  const url = `https://api.data.gov.in/resource/${resourceId}?api-key=${encodeURIComponent(apiKey)}&format=json&limit=1`;
+  const t0 = Date.now();
+  try {
+    const { data, status, transport } = await fetchGovtData(url, { timeout: 10000 });
+    const latencyMs = Date.now() - t0;
+    return {
+      status,
+      latencyMs,
+      transport,
+      totalGovRecords: data.total || (Array.isArray(data.records) ? data.records.length : 0),
+      resourceId,
+      keyDiag
+    };
+  } catch (err) {
+    const latencyMs = Date.now() - t0;
+    const status = err.status || 502;
+    let sanitizedMessage = err.message || 'data.gov.in connection failed';
+    if (apiKey) {
+      sanitizedMessage = sanitizedMessage.split(apiKey).join('[REDACTED_API_KEY]');
+    }
+    return {
+      status,
+      latencyMs,
+      errorCategory: status === 401 || status === 403 ? 'AUTH_FAILURE' : (status === 408 ? 'TIMEOUT' : 'NETWORK_ERROR'),
+      errorMessage: sanitizedMessage,
+      errorBody: err.body || null,
+      resourceId,
+      keyDiag
+    };
+  }
 }
 
 module.exports = {
   getMandiLocations,
   getMandiPrices,
+  testMandiConnection,
+  getApiKeyDiagnostics,
+  getDataGovResourceId,
   STATIC_INDIAN_STATES
 };

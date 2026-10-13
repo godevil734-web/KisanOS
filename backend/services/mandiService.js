@@ -24,15 +24,38 @@ function getDataGovApiKey() {
     'DATA_GOV_API_KEY',
     'DATA_GOV_IN_API_KEY',
     'DATAGOV_API_KEY',
-    'DATA_GOV_KEY'
+    'DATA_GOV_KEY',
+    'DATAGOV_KEY',
+    'DATA_GOVERNMENT_API_KEY',
+    'GOV_API_KEY',
+    'MANDI_API_KEY'
   ];
   for (const v of envVars) {
     const val = process.env[v];
     if (typeof val === 'string' && val.trim().length > 0) {
-      // Remove any surrounding single or double quotes and trim whitespace
       return val.trim().replace(/^["']|["']$/g, '').trim();
     }
   }
+
+  // Fallback: Case-insensitive / trimmed search across all env variable keys
+  for (const [k, val] of Object.entries(process.env)) {
+    if (typeof val === 'string' && val.trim().length > 0) {
+      const cleanKey = k.trim().toUpperCase();
+      if (
+        cleanKey === 'DATA_GOV_API_KEY' ||
+        cleanKey === 'DATA_GOV_IN_API_KEY' ||
+        cleanKey === 'DATAGOV_API_KEY' ||
+        cleanKey === 'DATA_GOV_KEY' ||
+        cleanKey === 'DATAGOV_KEY' ||
+        cleanKey === 'DATA_GOVERNMENT_API_KEY' ||
+        cleanKey === 'GOV_API_KEY' ||
+        cleanKey === 'MANDI_API_KEY'
+      ) {
+        return val.trim().replace(/^["']|["']$/g, '').trim();
+      }
+    }
+  }
+
   return '';
 }
 
@@ -41,7 +64,11 @@ function getApiKeyDiagnostics() {
     'DATA_GOV_API_KEY',
     'DATA_GOV_IN_API_KEY',
     'DATAGOV_API_KEY',
-    'DATA_GOV_KEY'
+    'DATA_GOV_KEY',
+    'DATAGOV_KEY',
+    'DATA_GOVERNMENT_API_KEY',
+    'GOV_API_KEY',
+    'MANDI_API_KEY'
   ];
   let foundVar = null;
   let keyVal = '';
@@ -53,11 +80,40 @@ function getApiKeyDiagnostics() {
       break;
     }
   }
+
+  if (!foundVar) {
+    for (const [k, val] of Object.entries(process.env)) {
+      if (typeof val === 'string' && val.trim().length > 0) {
+        const cleanKey = k.trim().toUpperCase();
+        if (
+          cleanKey === 'DATA_GOV_API_KEY' ||
+          cleanKey === 'DATA_GOV_IN_API_KEY' ||
+          cleanKey === 'DATAGOV_API_KEY' ||
+          cleanKey === 'DATA_GOV_KEY' ||
+          cleanKey === 'DATAGOV_KEY' ||
+          cleanKey === 'DATA_GOVERNMENT_API_KEY' ||
+          cleanKey === 'GOV_API_KEY' ||
+          cleanKey === 'MANDI_API_KEY'
+        ) {
+          foundVar = k;
+          keyVal = val.trim().replace(/^["']|["']$/g, '').trim();
+          break;
+        }
+      }
+    }
+  }
+
+  // SAFE: List only variable names (keys), NEVER values, matching data / gov / mandi / agri / resource
+  const detectedMatchingEnvVars = Object.keys(process.env).filter(k => 
+    /data|gov|mandi|agri|resource/i.test(k)
+  );
+
   return {
     isConfigured: Boolean(keyVal && keyVal.length > 0),
     envVarName: foundVar || 'NONE',
     keyLength: keyVal.length,
-    keyPreview: keyVal.length >= 8 ? `${keyVal.slice(0, 4)}...${keyVal.slice(-4)}` : (keyVal ? '***' : null)
+    keyPreview: keyVal.length >= 8 ? `${keyVal.slice(0, 4)}...${keyVal.slice(-4)}` : (keyVal ? '***' : null),
+    detectedMatchingEnvVars
   };
 }
 

@@ -3100,12 +3100,14 @@ app.get('/api/mandi-prices', optionalAuth, async (req, res) => {
     });
 
     console.log(`[API] /api/mandi-prices response: state=${targetState}, records=${data.records.length}, total=${data.totalRecords}, date=${data.reportDate}, cache=${data.cacheStatus}`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.json(data);
   } catch (error) {
     const isValidation = error.message && error.message.includes('State is required');
     const isAuth = error.message && (error.message.includes('MISSING_API_KEY') || error.message.includes('UPSTREAM_AUTH_ERROR'));
     const status = isValidation ? 400 : (isAuth ? 503 : (error.status || 502));
     console.error(`[API] /api/mandi-prices error (${status}):`, error.message);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.status(status).json({
       success: false,
       error: error.message || 'Failed to fetch government mandi prices from official servers.',

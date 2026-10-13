@@ -146,98 +146,119 @@ let statesDistrictsExpiresAt = 0;
  */
 async function fetchGovtData(url, options = {}) {
   const timeoutMs = options.timeout || 12000;
+  const maxRetries = options.retries !== undefined ? options.retries : 2;
 
-  // 1. Primary: Standard native fetch with normal HTTPS resolution & strict TLS verification
-  if (typeof globalThis.fetch === 'function') {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      // Exponential backoff on transient network error (200ms, 400ms)
+      await new Promise(r => setTimeout(r, 200 * Math.pow(2, attempt - 1)));
+    }
+
     try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal; Government Open Data Client)',
-          'Accept': 'application/json',
-          ...(options.headers || {})
+      if (typeof globalThis.fetch === 'function') {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              'Accept': 'application/json, text/plain, */*',
+              ...(options.headers || {})
+            }
+          });
+          clearTimeout(timer);
+
+          if (!res.ok) {
+            const rawText = await res.text().catch(() => '');
+            const bodySnippet = rawText ? rawText.slice(0, 300) : res.statusText;
+            const err = new Error(`Government API HTTP ${res.status}: ${res.statusText}`);
+            err.status = res.status;
+            err.body = bodySnippet;
+            throw err;
+          }
+
+          const data = await res.json();
+          return { data, status: res.status, transport: 'native-fetch', attempts: attempt + 1 };
+        } catch (err) {
+          clearTimeout(timer);
+          // If server responded with a definitive HTTP client error (e.g. 401, 403, 404, 429), do not retry
+          if (err.status && err.status >= 400 && err.status < 500) {
+            throw err;
+          }
+          if (err.name === 'AbortError') {
+            const timeoutErr = new Error(`Government API request timed out after ${timeoutMs}ms`);
+            timeoutErr.status = 504;
+            throw timeoutErr;
+          }
+          const cause = err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : '';
+          const netErr = new Error(`Government API network error: ${err.message}${cause ? ` (${cause})` : ''}`);
+          netErr.status = 502;
+          netErr.cause = err;
+          lastError = netErr;
+          // Continue to next attempt if retries remaining
+          continue;
         }
+      }
+
+      // Fallback for Node environments without global fetch
+      return await new Promise((resolve, reject) => {
+        const req = https.get(
+          url,
+          {
+            timeout: timeoutMs,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              'Accept': 'application/json',
+              ...(options.headers || {})
+            }
+          },
+          (res) => {
+            let body = '';
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => {
+              if (res.statusCode >= 400) {
+                const err = new Error(`Government API HTTP ${res.statusCode}: ${res.statusMessage}`);
+                err.status = res.statusCode;
+                err.body = body.slice(0, 300);
+                return reject(err);
+              }
+              try {
+                const parsed = JSON.parse(body);
+                resolve({ data: parsed, status: res.statusCode, transport: 'https-get', attempts: attempt + 1 });
+              } catch (e) {
+                const err = new Error(`Failed to parse government JSON: ${e.message}`);
+                err.status = res.statusCode;
+                reject(err);
+              }
+            });
+          }
+        );
+
+        req.on('timeout', () => {
+          req.destroy();
+          const err = new Error(`Government API request timed out after ${timeoutMs}ms`);
+          err.status = 504;
+          reject(err);
+        });
+
+        req.on('error', (err) => {
+          const netErr = new Error(`Government API connection error: ${err.message}`);
+          netErr.status = 502;
+          reject(netErr);
+        });
       });
-      clearTimeout(timer);
-
-      if (!res.ok) {
-        const rawText = await res.text().catch(() => '');
-        const bodySnippet = rawText ? rawText.slice(0, 300) : res.statusText;
-        const err = new Error(`Government API HTTP ${res.status}: ${res.statusText}`);
-        err.status = res.status;
-        err.body = bodySnippet;
-        throw err;
+    } catch (loopErr) {
+      if (loopErr.status && (loopErr.status < 500 || loopErr.status === 504)) {
+        throw loopErr;
       }
-
-      const data = await res.json();
-      return { data, status: res.status, transport: 'native-fetch' };
-    } catch (err) {
-      clearTimeout(timer);
-      if (err.status && err.status >= 400) {
-        throw err;
-      }
-      if (err.name === 'AbortError') {
-        const timeoutErr = new Error(`Government API request timed out after ${timeoutMs}ms`);
-        timeoutErr.status = 504;
-        throw timeoutErr;
-      }
-      const cause = err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : '';
-      const netErr = new Error(`Government API network error: ${err.message}${cause ? ` (${cause})` : ''}`);
-      netErr.status = 502;
-      netErr.cause = err;
-      throw netErr;
+      lastError = loopErr;
     }
   }
 
-  // 2. Fallback for Node environments without global fetch: standard https.get with TLS verification
-  return new Promise((resolve, reject) => {
-    const req = https.get(
-      url,
-      {
-        timeout: timeoutMs,
-        headers: {
-          'User-Agent': 'KisanConnect/1.0 (Agricultural Supply Chain Portal; Government Open Data Client)',
-          'Accept': 'application/json',
-          ...(options.headers || {})
-        }
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (chunk) => { body += chunk; });
-        res.on('end', () => {
-          if (res.statusCode >= 400) {
-            const err = new Error(`Government API HTTP ${res.statusCode}: ${res.statusMessage}`);
-            err.status = res.statusCode;
-            err.body = body.slice(0, 300);
-            return reject(err);
-          }
-          try {
-            const parsed = JSON.parse(body);
-            resolve({ data: parsed, status: res.statusCode, transport: 'https-get' });
-          } catch (e) {
-            const err = new Error(`Failed to parse government JSON: ${e.message}`);
-            err.status = res.statusCode;
-            reject(err);
-          }
-        });
-      }
-    );
-
-    req.on('timeout', () => {
-      req.destroy();
-      const err = new Error(`Government API request timed out after ${timeoutMs}ms`);
-      err.status = 504;
-      reject(err);
-    });
-
-    req.on('error', (err) => {
-      const netErr = new Error(`Government API connection error: ${err.message}`);
-      netErr.status = 502;
-      reject(netErr);
-    });
-  });
+  throw lastError;
 }
 
 function fetchGovtJson(url, options = {}) {

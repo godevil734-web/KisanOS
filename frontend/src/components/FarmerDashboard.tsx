@@ -54,7 +54,12 @@ import { FarmerProfileView } from './FarmerProfileView';
 
 type Lang = 'hi' | 'hinglish' | 'en';
 
-export const FarmerDashboard: React.FC = () => {
+interface FarmerDashboardProps {
+  currentRole?: string;
+  onNavigate?: (path: string) => void;
+}
+
+export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, onNavigate }) => {
   const { user } = useAuth();
   const { language, setLanguage: setGlobalLang } = useLanguage();
 
@@ -77,7 +82,7 @@ export const FarmerDashboard: React.FC = () => {
 
   // Farmer Navigation Tabs: 'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'
   const [activeTab, setActiveTab] = useState<'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'>('home');
-  const [profileSubTab, setProfileSubTab] = useState<'overview' | 'fields' | 'crops' | 'sales' | 'points'>('overview');
+  const [profileSubTab, setProfileSubTab] = useState<'overview' | 'passport' | 'fields' | 'crops' | 'sales' | 'points'>('overview');
 
   // Backend Data
   const [listings, setListings] = useState<FarmerListing[]>([]);
@@ -237,14 +242,15 @@ export const FarmerDashboard: React.FC = () => {
 
   useEffect(() => {
     const handleTabNav = (e: any) => {
-      if (e.detail?.tab === 'profile') {
-        setActiveTab('profile');
-        if (e.detail?.subTab) {
-          setProfileSubTab(e.detail.subTab);
+      if (e.detail?.tab === 'profile' || ['fields', 'crops', 'sales', 'points', 'passport', 'activities'].includes(e.detail?.tab)) {
+        const sub = e.detail?.subTab || (e.detail?.tab === 'activities' ? 'passport' : e.detail?.tab === 'points' ? 'points' : e.detail?.tab === 'profile' ? 'overview' : e.detail?.tab);
+        const url = `/profile?subtab=${sub}${e.detail?.edit ? '&edit=1' : ''}`;
+        if (onNavigate) {
+          onNavigate(url);
+        } else {
+          window.location.href = url;
         }
-      } else if (['fields', 'crops', 'sales', 'points'].includes(e.detail?.tab)) {
-        setActiveTab('profile');
-        setProfileSubTab(e.detail.tab === 'points' ? 'points' : e.detail.tab);
+        return;
       } else if (e.detail?.tab) {
         setActiveTab(e.detail.tab);
       }
@@ -285,36 +291,32 @@ export const FarmerDashboard: React.FC = () => {
     const subParam = urlParams.get('subtab');
     const currentPath = window.location.pathname;
 
-    if (currentPath === '/fields') {
-      setActiveTab('profile');
-      setProfileSubTab('fields');
-    } else if (currentPath === '/crops') {
-      setActiveTab('profile');
-      setProfileSubTab('crops');
-    } else if (currentPath === '/sales') {
-      setActiveTab('profile');
-      setProfileSubTab('sales');
-    } else if (currentPath === '/kisan-points') {
-      setActiveTab('profile');
-      setProfileSubTab('points');
-    } else if (currentPath === '/profile') {
-      setActiveTab('profile');
-      setProfileSubTab('overview');
-    } else if (tabParam === 'fields' || tabParam === 'crops' || tabParam === 'sales' || tabParam === 'points') {
-      setActiveTab('profile');
-      setProfileSubTab(tabParam === 'points' ? 'points' : tabParam as any);
-    } else if (tabParam === 'profile') {
-      setActiveTab('profile');
-      if (subParam && ['overview', 'fields', 'crops', 'sales', 'points'].includes(subParam)) {
-        setProfileSubTab(subParam as any);
-      }
-    } else if (tabParam && ['home', 'listings', 'mandi_prices', 'buyers', 'offers', 'orders', 'storage', 'aggregator_info', 'activities'].includes(tabParam)) {
+    if (['/profile', '/passport', '/fields', '/crops', '/sales', '/kisan-points'].includes(currentPath)) {
+      const sub = currentPath === '/passport' ? 'passport' : currentPath === '/fields' ? 'fields' : currentPath === '/crops' ? 'crops' : currentPath === '/sales' ? 'sales' : currentPath === '/kisan-points' ? 'points' : 'overview';
+      if (onNavigate) onNavigate(`/profile?subtab=${sub}`);
+      else window.location.href = `/profile?subtab=${sub}`;
+      return;
+    }
+
+    if (['profile', 'passport', 'activities', 'fields', 'crops', 'sales', 'points'].includes(tabParam || '')) {
+      const sub = subParam || (tabParam === 'activities' || tabParam === 'passport' ? 'passport' : tabParam === 'points' ? 'points' : tabParam === 'profile' ? 'overview' : tabParam);
+      if (onNavigate) onNavigate(`/profile?subtab=${sub}`);
+      else window.location.href = `/profile?subtab=${sub}`;
+      return;
+    }
+
+    if (tabParam && ['home', 'listings', 'mandi_prices', 'buyers', 'offers', 'orders', 'storage', 'aggregator_info'].includes(tabParam)) {
       setActiveTab(tabParam as any);
+    }
+
+    if (currentPath === '/list-crop' || urlParams.get('action') === 'sell') {
+      setWizardStep(1);
+      setShowAddWizard(true);
     }
 
     window.addEventListener('farmer-navigate-tab', handleTabNav);
     return () => window.removeEventListener('farmer-navigate-tab', handleTabNav);
-  }, [matchedBuyers, activeListings, listings, selectedListingForMatches]);
+  }, [matchedBuyers, activeListings, listings, selectedListingForMatches, onNavigate]);
 
   const handleMarkListingSold = async (listingId: string) => {
     if (!window.confirm(lang === 'hi' ? 'क्या आप इस फसल को "सौदा हो चुका (Dealed / Sold)" के रूप में अलग सेक्शन में ले जाना चाहते हैं?' : 'Move this crop listing to Dealed / Sold section?')) return;
@@ -734,19 +736,17 @@ export const FarmerDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. DESKTOP NAVIGATION TABS (Hidden on small mobile) */}
-      <div className="hidden md:flex items-center border-b border-slate-200 space-x-1 overflow-x-auto scrollbar-none pb-1">
+      {/* 2. DESKTOP & RESPONSIVE NAVIGATION TABS (One horizontal row on desktop, horizontal scrolling) */}
+      <div className="flex items-center border-b border-slate-200 gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none pb-1.5 flex-nowrap w-full">
         {[
           { id: 'home', label: t.home, icon: Home },
           { id: 'listings', label: `${t.myCrops} (${activeListings.length})`, icon: Sprout },
           { id: 'mandi_prices', label: lang === 'hi' ? 'सरकारी मंडी भाव' : 'Mandi Prices', icon: Landmark },
-          { id: 'activities', label: lang === 'hi' ? 'खेत डायरी (Fasal Diary)' : 'Farm Diary (Passport)', count: activities.length, icon: Activity },
           { id: 'buyers', label: t.findBuyers, icon: Search },
           { id: 'offers', label: `${t.myOffers}`, count: pendingOffersCount, icon: DollarSign },
           { id: 'orders', label: `${t.myDeals}`, count: activeOrdersCount, icon: Package },
           { id: 'storage', label: t.storage, icon: Warehouse },
           { id: 'aggregator_info', label: t.poolWithFarmers, icon: Layers },
-          { id: 'profile', label: lang === 'hi' ? 'डिजिटल प्रोफाइल व खेत' : 'Digital Profile & Fields', icon: User },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -754,7 +754,7 @@ export const FarmerDashboard: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 py-2.5 px-3.5 rounded-xl text-xs font-bold transition-all relative ${
+              className={`flex items-center gap-1.5 py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl text-xs font-bold transition-all relative shrink-0 whitespace-nowrap cursor-pointer ${
                 isActive
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -789,7 +789,7 @@ export const FarmerDashboard: React.FC = () => {
             </h2>
 
             {/* 5 Primary Large Action Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4">
               
               {/* ACTION 1: मेरा माल बेचें (Add Crop Wizard) */}
               <button
@@ -2015,7 +2015,7 @@ export const FarmerDashboard: React.FC = () => {
               </div>
             ) : (
               /* LIST VIEW INTERACTIVE CARDS */
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 2xl:gap-5">
                 {displayedMatches.map((matchItem, idx) => {
                   const req = matchItem.requirement;
                   const nr = matchItem.netRealization;
@@ -2844,218 +2844,21 @@ export const FarmerDashboard: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 👤 TAB 8: FARMER DIGITAL PROFILE, FIELDS, CROPS & KISAN POINTS */}
+      {/* 👤 TAB: UNIFIED FARMER PROFILE, PASSPORT, FIELDS & CROP RECORDS */}
       {/* ========================================================================= */}
-      {activeTab === 'profile' && (
-        <FarmerProfileView
-          initialSubTab={profileSubTab}
-          onNavigateTab={(targetTab) => {
-            if (['home', 'listings', 'mandi_prices', 'buyers', 'offers', 'orders', 'storage', 'aggregator_info', 'activities'].includes(targetTab)) {
-              setActiveTab(targetTab as any);
-            }
-          }}
-          onOpenListingWizard={() => {
-            setWizardStep(1);
-            setShowAddWizard(true);
-          }}
-        />
-      )}
-
-      {/* ========================================================================= */}
-      {/* 🌾 TAB: NALAMKI DIGITAL FIELD RECORD & TRACEABILITY (खेत रिकॉर्ड) */}
-      {/* ========================================================================= */}
-      {activeTab === 'activities' && (
-        <div className="space-y-6 animate-fadeIn">
-          {/* Header Banner */}
-          <div className="p-5 sm:p-6 rounded-3xl bg-slate-900 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  NaLamKI · ITU-T / FAO Recommendation Annex A.16
-                </span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-black">
-                {lang === 'hi' ? 'खेत की डायरी एवं फसल प्रमाण पत्र' : 'Farm Field Diary & Digital Passport'}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1 max-w-xl">
-                {lang === 'hi' 
-                  ? 'अपनी फसल के काम दर्ज करें — मौसम और तारीख अपने आप जुड़ जाएंगे। डायरी पूरी रखने पर खरीदार से ₹50-₹100/क्विंटल तक बेहतर दाम मिल सकता है।'
-                  : 'Log farm operations with 1-tap — weather and dates are auto-recorded. Earn premium prices from verified buyers.'}
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedListingForTraceability(listings[0] || null);
-                  setShowTraceabilityModal(true);
-                }}
-                className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <FileText className="w-4 h-4 text-emerald-400" />
-                <span>{lang === 'hi' ? '📜 प्रमाण पत्र देखें' : '📜 View Passport Certificate'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedListingForTraceability(listings[0] || null);
-                  setShowActivityLoggerModal(true);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{lang === 'hi' ? '✍️ डायरी लिखें (1-टैप)' : '✍️ Log Work (1-Tap)'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
-              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                {lang === 'hi' ? 'कुल दर्ज गतिविधियां' : 'Total Activities Logged'}
-              </span>
-              <span className="text-2xl font-black text-[#1C2B23]">{activities.length}</span>
-              <span className="text-[11px] text-emerald-700 font-bold block mt-0.5">✓ 100% NaLamKI Compliant</span>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
-              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                {lang === 'hi' ? 'सिंचाई रिकॉर्ड' : 'Irrigation Records'}
-              </span>
-              <span className="text-2xl font-black text-cyan-800">
-                {activities.filter(a => a.typeUri === 'irrigation').length}
-              </span>
-              <span className="text-[11px] text-cyan-700 font-bold block mt-0.5">💧 Micro-Drip Optimized</span>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
-              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                {lang === 'hi' ? 'सुरक्षा एवं पोषण' : 'Protection & Nutrition'}
-              </span>
-              <span className="text-2xl font-black text-amber-800">
-                {activities.filter(a => a.typeUri === 'fertilization' || a.typeUri === 'crop_protection').length}
-              </span>
-              <span className="text-[11px] text-amber-700 font-bold block mt-0.5">🛡️ Bio-IPM Protocol</span>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white border-2 border-[#D8D2C4] shadow-xs">
-              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
-                {lang === 'hi' ? 'कटाई एवं लॉट' : 'Harvested Lots'}
-              </span>
-              <span className="text-2xl font-black text-purple-800">
-                {activities.filter(a => a.typeUri === 'harvesting').length}
-              </span>
-              <span className="text-[11px] text-purple-700 font-bold block mt-0.5">🚜 BBCH 99 Graded</span>
-            </div>
-          </div>
-
-          {/* Activities Timeline */}
-          <div className="p-5 sm:p-6 rounded-3xl bg-white border-2 border-[#D8D2C4] shadow-md space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-              <h3 className="text-base font-black text-[#1C2B23] flex items-center gap-2">
-                <Activity className="w-5 h-5 text-emerald-700" />
-                <span>{lang === 'hi' ? 'खेत कार्य समयरेखा (Field Activity Log)' : 'Field Activity Chronological Timeline'}</span>
-              </h3>
-              <span className="text-xs font-bold text-slate-500">
-                {activities.length} {lang === 'hi' ? 'प्रमाणित प्रविष्टियां' : 'Audited Entries'}
-              </span>
-            </div>
-
-            {activities.length === 0 ? (
-              <div className="py-12 text-center text-slate-500 space-y-3">
-                <div className="text-4xl">🌱</div>
-                <h4 className="text-base font-extrabold text-slate-800">
-                  {lang === 'hi' ? 'अभी कोई खेत गतिविधि दर्ज नहीं की गई है' : 'No Field Activities Recorded Yet'}
-                </h4>
-                <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  {lang === 'hi' 
-                    ? 'अपनी फसल के लिए बुवाई, पानी या खाद की तारीख दर्ज करें।' 
-                    : 'Record your sowing, irrigation, fertilizer, or harvest operations.'}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowActivityLoggerModal(true)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-black text-xs cursor-pointer"
-                >
-                  + पहली गतिविधि दर्ज करें
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4 relative before:absolute before:inset-0 before:left-5 before:w-0.5 before:bg-stone-200">
-                {activities.map((act, idx) => (
-                  <div key={act.id || idx} className="relative pl-11 group">
-                    <div className="absolute left-2.5 top-3.5 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-slate-900 flex items-center justify-center z-10 shadow-xs">
-                      {act.typeUri === 'sowing' ? <Sprout className="w-3.5 h-3.5 text-emerald-600" /> :
-                       act.typeUri === 'irrigation' ? <Droplets className="w-3.5 h-3.5 text-cyan-600" /> :
-                       act.typeUri === 'fertilization' ? <FlaskConical className="w-3.5 h-3.5 text-amber-600" /> :
-                       act.typeUri === 'crop_protection' ? <ShieldAlert className="w-3.5 h-3.5 text-rose-600" /> :
-                       <Tractor className="w-3.5 h-3.5 text-purple-600" />}
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#D8D2C4] shadow-2xs hover:bg-white transition-all space-y-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-slate-900 text-white">
-                            {act.typeLabel || act.typeUri}
-                          </span>
-                          <h4 className="text-sm font-black text-[#1C2B23]">{act.name}</h4>
-                          {act.cropName && (
-                            <span className="text-[11px] font-bold text-stone-600 bg-stone-200 px-2 py-0.5 rounded">
-                              {act.cropName} {act.variety ? `(${act.variety})` : ''}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-stone-500 font-semibold">
-                          <Calendar className="w-3.5 h-3.5 text-stone-400" />
-                          <span>{new Date(act.startsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                        </div>
-                      </div>
-
-                      {act.bbchStage && (
-                        <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-white inline-flex px-2 py-0.5 rounded border border-slate-200">
-                          🌱 <span>{act.bbchStage}</span>
-                        </div>
-                      )}
-
-                      {act.notes && (
-                        <p className="text-xs text-[#2B3B32] font-medium leading-relaxed">
-                          {act.notes}
-                        </p>
-                      )}
-
-                      {/* Deployed Resources & Input/Output */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-stone-200 text-xs text-stone-600">
-                        {act.resources && act.resources.length > 0 && (
-                          <div className="flex items-center gap-1.5">
-                            <Tractor className="w-3.5 h-3.5 text-stone-500" />
-                            <span><strong>{lang === 'hi' ? 'उपकरण:' : 'Resource:'}</strong> {act.resources.map(r => r.name).join(', ')}</span>
-                          </div>
-                        )}
-                        {act.inputsOutputs && act.inputsOutputs.length > 0 && (
-                          <div className="flex items-center gap-1.5">
-                            <Layers className="w-3.5 h-3.5 text-stone-500" />
-                            <span><strong>{lang === 'hi' ? 'इनपुट/आउटपुट:' : 'Input/Output:'}</strong> {act.inputsOutputs.map(io => `${io.item} (${io.quantity})`).join(', ')}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Microclimate */}
-                      {act.conditions && (
-                        <div className="flex items-center gap-3 pt-1 text-[11px] text-stone-500 flex-wrap">
-                          <span className="font-bold text-stone-700 uppercase">{lang === 'hi' ? 'खेत मौसम:' : 'Microclimate:'}</span>
-                          <span>🌡️ {act.conditions.temperature}°C</span>
-                          <span>💧 {act.conditions.humidity}% RH</span>
-                          <span>🌱 {act.conditions.soilMoisture}% Moisture</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+      {(activeTab === 'profile' || activeTab === 'activities') && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-4">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-600 border-r-transparent" />
+          <p className="text-sm font-bold text-slate-600">
+            {lang === 'hi' ? 'किसान प्रोफाइल व पासपोर्ट पेज पर ले जाया जा रहा है...' : 'Navigating to Farmer Profile & Passport page...'}
+          </p>
+          <div>
+            <button
+              onClick={() => onNavigate ? onNavigate('/profile') : (window.location.href = '/profile')}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+            >
+              {lang === 'hi' ? 'प्रोफाइल पेज खोलें' : 'Open Profile Page'}
+            </button>
           </div>
         </div>
       )}

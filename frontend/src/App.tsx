@@ -22,6 +22,8 @@ import { LanguageGateModal } from './components/LanguageGateModal';
 import { PendingApprovalBanner } from './components/PendingApprovalBanner';
 import { DemoBanner } from './components/DemoBanner';
 import { KisanSaathiWidget } from './components/KisanSaathiWidget';
+import { FarmerProfilePage } from './components/FarmerProfilePage';
+import { QuickTourModal } from './components/QuickTourModal';
 
 const MainApp: React.FC = () => {
   const { user, loading } = useAuth();
@@ -63,7 +65,7 @@ const MainApp: React.FC = () => {
     if (!loading && !user) {
       if (pathname === '/list-crop') {
         navigate('/login?next=/list-crop');
-      } else if (pathname === '/dashboard' || pathname === '/profile' || pathname === '/fields' || pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points') {
+      } else if (pathname === '/dashboard' || pathname === '/profile' || pathname === '/passport' || pathname === '/fields' || pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points') {
         navigate(`/login?next=${pathname}`);
       } else if (pathname === '/aggregator') {
         navigate('/login?next=/aggregator');
@@ -83,32 +85,48 @@ const MainApp: React.FC = () => {
     }
   }, [loading, user, pathname]);
 
+  // Redirect legacy /dashboard?tab=profile queries to standalone /profile page
+  useEffect(() => {
+    if (pathname === '/dashboard') {
+      const tab = searchParams.get('tab');
+      if (tab === 'profile' || tab === 'passport' || tab === 'activities' || tab === 'fields' || tab === 'crops' || tab === 'sales' || tab === 'points') {
+        const sub = searchParams.get('subtab') || (tab === 'activities' ? 'passport' : tab === 'profile' ? 'overview' : tab);
+        navigate(`/profile?subtab=${sub}`);
+      }
+    }
+  }, [pathname, searchParams]);
+
   // Unified Role Selection & Authentication Gateway States
   const [isRoleModalOpen, setIsRoleModalOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [selectedRole, setSelectedRole] = useState<'farmer' | 'aggregator' | 'buyer'>('farmer');
 
-  // Triggered by "Get Started →"
+  // Quick Tour Modal State
+  const [isTourModalOpen, setIsTourModalOpen] = useState<boolean>(false);
+
+  // Triggered by "Get Started →" or tour button
   const handleOpenGetStarted = (preferredRole?: 'farmer' | 'aggregator' | 'buyer') => {
     if (!user) {
-      navigate('/signup');
+      if (preferredRole) {
+        setSelectedRole(preferredRole);
+        setIsRoleModalOpen(false);
+        setIsAuthModalOpen(true);
+      } else {
+        navigate('/signup');
+      }
       return;
     }
-    if (preferredRole) {
-      setSelectedRole(preferredRole);
-      setIsRoleModalOpen(false);
-      setIsAuthModalOpen(true);
-    } else {
-      setIsRoleModalOpen(true);
-      setIsAuthModalOpen(false);
-    }
+    // Authenticated users never get prompted for login!
+    setIsTourModalOpen(true);
   };
 
   // Grouped route definitions to prevent blank pages
+  const isFarmerProfileRoute = pathname === '/profile' || pathname === '/passport' || pathname === '/fields' ||
+    pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points';
+
   const isFarmerRoute = pathname === '/list-crop' || pathname === '/farmer' || pathname === '/dashboard' ||
-    pathname === '/buyers' || pathname === '/listings' || pathname === '/crops' || pathname === '/offers' ||
-    pathname === '/orders' || pathname === '/deals' || pathname === '/aggregator-info' || pathname === '/storage-farmer' ||
-    pathname === '/profile' || pathname === '/fields' || pathname === '/kisan-points' || pathname === '/sales';
+    pathname === '/buyers' || pathname === '/listings' || pathname === '/offers' ||
+    pathname === '/orders' || pathname === '/deals' || pathname === '/aggregator-info' || pathname === '/storage-farmer';
 
   const isAggregatorRoute = pathname === '/aggregator' || pathname === '/demand' || pathname === '/supply' ||
     pathname === '/procurement' || pathname === '/aggregation' || pathname === '/batches' || pathname === '/logistics' ||
@@ -122,7 +140,7 @@ const MainApp: React.FC = () => {
   if (pathname === '/login') currentTab = 'login';
   else if (pathname === '/admin-login') currentTab = 'admin-login';
   else if (pathname === '/signup') currentTab = 'signup';
-  else if (isFarmerRoute) currentTab = 'farmer';
+  else if (isFarmerProfileRoute || isFarmerRoute) currentTab = 'farmer';
   else if (isAggregatorRoute) currentTab = 'aggregator';
   else if (isBuyerRoute) currentTab = 'buyer';
   else if (pathname === '/storage') currentTab = 'storage';
@@ -161,7 +179,7 @@ const MainApp: React.FC = () => {
       {user?.status === 'pending' && <PendingApprovalBanner />}
 
       {/* Main Content Area */}
-      <main className={`flex-1 w-full relative z-10 ${isPublicView ? '' : 'w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-6 sm:py-8'}`}>
+      <main className={`flex-1 w-full relative z-10 ${isPublicView ? '' : 'w-full max-w-[1920px] 2xl:max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-5 sm:py-7'}`}>
         {loading ? (
           <div className="py-24 text-center">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#315C45] border-r-transparent" />
@@ -203,6 +221,43 @@ const MainApp: React.FC = () => {
                 onOpenGetStarted={handleOpenGetStarted}
               />
             )}
+            {isFarmerProfileRoute && (
+              user && user.role !== 'farmer' && user.role !== 'admin' ? (
+                <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-amber-200 p-8 shadow-xs text-center space-y-4">
+                  <div className="h-16 w-16 mx-auto rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl">
+                    🌾
+                  </div>
+                  <div>
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-800 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                      किसान पोर्टल • Farmer Portal Only
+                    </span>
+                    <h2 className="text-2xl font-black text-slate-900 mt-3">
+                      किसान प्रोफाइल व पासपोर्ट (Farmer Profile & Passport)
+                    </h2>
+                    <p className="text-sm text-slate-600 mt-2 max-w-lg mx-auto">
+                      आप वर्तमान में <strong>{user.name} ({user.role === 'buyer' || user.role === 'dealer' ? 'थोक खरीदार / Buyer' : user.role})</strong> के रूप में लॉगिन हैं। यह अनुभाग केवल पंजीकृत किसानों के लिए है।
+                    </p>
+                  </div>
+                  <div className="pt-2 flex flex-wrap justify-center gap-3">
+                    <button
+                      onClick={() => navigate(user.role === 'aggregator' ? '/aggregator' : '/buyer')}
+                      className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-extrabold text-sm shadow-xs transition-colors cursor-pointer"
+                    >
+                      {user.role === 'aggregator' ? '📦 एग्रीगेटर पोर्टल पर जाएं' : '🏢 अपने खरीदार पोर्टल पर जाएं'}
+                    </button>
+                    <button
+                      onClick={() => navigate('/')}
+                      className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-colors cursor-pointer"
+                    >
+                      होम पेज (Home)
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <FarmerProfilePage onNavigate={navigate} />
+              )
+            )}
+
             {isFarmerRoute && (
               user && user.role !== 'farmer' && user.role !== 'admin' ? (
                 <div className="max-w-2xl mx-auto my-12 bg-white rounded-3xl border-2 border-amber-200 p-8 shadow-xs text-center space-y-4">
@@ -328,7 +383,7 @@ const MainApp: React.FC = () => {
               )
             )}
             {/* Fallback to prevent black/blank screens on any unmatched route */}
-            {!isFarmerRoute && !isAggregatorRoute && !isBuyerRoute && 
+            {!isFarmerProfileRoute && !isFarmerRoute && !isAggregatorRoute && !isBuyerRoute && 
              pathname !== '/storage' && pathname !== '/transport' && pathname !== '/intelligence' && 
              !pathname.startsWith('/admin') && pathname !== '/how-it-works' && 
              pathname !== '/login' && pathname !== '/signup' && pathname !== '/admin-login' && pathname !== '/' && (
@@ -404,8 +459,21 @@ const MainApp: React.FC = () => {
         }} 
       />
 
-      {/* Footer */}
-      <Footer onSelectTab={handleSetCurrentTab} />
+      {/* Layout-Specific Footer Rendering:
+          - Public Landing Layout (/): Agricultural Landscape Banner + Full Marketing Footer
+          - Public Informational (/how-it-works): Clean informational footer without repetitive banner
+          - Authenticated Dashboards, Profile, and Focused Workflows (/list-crop, /dashboard, /profile, /aggregator, /buyer, /admin, etc.):
+            Do NOT render the landing banner or marketing footer.
+      */}
+      {pathname === '/' && <Footer onSelectTab={handleSetCurrentTab} showLandscapeBanner={true} />}
+      {pathname === '/how-it-works' && <Footer onSelectTab={handleSetCurrentTab} showLandscapeBanner={false} />}
+
+      {/* Interactive Quick Tour Modal */}
+      <QuickTourModal 
+        isOpen={isTourModalOpen} 
+        onClose={() => setIsTourModalOpen(false)} 
+        onNavigate={navigate} 
+      />
     </div>
   );
 };

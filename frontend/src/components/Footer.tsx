@@ -4,9 +4,10 @@ import { useLanguage } from '../context/LanguageContext';
 
 interface FooterProps {
   onSelectTab: (tab: string) => void;
+  showLandscapeBanner?: boolean;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onSelectTab }) => {
+export const Footer: React.FC<FooterProps> = ({ onSelectTab, showLandscapeBanner = true }) => {
   const { language, t } = useLanguage();
   const isHi = language === 'hi';
   const [modalInfo, setModalInfo] = useState<{ title: string; desc: string } | null>(null);
@@ -35,28 +36,30 @@ export const Footer: React.FC<FooterProps> = ({ onSelectTab }) => {
   return (
     <footer className="relative bg-[#EFECE4] text-[#2B3B32] text-sm border-t-2 border-[#D8D2C4] mt-0 overflow-hidden">
       
-      {/* Agriculture Scenic Landscape Banner Header */}
-      <div className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden border-b-2 border-[#D8D2C4]">
-        <img 
-          src="/farm_landscape_preview.jpg" 
-          alt="Indian Agriculture Fields" 
-          className="w-full h-full object-cover object-center"
-        />
-        {/* Soft gradient blend into footer background */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#EFECE4] via-[#EFECE4]/30 to-black/20" />
-        
-        {/* Agricultural Banner Content */}
-        <div className="absolute bottom-4 left-4 sm:left-8 right-4 sm:right-8 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1E3A2B]/90 backdrop-blur-md text-white text-xs sm:text-sm font-black shadow-md border border-emerald-400/30">
-            <span className="text-base">🌾</span>
-            <span>{isHi ? 'खेत से मंडी तक • सशक्त किसान, आत्मनिर्भर भारत' : 'From Soil to Sale • Empowering Indian Agriculture'}</span>
-          </div>
-          <div className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#1E3A2B] text-xs font-black shadow-xs border border-[#D8D2C4]">
-            <span>🌱</span>
-            <span>{isHi ? 'पारदर्शी डिजिटल कृषि आपूर्ति नेटवर्क' : 'Transparent Agricultural Supply Chain'}</span>
+      {/* Agriculture Scenic Landscape Banner Header (Only on Public Landing) */}
+      {showLandscapeBanner && (
+        <div className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden border-b-2 border-[#D8D2C4]">
+          <img 
+            src="/farm_landscape_preview.jpg" 
+            alt="Indian Agriculture Fields" 
+            className="w-full h-full object-cover object-center"
+          />
+          {/* Soft gradient blend into footer background */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#EFECE4] via-[#EFECE4]/30 to-black/20" />
+          
+          {/* Agricultural Banner Content */}
+          <div className="absolute bottom-4 left-4 sm:left-8 right-4 sm:right-8 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#1E3A2B]/90 backdrop-blur-md text-white text-xs sm:text-sm font-black shadow-md border border-emerald-400/30">
+              <span className="text-base">🌾</span>
+              <span>{isHi ? 'खेत से मंडी तक • सशक्त किसान, आत्मनिर्भर भारत' : 'From Soil to Sale • Empowering Indian Agriculture'}</span>
+            </div>
+            <div className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#1E3A2B] text-xs font-black shadow-xs border border-[#D8D2C4]">
+              <span>🌱</span>
+              <span>{isHi ? 'पारदर्शी डिजिटल कृषि आपूर्ति नेटवर्क' : 'Transparent Agricultural Supply Chain'}</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12 py-10 sm:py-14 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">

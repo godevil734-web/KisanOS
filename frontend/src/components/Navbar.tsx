@@ -24,7 +24,10 @@ import {
   Edit3,
   CheckCircle2,
   MapPin,
-  Sparkles
+  Sparkles,
+  FileText,
+  Phone,
+  Eye
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -51,6 +54,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [pointsBalance, setPointsBalance] = useState<number | null>(null);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showAccessibilityModal, setShowAccessibilityModal] = useState(false);
 
   const langMenuRef = useRef<HTMLDivElement>(null);
   const roleSwitcherRef = useRef<HTMLDivElement>(null);
@@ -71,6 +76,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close dropdowns on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setProfileMenuOpen(false);
+        setLangMenuOpen(false);
+        setRoleSwitcherOpen(false);
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // Fetch points balance for farmer
@@ -130,16 +149,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     setMobileMenuOpen(false);
     if (user?.role === 'farmer') {
       const targetSub = tabOrSubTab === 'profile' ? 'overview' : tabOrSubTab;
-      handleNav(`/dashboard?tab=${tabOrSubTab}${isEdit ? '&edit=1' : ''}`);
-      window.dispatchEvent(
-        new CustomEvent('farmer-navigate-tab', {
-          detail: {
-            tab: 'profile',
-            subTab: targetSub,
-            edit: isEdit
-          }
-        })
-      );
+      handleNav(`/profile?subtab=${targetSub}${isEdit ? '&edit=1' : ''}`);
     } else {
       if (tabOrSubTab === 'profile') {
         handleNav('/dashboard');
@@ -149,15 +159,24 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const isSubTabActive = (subTab: string) => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname;
+    const search = window.location.search;
+    if (subTab === 'profile' || subTab === 'overview') {
+      return (path === '/profile' && (!search.includes('subtab=') || search.includes('subtab=overview'))) || path === '/passport';
+    }
+    return search.includes(`subtab=${subTab}`) || path === `/${subTab}`;
+  };
+
   const isPublicLanding = currentTab === 'landing';
 
   return (
-    <header className="sticky top-0 z-40 bg-[#F7F5EF]/95 backdrop-blur-md border-b border-[#E5E0D5] shadow-2xs">
+    <header className="sticky top-0 z-50 bg-[#F7F5EF]/95 backdrop-blur-md border-b border-[#E5E0D5] shadow-2xs">
       
 
-
       {/* Main Public Navigation */}
-      <div className="w-full max-w-7xl 2xl:max-w-[1536px] mx-auto px-4 sm:px-6 lg:px-8 2xl:px-12">
+      <div className="w-full max-w-[1920px] 2xl:max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
         <div className="flex items-center justify-between h-16 sm:h-18">
           
           {/* Brand Logo */}
@@ -446,152 +465,88 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow-2xs" />
                   </button>
 
-                  {/* Profile Dropdown Menu */}
+                  {/* Urban EYE-Inspired Profile Dropdown Menu */}
                   {profileMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-2xl bg-white border border-[#E5E0D5] shadow-2xl p-2 z-50 animate-in fade-in duration-150">
-                      {/* Dropdown Header Card */}
-                      <div className="p-3 bg-[#FAF9F5] rounded-xl border border-[#EBE6DC] mb-2">
-                        <div className="flex items-center gap-3">
-                          {user.avatar || (user as any).profile_image || (user as any).profileImage ? (
-                            <img
-                              src={user.avatar || (user as any).profile_image || (user as any).profileImage}
-                              alt={user.name}
-                              className="w-11 h-11 rounded-full object-cover border-2 border-[#315C45] shrink-0"
-                            />
-                          ) : (
-                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-[#315C45] to-[#1E3A2B] text-white flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
-                              {getInitials(user.name)}
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="font-black text-sm text-[#26332C] truncate flex items-center gap-1.5">
-                              <span>{user.name}</span>
-                              {user.role === 'farmer' && (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              )}
-                            </div>
-                            <div className="text-xs text-[#637067] truncate font-medium">
-                              {user.phone || user.email}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#EEF5F2] text-[#315C45] border border-[#D5E5DC]">
-                                {t(`roles.${user.role}`) || user.role}
-                              </span>
-                              {user.role === 'farmer' && pointsBalance !== null && (
-                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1">
-                                  <span>🪙</span>
-                                  <span>{pointsBalance} pts</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                    <div className="absolute right-0 top-full mt-2 w-64 rounded-xl bg-white border border-[#E5E0D5] shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150 origin-top-right text-slate-800">
+                      {/* 1. View Profile */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          handleNav('/profile');
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold flex items-center justify-between text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                      >
+                        <span>{isHi ? 'प्रोफाइल देखें (View Profile)' : 'View Profile'}</span>
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                          {user?.role === 'farmer' ? 'FARMER' : user?.role === 'buyer' ? 'BUYER' : user?.role === 'aggregator' ? 'AGGREGATOR' : 'USER'}
+                        </span>
+                      </button>
 
-                      {/* Dropdown Menu Items */}
-                      <div className="space-y-0.5">
-                        {user.role === 'farmer' ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('profile')}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
-                            >
-                              <User className="w-4 h-4 text-[#315C45]" />
-                              <span>{isHi ? 'किसान प्रोफाइल देखें' : 'View Farmer Profile'}</span>
-                            </button>
+                      {/* 2. 'Get Started' tour */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          onOpenGetStarted(user?.role === 'aggregator' ? 'aggregator' : user?.role === 'buyer' ? 'buyer' : 'farmer');
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                      >
+                        {isHi ? "'Get Started' टूर" : "'Get Started' tour"}
+                      </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('fields')}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
-                            >
-                              <Layers className="w-4 h-4 text-[#315C45]" />
-                              <span>{isHi ? 'मेरे खेत (My Fields)' : 'My Fields'}</span>
-                            </button>
+                      {/* 3. Privacy Policy */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          setShowPrivacyModal(true);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                      >
+                        {isHi ? 'गोपनीयता नीति (Privacy Policy)' : 'Privacy Policy'}
+                      </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('crops')}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
-                            >
-                              <Sprout className="w-4 h-4 text-[#315C45]" />
-                              <span>{isHi ? 'फसल रिकॉर्ड (My Crop Records)' : 'My Crop Records'}</span>
-                            </button>
+                      {/* 4. Accessibility */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          setShowAccessibilityModal(true);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                      >
+                        {isHi ? 'सुगमता (Accessibility)' : 'Accessibility'}
+                      </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('sales')}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
-                            >
-                              <TrendingUp className="w-4 h-4 text-[#315C45]" />
-                              <span>{isHi ? 'मेरी बिक्री (My Sales)' : 'My Sales'}</span>
-                            </button>
+                      {/* 5. Settings */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          handleNav('/profile?subtab=overview&edit=1');
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
+                      >
+                        {isHi ? 'सेटिंग्स (Settings)' : 'Settings'}
+                      </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('points')}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-between text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <Coins className="w-4 h-4 text-amber-600" />
-                                <span>{isHi ? 'किसान पॉइंट्स (Kisan Points)' : 'Kisan Points'}</span>
-                              </div>
-                              {pointsBalance !== null && (
-                                <span className="text-xs font-black text-amber-800 bg-amber-100/70 px-2 py-0.5 rounded-lg border border-amber-200">
-                                  {pointsBalance} pts
-                                </span>
-                              )}
-                            </button>
+                      {/* Divider */}
+                      <div className="my-1 border-t border-[#F0ECE1]" />
 
-                            <div className="my-1 border-t border-[#F0ECE1]" />
-
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('profile', true)}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
-                            >
-                              <Edit3 className="w-4 h-4 text-stone-500" />
-                              <span>{isHi ? 'प्रोफाइल संपादित करें' : 'Edit Profile'}</span>
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('profile')}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] hover:text-[#315C45] transition-colors cursor-pointer"
-                            >
-                              <User className="w-4 h-4 text-[#315C45]" />
-                              <span>{isHi ? 'प्रोफाइल देखें' : 'View Profile'}</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleProfileItemClick('profile', true)}
-                              className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-[#26332C] hover:bg-[#FAF9F5] transition-colors cursor-pointer"
-                            >
-                              <Edit3 className="w-4 h-4 text-stone-500" />
-                              <span>{isHi ? 'प्रोफाइल संपादित करें' : 'Edit Profile'}</span>
-                            </button>
-                          </>
-                        )}
-
-                        <div className="my-1 border-t border-[#F0ECE1]" />
-
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setProfileMenuOpen(false);
-                            await logout();
-                            handleNav('/');
-                          }}
-                          className="w-full text-left px-3 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
-                        >
-                          <LogOut className="w-4 h-4 text-rose-600" />
-                          <span>{t('navbar.logout') || (isHi ? 'साइन आउट' : 'Sign Out')}</span>
-                        </button>
-                      </div>
+                      {/* 6. Sign Out */}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setProfileMenuOpen(false);
+                          await logout();
+                          handleNav('/');
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold flex items-center justify-between text-slate-700 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer group"
+                      >
+                        <span>{isHi ? 'साइन आउट (Sign Out)' : 'Sign Out'}</span>
+                        <LogOut className="w-4 h-4 text-slate-400 group-hover:text-rose-600 transition-colors" />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -722,43 +677,65 @@ export const Navbar: React.FC<NavbarProps> = ({
                     )}
                   </div>
 
-                  {/* Mobile Farmer Profile Links */}
-                  {user.role === 'farmer' && (
-                    <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-[#EAE5D8]">
-                      <button
-                        type="button"
-                        onClick={() => handleProfileItemClick('profile')}
-                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
-                      >
-                        <User className="w-3.5 h-3.5 text-[#315C45]" />
-                        <span>{isHi ? 'प्रोफाइल' : 'Profile'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleProfileItemClick('fields')}
-                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
-                      >
-                        <Layers className="w-3.5 h-3.5 text-[#315C45]" />
-                        <span>{isHi ? 'मेरे खेत' : 'My Fields'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleProfileItemClick('crops')}
-                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
-                      >
-                        <Sprout className="w-3.5 h-3.5 text-[#315C45]" />
-                        <span>{isHi ? 'फसल रिकॉर्ड' : 'Crop Records'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleProfileItemClick('points')}
-                        className="p-2 rounded-xl bg-white border border-[#D8D2C4] text-[11px] font-bold text-[#26332C] flex items-center gap-1.5 cursor-pointer hover:bg-emerald-50"
-                      >
-                        <Coins className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{isHi ? 'पॉइंट्स लेजर' : 'Points Ledger'}</span>
-                      </button>
-                    </div>
-                  )}
+                  {/* Mobile Profile & Quick Links */}
+                  <div className="space-y-1.5 pt-2 border-t border-[#EAE5D8]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        handleNav('/profile');
+                      }}
+                      className="w-full p-2.5 rounded-xl bg-white border border-[#D8D2C4] text-xs font-bold text-[#26332C] flex items-center justify-between cursor-pointer hover:bg-emerald-50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-[#315C45]" />
+                        <span>{isHi ? 'प्रोफाइल देखें (View Profile)' : 'View Profile'}</span>
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        {user.role === 'farmer' ? 'FARMER' : user.role === 'buyer' ? 'BUYER' : user.role === 'aggregator' ? 'AGGREGATOR' : 'USER'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onOpenGetStarted(user.role === 'aggregator' ? 'aggregator' : user.role === 'buyer' ? 'buyer' : 'farmer');
+                      }}
+                      className="w-full p-2.5 rounded-xl bg-white border border-[#D8D2C4] text-xs font-semibold text-[#26332C] flex items-center gap-2 cursor-pointer hover:bg-emerald-50"
+                    >
+                      <span>{isHi ? "'Get Started' टूर" : "'Get Started' tour"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setShowPrivacyModal(true);
+                      }}
+                      className="w-full p-2.5 rounded-xl bg-white border border-[#D8D2C4] text-xs font-semibold text-[#26332C] flex items-center gap-2 cursor-pointer hover:bg-emerald-50"
+                    >
+                      <span>{isHi ? 'गोपनीयता नीति (Privacy Policy)' : 'Privacy Policy'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setShowAccessibilityModal(true);
+                      }}
+                      className="w-full p-2.5 rounded-xl bg-white border border-[#D8D2C4] text-xs font-semibold text-[#26332C] flex items-center gap-2 cursor-pointer hover:bg-emerald-50"
+                    >
+                      <span>{isHi ? 'सुगमता (Accessibility)' : 'Accessibility'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        handleNav('/profile?subtab=overview&edit=1');
+                      }}
+                      className="w-full p-2.5 rounded-xl bg-white border border-[#D8D2C4] text-xs font-semibold text-[#26332C] flex items-center gap-2 cursor-pointer hover:bg-emerald-50"
+                    >
+                      <span>{isHi ? 'सेटिंग्स (Settings)' : 'Settings'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Mobile Admin Section (Admin Only) */}
@@ -857,6 +834,106 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Privacy Policy Modal */}
+      {showPrivacyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-base text-slate-900">
+                  {isHi ? 'गोपनीयता नीति (Privacy Policy)' : 'Privacy Policy & Data Security'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="text-xs sm:text-sm text-slate-600 space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              <p>
+                <strong>KisanConnect</strong> prioritizes the privacy, autonomy, and security of farmers and trade partners.
+              </p>
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 space-y-1.5">
+                <div className="font-bold text-emerald-900 flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-700" />
+                  <span>{isHi ? 'किसान डेटा सुरक्षा' : 'Encrypted Farmer Credentials'}</span>
+                </div>
+                <p className="text-xs text-emerald-800">
+                  {isHi 
+                    ? 'आपकी भूमि विवरण, आधार सत्यापन, और बैंक विवरण 256-बिट एन्क्रिप्शन द्वारा सुरक्षित हैं।'
+                    : 'Aadhaar hashes, land record IDs, and bank account details are stored in compliance with Digital Personal Data Protection standards.'}
+                </p>
+              </div>
+              <p>
+                {isHi
+                  ? 'हम कभी भी आपका व्यक्तिगत फोन नंबर या वित्तीय विवरण तीसरे पक्ष के विज्ञापनदाताओं को नहीं बेचते हैं।'
+                  : 'We never sell your phone number, crop pricing histories, or financial credentials to 3rd-party ad networks.'}
+              </p>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPrivacyModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                {isHi ? 'ठीक है (Got It)' : 'Got It'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Accessibility Modal */}
+      {showAccessibilityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-base text-slate-900">
+                  {isHi ? 'सुगमता सेटिंग्स (Accessibility)' : 'Accessibility Settings'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowAccessibilityModal(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="text-xs sm:text-sm text-slate-600 space-y-3">
+              <p>
+                {isHi
+                  ? 'KisanConnect को सभी किसानों के लिए सुगम और सरल बनाया गया है।'
+                  : 'KisanConnect is designed with universal access principles for multi-lingual and non-tech-savvy users.'}
+              </p>
+              <div className="space-y-2">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                  <span className="font-bold text-slate-800">{isHi ? 'आवाज सहायता (Voice Narration)' : 'Voice Audio Assistance'}</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800 uppercase">Active</span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                  <span className="font-bold text-slate-800">{isHi ? 'बड़ा टेक्स्ट और कंट्रास्ट' : 'High Contrast UI'}</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-slate-200 text-slate-700 uppercase">Default</span>
+                </div>
+              </div>
+            </div>
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowAccessibilityModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-[#315C45] text-white font-bold text-xs hover:bg-[#254634] transition-colors cursor-pointer"
+              >
+                {isHi ? 'बंद करें (Close)' : 'Close'}
+              </button>
+            </div>
           </div>
         </div>
       )}

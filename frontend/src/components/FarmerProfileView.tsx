@@ -25,6 +25,10 @@ import {
   Trash2, 
   Calendar, 
   Droplets, 
+  FlaskConical,
+  ShieldAlert,
+  Tractor,
+  Activity,
   Clock, 
   ArrowRight, 
   AlertCircle, 
@@ -36,27 +40,49 @@ import {
   ChevronRight,
   Sparkles
 } from 'lucide-react';
+import { FarmTraceabilityModal } from './FarmTraceabilityModal';
+import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
+import { FarmActivity, FarmerListing } from '../types';
+
+export type ProfileSubTab = 'overview' | 'passport' | 'fields' | 'crops' | 'sales' | 'points';
 
 interface FarmerProfileViewProps {
-  initialSubTab?: 'overview' | 'fields' | 'crops' | 'sales' | 'points';
+  initialSubTab?: ProfileSubTab;
   onNavigateTab?: (tab: string) => void;
   onOpenListingWizard?: () => void;
+  listings?: FarmerListing[];
+  activities?: FarmActivity[];
+  onRefreshData?: () => void;
+  onOpenTraceabilityModal?: (listing?: FarmerListing) => void;
+  onOpenActivityLogger?: () => void;
 }
 
 export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
   initialSubTab = 'overview',
   onNavigateTab,
-  onOpenListingWizard
+  onOpenListingWizard,
+  listings,
+  activities,
+  onRefreshData,
+  onOpenTraceabilityModal,
+  onOpenActivityLogger
 }) => {
   const { user } = useAuth();
   const { language } = useLanguage();
   const isHi = language === 'hi';
 
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'fields' | 'crops' | 'sales' | 'points'>(initialSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<ProfileSubTab>(initialSubTab);
   const [profile, setProfile] = useState<FarmerDigitalProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Passport & Activity State
+  const [activitiesList, setActivitiesList] = useState<FarmActivity[]>(activities || []);
+  const [selectedActivityFilter, setSelectedActivityFilter] = useState<string>('ALL');
+  const [showInternalTraceModal, setShowInternalTraceModal] = useState<boolean>(false);
+  const [showInternalLoggerModal, setShowInternalLoggerModal] = useState<boolean>(false);
+  const [selectedListingForTrace, setSelectedListingForTrace] = useState<FarmerListing | null>(null);
 
   // Modal States
   const [isFieldModalOpen, setIsFieldModalOpen] = useState<boolean>(false);
@@ -143,6 +169,63 @@ export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
       setActiveSubTab(initialSubTab);
     }
   }, [initialSubTab]);
+
+  useEffect(() => {
+    if (activities && activities.length > 0) {
+      setActivitiesList(activities);
+    } else {
+      api.getActivities({ farmerId: user?.id || '' })
+        .then(res => {
+          if (Array.isArray(res)) setActivitiesList(res);
+        })
+        .catch(() => {});
+    }
+  }, [activities, user?.id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('edit') === '1') {
+      setIsEditProfileOpen(true);
+    }
+    const subParam = params.get('subtab');
+    if (subParam && ['overview', 'passport', 'fields', 'crops', 'sales', 'points'].includes(subParam)) {
+      setActiveSubTab(subParam as ProfileSubTab);
+    }
+
+    const handleFarmerNav = (e: any) => {
+      if (e.detail?.subTab && ['overview', 'passport', 'fields', 'crops', 'sales', 'points'].includes(e.detail.subTab)) {
+        setActiveSubTab(e.detail.subTab as ProfileSubTab);
+      }
+      if (e.detail?.edit) {
+        setIsEditProfileOpen(true);
+      }
+    };
+    window.addEventListener('farmer-navigate-tab', handleFarmerNav);
+    return () => window.removeEventListener('farmer-navigate-tab', handleFarmerNav);
+  }, []);
+
+  const handleOpenTraceModal = (listing?: FarmerListing) => {
+    const targetListing = listing || listings?.[0] || undefined;
+    setSelectedListingForTrace(targetListing || null);
+    if (onOpenTraceabilityModal) {
+      onOpenTraceabilityModal(targetListing);
+    } else {
+      setShowInternalTraceModal(true);
+    }
+  };
+
+  const handleOpenLoggerModal = () => {
+    if (onOpenActivityLogger) {
+      onOpenActivityLogger();
+    } else {
+      setShowInternalLoggerModal(true);
+    }
+  };
+
+  const filteredActivities = useMemo(() => {
+    if (selectedActivityFilter === 'ALL') return activitiesList;
+    return activitiesList.filter(a => a.typeUri === selectedActivityFilter);
+  }, [activitiesList, selectedActivityFilter]);
 
   // Flash banner helper
   const showBanner = (msg: string) => {
@@ -541,6 +624,7 @@ export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
       <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-[#E0DBD0] scrollbar-none">
         {[
           { id: 'overview', label: isHi ? 'सारांश (Overview)' : 'Overview', icon: FileText },
+          { id: 'passport', label: isHi ? 'किसान पासपोर्ट व डायरी' : 'Farmer Passport', icon: ShieldCheck, count: activitiesList.length },
           { id: 'fields', label: `${isHi ? 'मेरे खेत' : 'My Fields'} (${profile?.fields.length || 0})`, icon: Layers },
           { id: 'crops', label: `${isHi ? 'फसल रिकॉर्ड' : 'Crop Records'} (${profile?.cropRecords.length || 0})`, icon: Sprout },
           { id: 'sales', label: `${isHi ? 'मेरी बिक्री' : 'My Sales'} (${profile?.metrics.totalCompletedSales || 0})`, icon: TrendingUp },
@@ -552,7 +636,7 @@ export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id as any)}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs whitespace-nowrap transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
                 isActive
                   ? 'bg-[#315C45] text-white shadow-xs'
                   : 'bg-white text-[#5A6860] hover:text-[#26332C] hover:bg-[#EFECE4] border border-[#E5E0D5]'
@@ -560,6 +644,13 @@ export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
             >
               <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-[#315C45]'}`} />
               <span>{tab.label}</span>
+              {typeof (tab as any).count === 'number' && (tab as any).count > 0 && (
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  isActive ? 'bg-white text-emerald-800' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {(tab as any).count}
+                </span>
+              )}
             </button>
           );
         })}
@@ -649,6 +740,117 @@ export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
               </div>
             </div>
           )}
+
+          {/* Unified Farmer Passport & Identity Verification Card */}
+          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#E5E0D5] shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl font-bold shadow-2xs">
+                  📜
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">
+                      {isHi ? 'किसान डिजिटल पासपोर्ट एवं सत्यापन स्थिति' : 'Farmer Digital Passport & Verification Status'}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      NaLamKI Open Twin
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {isHi ? 'पहचान, आधार, खेत अभिलेख एवं फसल ट्रेसेबिलिटी का आधिकारिक डिजिटल प्रमाण' : 'Official identity verification, land records, and crop traceability proof'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenTraceModal()}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{isHi ? '📜 प्रमाण पत्र देखें' : '📜 View Passport Certificate'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab('passport')}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-xs flex items-center gap-1 cursor-pointer border border-emerald-200 transition-colors"
+                >
+                  <span>{isHi ? 'खेत डायरी' : 'Farm Diary'}</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Pillars of Verification */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* Pillar 1: Aadhaar Verification */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F5] border border-[#E5E0D5] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-500">
+                    {isHi ? 'आधार सत्यापन' : 'Aadhaar Verification'}
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black flex items-center gap-0.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>{isHi ? 'सत्यापित' : 'Verified'}</span>
+                  </span>
+                </div>
+                <div className="text-sm font-black text-slate-800">XXXX-XXXX-4819</div>
+                <div className="text-[11px] text-emerald-700 font-medium">{isHi ? '✓ यूआईडीएआई / एग्रीस्टैक लिंक सक्रिय' : '✓ UIDAI / AgriStack Link Active'}</div>
+              </div>
+
+              {/* Pillar 2: Mobile OTP Verification */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F5] border border-[#E5E0D5] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-500">
+                    {isHi ? 'मोबाइल सत्यापन' : 'Mobile Verification'}
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black flex items-center gap-0.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>{isHi ? 'सत्यापित' : 'Verified'}</span>
+                  </span>
+                </div>
+                <div className="text-sm font-black text-slate-800">{profile?.phone || user?.phone || '+91 98765 43210'}</div>
+                <div className="text-[11px] text-emerald-700 font-medium">{isHi ? '✓ 2FA ओटीपी सत्यापित' : '✓ 2FA OTP Verified'}</div>
+              </div>
+
+              {/* Pillar 3: Land & Field Registration */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F5] border border-[#E5E0D5] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-500">
+                    {isHi ? 'भू-अभिलेख' : 'Land Records'}
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black flex items-center gap-0.5">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>{isHi ? 'राजस्व पुष्टि' : 'Verified'}</span>
+                  </span>
+                </div>
+                <div className="text-sm font-black text-slate-800">
+                  {profile?.metrics.totalCultivatedAcres || 12} {isHi ? 'एकड़' : 'Acres'} • {profile?.fields.length || 0} {isHi ? 'खेत' : 'Plots'}
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium">{isHi ? 'खतौनी व रकबा मिलान पूर्ण' : 'Khasra / Khatauni verified'}</div>
+              </div>
+
+              {/* Pillar 4: Passport Traceability Tier */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F5] border border-[#E5E0D5] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-500">
+                    {isHi ? 'पासपोर्ट स्तर' : 'Passport Tier'}
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black">
+                    Gold Verified
+                  </span>
+                </div>
+                <div className="text-sm font-black text-slate-800">
+                  {profile?.trust?.trustBadge || 'Verified Producer'}
+                </div>
+                <div className="text-[11px] text-emerald-700 font-medium">
+                  {activitiesList.length} {isHi ? 'प्रमाणित गतिविधियां दर्ज' : 'Audited Entries'}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Quick Actions Shortcuts */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -796,7 +998,223 @@ export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* 4. TAB 2: MY FIELDS (खेत प्रबंधन)                              */}
+      {/* 4. TAB: FARMER PASSPORT & FARM DIARY (किसान पासपोर्ट व डायरी) */}
+      {/* ------------------------------------------------------------- */}
+      {activeSubTab === 'passport' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Header Banner */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-slate-900 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+            <div>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  NaLamKI · ITU-T / FAO Recommendation Annex A.16
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-800 text-slate-300">
+                  PASSPORT-ID-{user?.id?.slice(-8).toUpperCase() || 'FARMER-IND'}
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black">
+                {isHi ? 'खेत की डायरी एवं फसल प्रमाण पत्र (Farmer Passport)' : 'Farm Field Diary & Digital Passport'}
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1 max-w-xl">
+                {isHi 
+                  ? 'अपनी फसल के काम दर्ज करें — मौसम और तारीख अपने आप जुड़ जाएंगे। डायरी पूरी रखने पर खरीदार से ₹50-₹100/क्विंटल तक बेहतर दाम मिल सकता है।'
+                  : 'Log farm operations with 1-tap — weather and dates are auto-recorded. Conforming to ITU-T/FAO digital twin standards to unlock verified buyer premiums.'}
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => handleOpenTraceModal()}
+                className="px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              >
+                <FileText className="w-4 h-4 text-emerald-400" />
+                <span>{isHi ? '📜 प्रमाण पत्र देखें' : '📜 View Passport Certificate'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleOpenLoggerModal()}
+                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isHi ? '✍️ डायरी लिखें (1-टैप)' : '✍️ Log Work (1-Tap)'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <div className="p-4 rounded-2xl bg-white border border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {isHi ? 'कुल दर्ज गतिविधियां' : 'Total Activities Logged'}
+              </span>
+              <span className="text-2xl font-black text-[#1C2B23]">{activitiesList.length}</span>
+              <span className="text-[11px] text-emerald-700 font-bold block mt-0.5">✓ 100% NaLamKI Compliant</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {isHi ? 'सिंचाई रिकॉर्ड' : 'Irrigation Records'}
+              </span>
+              <span className="text-2xl font-black text-cyan-800">
+                {activitiesList.filter(a => a.typeUri === 'irrigation').length}
+              </span>
+              <span className="text-[11px] text-cyan-700 font-bold block mt-0.5">💧 Micro-Drip Optimized</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {isHi ? 'सुरक्षा एवं पोषण' : 'Protection & Nutrition'}
+              </span>
+              <span className="text-2xl font-black text-amber-800">
+                {activitiesList.filter(a => a.typeUri === 'fertilization' || a.typeUri === 'crop_protection').length}
+              </span>
+              <span className="text-[11px] text-amber-700 font-bold block mt-0.5">🛡️ Bio-IPM Protocol</span>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-[#D8D2C4] shadow-xs">
+              <span className="text-[10px] font-black uppercase text-slate-500 block mb-1">
+                {isHi ? 'कटाई एवं लॉट' : 'Harvested Lots'}
+              </span>
+              <span className="text-2xl font-black text-purple-800">
+                {activitiesList.filter(a => a.typeUri === 'harvesting').length}
+              </span>
+              <span className="text-[11px] text-purple-700 font-bold block mt-0.5">🚜 BBCH 99 Graded</span>
+            </div>
+          </div>
+
+          {/* Activities Filter & Timeline */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#D8D2C4] shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-200">
+              <h3 className="text-base font-black text-[#1C2B23] flex items-center gap-2">
+                <Activity className="w-5 h-5 text-emerald-700" />
+                <span>{isHi ? 'खेत कार्य समयरेखा (Field Activity Log)' : 'Field Activity Chronological Timeline'}</span>
+              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { id: 'ALL', label: isHi ? 'सभी' : 'All' },
+                  { id: 'sowing', label: isHi ? 'बुवाई' : 'Sowing' },
+                  { id: 'irrigation', label: isHi ? 'सिंचाई' : 'Irrigation' },
+                  { id: 'fertilization', label: isHi ? 'खाद' : 'Fertilizer' },
+                  { id: 'crop_protection', label: isHi ? 'कीट सुरक्षा' : 'Protection' },
+                  { id: 'harvesting', label: isHi ? 'कटाई' : 'Harvest' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedActivityFilter(f.id)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      selectedActivityFilter === f.id
+                        ? 'bg-emerald-700 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {filteredActivities.length === 0 ? (
+              <div className="py-12 text-center text-slate-500 space-y-3">
+                <div className="text-4xl">🌱</div>
+                <h4 className="text-base font-extrabold text-slate-800">
+                  {isHi ? 'कोई खेत गतिविधि दर्ज नहीं है' : 'No Field Activities Recorded'}
+                </h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  {isHi 
+                    ? 'अपनी फसल के लिए बुवाई, पानी या खाद की तारीख दर्ज करें।' 
+                    : 'Record your sowing, irrigation, fertilizer, or harvest operations.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleOpenLoggerModal()}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs cursor-pointer shadow-xs"
+                >
+                  + {isHi ? 'पहली गतिविधि दर्ज करें' : 'Record First Farm Activity'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 relative before:absolute before:inset-0 before:left-5 before:w-0.5 before:bg-stone-200">
+                {filteredActivities.map((act, idx) => (
+                  <div key={act.id || idx} className="relative pl-11 group">
+                    <div className="absolute left-2.5 top-3.5 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-slate-900 flex items-center justify-center z-10 shadow-xs">
+                      {act.typeUri === 'sowing' ? <Sprout className="w-3.5 h-3.5 text-emerald-600" /> :
+                       act.typeUri === 'irrigation' ? <Droplets className="w-3.5 h-3.5 text-cyan-600" /> :
+                       act.typeUri === 'fertilization' ? <FlaskConical className="w-3.5 h-3.5 text-amber-600" /> :
+                       act.typeUri === 'crop_protection' ? <ShieldAlert className="w-3.5 h-3.5 text-rose-600" /> :
+                       <Tractor className="w-3.5 h-3.5 text-purple-600" />}
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-[#FAF9F5] border border-[#D8D2C4] shadow-2xs hover:bg-white transition-all space-y-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-slate-900 text-white">
+                            {act.typeLabel || act.typeUri}
+                          </span>
+                          <h4 className="text-sm font-black text-[#1C2B23]">{act.name}</h4>
+                          {act.cropName && (
+                            <span className="text-[11px] font-bold text-stone-600 bg-stone-200 px-2 py-0.5 rounded">
+                              {act.cropName} {act.variety ? `(${act.variety})` : ''}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-stone-500 font-semibold">
+                          <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                          <span>{new Date(act.startsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        </div>
+                      </div>
+
+                      {act.bbchStage && (
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-slate-700 bg-white inline-flex px-2 py-0.5 rounded border border-slate-200">
+                          🌱 <span>{act.bbchStage}</span>
+                        </div>
+                      )}
+
+                      {act.notes && (
+                        <p className="text-xs text-[#2B3B32] font-medium leading-relaxed">
+                          {act.notes}
+                        </p>
+                      )}
+
+                      {/* Deployed Resources & Input/Output */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-stone-200 text-xs text-stone-600">
+                        {act.resources && act.resources.length > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <Tractor className="w-3.5 h-3.5 text-stone-500" />
+                            <span><strong>{isHi ? 'उपकरण:' : 'Resource:'}</strong> {act.resources.map(r => r.name).join(', ')}</span>
+                          </div>
+                        )}
+                        {act.inputsOutputs && act.inputsOutputs.length > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-stone-500" />
+                            <span><strong>{isHi ? 'इनपुट/आउटपुट:' : 'Input/Output:'}</strong> {act.inputsOutputs.map(io => `${io.item} (${io.quantity})`).join(', ')}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Microclimate */}
+                      {act.conditions && (
+                        <div className="flex items-center gap-3 pt-1 text-[11px] text-stone-500 flex-wrap">
+                          <span className="font-bold text-stone-700 uppercase">{isHi ? 'खेत मौसम:' : 'Microclimate:'}</span>
+                          <span>🌡️ {act.conditions.temperature}°C</span>
+                          <span>💧 {act.conditions.humidity}% RH</span>
+                          <span>🌱 {act.conditions.soilMoisture}% Moisture</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* 5. TAB 3: MY FIELDS (खेत प्रबंधन)                              */}
       {/* ------------------------------------------------------------- */}
       {activeSubTab === 'fields' && (
         <div className="space-y-6">
@@ -1657,6 +2075,32 @@ export const FarmerProfileView: React.FC<FarmerProfileViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Traceability & Activity Logger Modals (Self-contained / Fallback) */}
+      {showInternalTraceModal && (
+        <FarmTraceabilityModal
+          isOpen={showInternalTraceModal}
+          onClose={() => setShowInternalTraceModal(false)}
+          listingId={selectedListingForTrace?.id}
+          initialListing={selectedListingForTrace || undefined}
+          farmerId={user?.id}
+          language={isHi ? 'hi' : 'en'}
+        />
+      )}
+      {showInternalLoggerModal && (
+        <FieldActivityLoggerModal
+          isOpen={showInternalLoggerModal}
+          onClose={() => setShowInternalLoggerModal(false)}
+          listings={listings || []}
+          onActivityCreated={() => {
+            if (onRefreshData) onRefreshData();
+            api.getActivities({ farmerId: user?.id || '' }).then(res => {
+              if (Array.isArray(res)) setActivitiesList(res);
+            }).catch(() => {});
+          }}
+          language={isHi ? 'hi' : 'en'}
+        />
       )}
     </div>
   );

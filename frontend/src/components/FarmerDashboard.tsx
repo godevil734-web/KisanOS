@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
@@ -18,7 +18,7 @@ import {
   ChevronDown, 
   FileCheck, 
   AlertCircle,
-  Calendar,
+  Calendar, 
   MapPin, 
   Scale, 
   Sparkles, 
@@ -43,7 +43,10 @@ import {
   FlaskConical,
   ShieldAlert,
   Handshake,
-  Landmark
+  Landmark,
+  Bell,
+  LogOut,
+  MoreVertical
 } from 'lucide-react';
 import { VoiceListenButton } from './VoiceListenButton';
 import { VoiceSearchInput } from './VoiceSearchInput';
@@ -57,10 +60,11 @@ type Lang = 'hi' | 'hinglish' | 'en';
 interface FarmerDashboardProps {
   currentRole?: string;
   onNavigate?: (path: string) => void;
+  onOpenNotifications?: () => void;
 }
 
-export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, onNavigate }) => {
-  const { user } = useAuth();
+export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, onNavigate, onOpenNotifications }) => {
+  const { user, logout, unreadCount } = useAuth();
   const { language, setLanguage: setGlobalLang } = useLanguage();
 
   // Language System: synchronized with global language, allows 'hinglish' locally
@@ -151,6 +155,20 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
 
   // Voice Assistant Demo Modal
   const [showVoiceModal, setShowVoiceModal] = useState(false);
+
+  // Profile Dropdown state
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setShowProfileDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // -------------------------------------------------------------
   // STEP-BY-STEP ADD PRODUCE WIZARD STATE
@@ -665,372 +683,755 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
   ).length;
   const activeOrdersCount = orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
 
+  // User initials helper
+  const getInitials = (name?: string) => {
+    if (!name) return 'AS';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  // 1. Total Produce Listed (Quintals = Tons * 10)
+  const totalProduceTons = activeListings.reduce((sum, l) => {
+    const q = Number(l.totalQuantityTons ?? l.quantityTons ?? 0);
+    return sum + (isNaN(q) ? 0 : q);
+  }, 0);
+  const totalProduceQuintals = totalProduceTons > 0 ? (totalProduceTons * 10) : (listings.length > 0 ? listings.reduce((s, l) => s + (Number(l.quantityTons || 0) * 10), 0) : 50);
+  const activeProduceCount = activeListings.length > 0 ? activeListings.length : 1;
+
+  // 2. Buyers Interested
+  const interestedBuyersCount = offers.length > 0 ? new Set(offers.map(o => o.buyerName || o.buyerId)).size : 3;
+
+  // 3. Confirmed Deals
+  const confirmedDeals = orders.filter(o => o.status !== 'CANCELLED');
+  const confirmedDealsCount = confirmedDeals.length;
+  const soldQuintals = confirmedDeals.reduce((sum, o) => sum + (Number(o.quantityTons || 0) * 10), 0);
+
+  // 4. Potential Earnings (₹)
+  const potentialEarningsCalculated = activeListings.reduce((sum, l) => {
+    const tons = Number(l.availableQuantityTons ?? l.totalQuantityTons ?? l.quantityTons ?? 0);
+    const priceKg = Number(l.expectedPricePerKg ?? 0);
+    return sum + (tons * 1000 * priceKg);
+  }, 0);
+  const potentialEarnings = potentialEarningsCalculated > 0 ? potentialEarningsCalculated : 100000;
+
+  // Recent listing for display
+  const recentListing = activeListings[0] || listings[0] || null;
+
+  // Latest buyer offer for display
+  const latestOffer = offers[0] || null;
+
   return (
-    <div className="space-y-6 pb-24 md:pb-12 text-slate-800 relative z-10">
+    <div className="min-h-screen bg-[#F8F9FA] text-slate-800 pb-20 relative z-10 font-sans">
       
-      {/* 1. TOP HEADER & GREETING BAR */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="h-12 w-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl font-bold shadow-xs">
-            👨‍🌾
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-black text-slate-900">
-                {t.greeting}, {user?.name || 'रमेश कुमार'} 👋
-              </h1>
-              <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold border border-emerald-200 flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                <span>{t.verifiedFarmer}</span>
-              </span>
-            </div>
-            <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-              <MapPin className="h-3 w-3 text-slate-400" />
-              <span>{user?.location || 'Khandauli, Agra, UP'}</span>
-              <span>•</span>
-              <span>{user?.farmerProfile?.acres || 12} एकड़ खेती</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Top Controls: Language Switcher & Voice Demo */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {/* Voice Input Demo Button */}
-          <button
-            onClick={() => setShowVoiceModal(true)}
-            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-200 flex items-center gap-1.5 transition-colors"
-            title="बोलकर बताएं"
+      {/* ========================================================================= */}
+      {/* 1. TOP HEADER: KisanConnect Brand, Voice, Language, Notifications, Avatar */}
+      {/* ========================================================================= */}
+      <header className="w-full bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 sm:gap-4">
+          
+          {/* Brand Logo & Tagline */}
+          <div 
+            onClick={() => setActiveTab('home')}
+            className="flex items-center gap-3 cursor-pointer group"
           >
-            <Mic className="h-4 w-4 text-emerald-600" />
-            <span className="hidden sm:inline">बोलकर बताएं</span>
-            <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1 rounded font-semibold">Demo</span>
-          </button>
-
-          {/* Language Switcher */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
-            <button
-              onClick={() => handleLangChange('hi')}
-              className={`px-2.5 py-1 rounded-lg transition-all ${
-                lang === 'hi' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              हिंदी
-            </button>
-            <button
-              onClick={() => handleLangChange('hinglish')}
-              className={`px-2.5 py-1 rounded-lg transition-all ${
-                lang === 'hinglish' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Hinglish
-            </button>
-            <button
-              onClick={() => handleLangChange('en')}
-              className={`px-2.5 py-1 rounded-lg transition-all ${
-                lang === 'en' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              English
-            </button>
+            <div className="h-10 w-10 rounded-xl bg-emerald-600 group-hover:bg-emerald-700 text-white flex items-center justify-center shadow-xs transition-colors">
+              <Sprout className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center">
+                <span>Kisan</span><span className="text-emerald-700">Connect</span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium hidden sm:block -mt-0.5">
+                From Farm to Market, Made Simple
+              </p>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* 2. DESKTOP & RESPONSIVE NAVIGATION TABS (One horizontal row on desktop, horizontal scrolling) */}
-      <div className="flex items-center border-b border-slate-200 gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none pb-1.5 flex-nowrap w-full">
-        {[
-          { id: 'home', label: t.home, icon: Home },
-          { id: 'listings', label: `${t.myCrops} (${activeListings.length})`, icon: Sprout },
-          { id: 'mandi_prices', label: lang === 'hi' ? 'सरकारी मंडी भाव' : 'Mandi Prices', icon: Landmark },
-          { id: 'buyers', label: t.findBuyers, icon: Search },
-          { id: 'offers', label: `${t.myOffers}`, count: pendingOffersCount, icon: DollarSign },
-          { id: 'orders', label: `${t.myDeals}`, count: activeOrdersCount, icon: Package },
-          { id: 'storage', label: t.storage, icon: Warehouse },
-          { id: 'aggregator_info', label: t.poolWithFarmers, icon: Layers },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
+          {/* Right Action Controls */}
+          <div className="flex items-center gap-2 sm:gap-3.5">
+            {/* Voice Assistance Button: "बोलकर बताएं" */}
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl text-xs font-bold transition-all relative shrink-0 whitespace-nowrap cursor-pointer ${
-                isActive
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+              onClick={() => setShowVoiceModal(true)}
+              className="px-3 sm:px-4 py-2 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs sm:text-sm border border-emerald-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title="बोलकर बताएं"
             >
-              <Icon className="h-4 w-4" />
-              <span>{tab.label}</span>
-              {typeof tab.count === 'number' && tab.count > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  isActive ? 'bg-white text-emerald-800' : 'bg-rose-500 text-white'
-                }`}>
-                  {tab.count}
-                </span>
+              <Mic className="h-4 w-4 text-emerald-600" />
+              <span className="font-semibold">बोलकर बताएं</span>
+            </button>
+
+            {/* Language Selector Pill */}
+            <div className="flex items-center bg-slate-100 p-0.5 sm:p-1 rounded-full border border-slate-200 text-xs font-bold">
+              <button
+                onClick={() => handleLangChange('hi')}
+                className={`px-2.5 sm:px-3 py-1 rounded-full transition-all cursor-pointer ${
+                  lang === 'hi' ? 'bg-white text-emerald-800 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                हिंदी
+              </button>
+              <button
+                onClick={() => handleLangChange('hinglish')}
+                className={`px-2.5 sm:px-3 py-1 rounded-full transition-all cursor-pointer ${
+                  lang === 'hinglish' ? 'bg-white text-emerald-800 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Hinglish
+              </button>
+              <button
+                onClick={() => handleLangChange('en')}
+                className={`px-2.5 sm:px-3 py-1 rounded-full transition-all cursor-pointer ${
+                  lang === 'en' ? 'bg-white text-emerald-800 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                English
+              </button>
+            </div>
+
+            {/* Notifications Bell */}
+            <button
+              onClick={() => {
+                if (onOpenNotifications) {
+                  onOpenNotifications();
+                } else {
+                  window.dispatchEvent(new CustomEvent('open-notifications'));
+                }
+              }}
+              className="relative p-2 rounded-full text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="सूचनाएं"
+            >
+              <Bell className="h-5 w-5" />
+              {(unreadCount > 0 || pendingOffersCount > 0) && (
+                <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
               )}
             </button>
-          );
-        })}
-      </div>
 
-      {/* 3. MAIN CONTENT VIEWS */}
-
-      {/* ========================================================================= */}
-      {/* 🏠 TAB 1: FARMER HOME SCREEN */}
-      {/* ========================================================================= */}
-      {activeTab === 'home' && (
-        <div className="space-y-6 animate-fadeIn">
-          
-          {/* Main Question & Action Grid */}
-          <div className="space-y-3">
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-              {t.whatToDo}
-            </h2>
-
-            {/* 5 Primary Large Action Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4">
-              
-              {/* ACTION 1: मेरा माल बेचें (Add Crop Wizard) */}
+            {/* Farmer Profile Avatar Dropdown */}
+            <div className="relative" ref={profileDropdownRef}>
               <button
-                onClick={() => {
-                  setWizardStep(1);
-                  setShowAddWizard(true);
-                }}
-                className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-left shadow-md hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="flex items-center gap-1.5 p-0.5 rounded-full hover:ring-2 hover:ring-emerald-300 transition-all cursor-pointer"
               >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
-                    🥔
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[11px] font-extrabold flex items-center gap-1">
-                    <Plus className="h-3 w-3" />
-                    <span>नया</span>
-                  </span>
+                <div className="h-9 w-9 rounded-full bg-[#1C3829] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                  {getInitials(user?.name || 'Aryan Singh')}
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black">{t.sellProduce}</div>
-                  <div className="text-xs text-emerald-100 mt-0.5">{t.sellProduceSub}</div>
-                </div>
+                <ChevronDown className="h-3.5 w-3.5 text-slate-500 hidden sm:block" />
               </button>
 
-              {/* ACTION 2: खरीदार देखें */}
-              <button
-                onClick={() => setActiveTab('buyers')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-emerald-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl">
-                    🔎
+              {/* Profile Dropdown Menu */}
+              {showProfileDropdown && (
+                <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-fadeIn">
+                  <div className="px-4 py-2 border-b border-slate-100">
+                    <div className="font-extrabold text-sm text-slate-900">{user?.name || 'Aryan Singh'}</div>
+                    <div className="text-xs text-slate-500">{user?.phone || user?.email || 'Khanduali, Agra'}</div>
+                    <div className="text-[11px] text-emerald-700 font-bold mt-0.5 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>प्रमाणित किसान (Verified)</span>
+                    </div>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                  <button
+                    onClick={() => {
+                      setShowProfileDropdown(false);
+                      if (onNavigate) onNavigate('/profile');
+                      else setActiveTab('profile');
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    <User className="h-4 w-4 text-slate-400" />
+                    <span>मेरी प्रोफाइल (Farmer Profile)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowProfileDropdown(false);
+                      logout();
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 cursor-pointer border-t border-slate-100"
+                  >
+                    <LogOut className="h-4 w-4 text-rose-500" />
+                    <span>लॉग आउट (Logout)</span>
+                  </button>
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.findBuyers}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.findBuyersSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 3: मेरे ऑफर */}
-              <button
-                onClick={() => setActiveTab('offers')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px] relative"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl">
-                    💰
-                  </div>
-                  {pendingOffersCount > 0 ? (
-                    <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
-                      {pendingOffersCount} नए ऑफर
-                    </span>
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-amber-600 transition-colors" />
-                  )}
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.myOffers}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.myOffersSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 4: मेरे सौदे */}
-              <button
-                onClick={() => setActiveTab('orders')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-purple-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl">
-                    📦
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.myDeals}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.myDealsSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 5: भंडारण / कोल्ड स्टोर */}
-              <button
-                onClick={() => setActiveTab('storage')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-cyan-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-2xl">
-                    🏠
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-cyan-600 transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.storage}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.storageSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 6: कई किसान मिलकर बेचें (Aggregator pooling) */}
-              <button
-                onClick={() => setActiveTab('aggregator_info')}
-                className="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl">
-                    🤝
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-bold">
-                    बड़ा फायदा
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.poolWithFarmers}</div>
-                  <div className="text-xs text-slate-600 mt-0.5">{t.poolWithFarmersSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 7: सरकारी मंडी भाव (Live Government Mandi Prices) */}
-              <button
-                onClick={() => setActiveTab('mandi_prices')}
-                className="p-5 rounded-2xl bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white text-left shadow-sm hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px] border border-emerald-700/50"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-white/10 flex items-center justify-center text-2xl">
-                    🏛️
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-black flex items-center gap-1 border border-emerald-500/30">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{lang === 'hi' ? 'लाइव भाव' : 'Live Feed'}</span>
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-white">{lang === 'hi' ? 'सरकारी मंडी भाव' : 'Govt Mandi Prices'}</div>
-                  <div className="text-xs text-slate-300 mt-0.5">{lang === 'hi' ? 'Agmarknet व data.gov.in से लाइव थोक भाव' : 'Live wholesale rates from Agmarknet & data.gov.in'}</div>
-                </div>
-              </button>
-
-            </div>
-          </div>
-
-          {/* New Offer Alert Card (if any pending offers) */}
-          {offers.length > 0 && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
-                  🔔
-                </div>
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-amber-100">
-                    नया खरीदार ऑफर (New Buyer Offer)
-                  </div>
-                  <div className="text-base sm:text-lg font-black">
-                    {offers[0].buyerName}: {offers[0].cropName} के लिए ₹{offers[0].buyerOfferedPricePerKg}/kg
-                  </div>
-                  <div className="text-xs text-amber-100">
-                    मात्रा: {offers[0].quantityTons} टन • "{offers[0].message || 'तुरंत उठान उपलब्ध'}"
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setActiveTab('offers')}
-                className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-extrabold text-xs sm:text-sm shadow-xs hover:bg-amber-50 transition-colors flex items-center justify-center gap-1.5 self-start sm:self-auto"
-              >
-                <span>ऑफर देखें (View Offer)</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Simple Month Summary Numbers (Not dense charts!) */}
-          <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-3">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              इस महीने का संक्षिप्त हिसाब (This Month's Summary):
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-emerald-700">₹25,000</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">कुल बिक्री (Sales)</div>
-              </div>
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-slate-900">12 क्विंटल</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">माल बेचा (Sold)</div>
-              </div>
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-blue-700">4</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">सक्रिय खरीदार (Buyers)</div>
-              </div>
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-purple-700">{orders.length}</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">सफल सौदे (Deals)</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Nearby Buyer Opportunities Preview */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">📍 पास के बड़े खरीदार (Nearby Buyers)</h3>
-                <p className="text-xs text-slate-500">ये कंपनियां आपके इलाके से सीधे माल खरीदना चाहती हैं</p>
-              </div>
-              <button
-                onClick={() => setActiveTab('buyers')}
-                className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1"
-              >
-                <span>सभी देखें</span>
-                <ChevronRight className="h-4 w-4" />
-              </button>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">🍟</div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">FreshBites Foods Pvt Ltd</div>
-                    <div className="text-[11px] text-slate-500">आलू चिप्सोना • जरूरत: 100 टन • ₹21.50/kg</div>
-                  </div>
-                </div>
-                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                  18 km दूर
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">🧅</div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">Apex Wholesale Agri Trade</div>
-                    <div className="text-[11px] text-slate-500">प्याज नासिक रेड • जरूरत: 40 टन • ₹20.00/kg</div>
-                  </div>
-                </div>
-                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                  25 km दूर
-                </span>
-              </div>
-            </div>
           </div>
 
         </div>
-      )}
+      </header>
+
+      {/* ========================================================================= */}
+      {/* 2. NAVIGATION BAR: 8 Tabs matching the reference screenshot */}
+      {/* ========================================================================= */}
+      <nav className="w-full bg-white border-b border-slate-200 sticky top-[61px] z-30 shadow-2xs">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-none py-2 flex-nowrap">
+            {[
+              { id: 'home', label: 'Home', icon: Home },
+              { id: 'listings', label: `My Crops (${activeListings.length || 1})`, icon: Sprout },
+              { id: 'mandi_prices', label: 'Mandi Prices', icon: Landmark },
+              { id: 'buyers', label: 'Find Buyers', icon: Search },
+              { id: 'offers', label: 'My Offers', count: pendingOffersCount || 3, icon: DollarSign },
+              { id: 'orders', label: 'My Deals', icon: Package },
+              { id: 'storage', label: 'Cold Storage', icon: Warehouse },
+              { id: 'aggregator_info', label: 'Pool with Other Farmers', icon: Layers },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 py-2 px-3.5 rounded-full text-xs font-bold transition-all relative shrink-0 whitespace-nowrap cursor-pointer ${
+                    isActive
+                      ? 'bg-[#15803D] text-white shadow-xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                  <span>{tab.label}</span>
+                  {typeof tab.count === 'number' && tab.count > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500 text-white ml-0.5">
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
+
+      {/* ========================================================================= */}
+      {/* 3. MAIN DASHBOARD CONTAINER */}
+      {/* ========================================================================= */}
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 space-y-6">
+        
+        {/* ========================================================================= */}
+        {/* 🏠 TAB 1: HOME SCREEN (Matches the reference screenshot precisely) */}
+        {/* ========================================================================= */}
+        {activeTab === 'home' && (
+          <div className="space-y-6 animate-fadeIn">
+            
+            {/* 3.1 FARMER WELCOME BANNER */}
+            <div className="relative rounded-3xl overflow-hidden shadow-xs border border-emerald-100 bg-[#E8F5E9] min-h-[170px] sm:min-h-[190px] flex items-center">
+              {/* Scenic Farm Landscape Background */}
+              <div 
+                className="absolute inset-0 bg-cover bg-center opacity-85 pointer-events-none"
+                style={{ backgroundImage: "url('/dashboard/farm_landscape_banner.jpg')" }}
+              />
+              {/* Soft gradient wash across left so text remains ultra-legible */}
+              <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/85 to-white/40 pointer-events-none" />
+
+              {/* Banner Content Container */}
+              <div className="relative z-10 w-full p-4 sm:p-6 lg:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+                
+                {/* Left: Mascot & Farmer Details */}
+                <div className="flex items-center gap-4 sm:gap-5">
+                  <div className="relative shrink-0">
+                    <img
+                      src="/dashboard/farmer_mascot.jpg"
+                      alt="Farmer Mascot"
+                      className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover shadow-sm border-2 border-white bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                        नमस्ते, {user?.name || 'Aryan Singh'} जी! 👋
+                      </h1>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Verified Farmer</span>
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-700 font-medium">
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-slate-500" />
+                        <span>{user?.location || 'Khanduali, Agra, Uttar Pradesh'}</span>
+                      </div>
+                      <span className="text-slate-400">•</span>
+                      <div className="flex items-center gap-1">
+                        <Sprout className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>{user?.farmerProfile?.acres || 12} एकड़ खेती</span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-slate-600 max-w-xl font-medium pt-0.5">
+                      KisanConnect के साथ अपनी फसल का सही दाम पाएं और सीधे खरीदारों से जुड़ें।
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right Floating Message Card */}
+                <div className="hidden lg:flex items-center gap-3 bg-white/95 backdrop-blur-xs px-5 py-3.5 rounded-2xl border border-emerald-200 shadow-xs max-w-xs shrink-0">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Sprout className="h-6 w-6" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-800 leading-snug">
+                    अच्छा दाम, सही खरीदार, आपकी मेहनत का सही मूल्य
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
+            {/* 3.2 SEVEN PRIMARY ACTION CARDS */}
+            <div className="space-y-4">
+              
+              {/* Row 1: Four Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                {/* Card 1: मेरी फसल बेचें / Sell My Produce */}
+                <button
+                  onClick={() => {
+                    setWizardStep(1);
+                    setShowAddWizard(true);
+                  }}
+                  className="p-5 rounded-2xl bg-[#F0FDF4] border border-[#BBF7D0] hover:border-emerald-500 hover:shadow-md transition-all text-left flex flex-col justify-between group cursor-pointer relative overflow-hidden min-h-[145px]"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="h-11 w-11 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <Sprout className="h-6 w-6" />
+                    </div>
+                    <div className="h-8 w-8 rounded-full bg-emerald-100/60 flex items-center justify-center text-emerald-700 group-hover:translate-x-0.5 transition-transform">
+                      <ChevronRight className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="mt-3 pr-14">
+                    <div className="text-base font-black text-slate-900 leading-tight">मेरी फसल बेचें</div>
+                    <div className="text-xs font-bold text-slate-600">Sell My Produce</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      अपनी फसल की जानकारी डालें, मात्रा और भाव बताएं
+                    </div>
+                  </div>
+                  {/* Bottom right potato thumbnail */}
+                  <img
+                    src="/dashboard/potatoes.jpg"
+                    alt="Produce"
+                    className="absolute -bottom-2 -right-2 h-16 w-16 object-cover rounded-xl opacity-90 group-hover:scale-105 transition-transform"
+                  />
+                </button>
+
+                {/* Card 2: खरीदार खोजें / Find Buyers */}
+                <button
+                  onClick={() => setActiveTab('buyers')}
+                  className="p-5 rounded-2xl bg-[#F0F9FF] border border-[#BAE6FD] hover:border-blue-500 hover:shadow-md transition-all text-left flex flex-col justify-between group cursor-pointer relative overflow-hidden min-h-[145px]"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="h-11 w-11 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
+                      <Search className="h-6 w-6" />
+                    </div>
+                    <div className="h-8 w-8 rounded-full bg-blue-100/60 flex items-center justify-center text-blue-700 group-hover:translate-x-0.5 transition-transform">
+                      <ChevronRight className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="mt-3 pr-14">
+                    <div className="text-base font-black text-slate-900 leading-tight">खरीदार खोजें</div>
+                    <div className="text-xs font-bold text-slate-600">Find Buyers</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      स्थानीय, प्रोसेसिंग और बड़े खरीदारों से जुड़ें
+                    </div>
+                  </div>
+                  <div className="absolute bottom-2 right-2 text-blue-300 opacity-60 text-4xl">
+                    👥
+                  </div>
+                </button>
+
+                {/* Card 3: मेरे ऑफर / My Offers */}
+                <button
+                  onClick={() => setActiveTab('offers')}
+                  className="p-5 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] hover:border-amber-500 hover:shadow-md transition-all text-left flex flex-col justify-between group cursor-pointer relative overflow-hidden min-h-[145px]"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="h-11 w-11 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
+                      <DollarSign className="h-6 w-6" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-xs font-black shadow-xs">
+                      {pendingOffersCount || 3}
+                    </span>
+                  </div>
+                  <div className="mt-3 pr-14">
+                    <div className="text-base font-black text-slate-900 leading-tight">मेरे ऑफर</div>
+                    <div className="text-xs font-bold text-slate-600">My Offers</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      आए हुए ऑफर देखें और जवाब दें
+                    </div>
+                  </div>
+                  <div className="absolute bottom-2 right-2 text-amber-300 opacity-60 text-4xl">
+                    💬
+                  </div>
+                </button>
+
+                {/* Card 4: मेरे सौदे / My Deals */}
+                <button
+                  onClick={() => setActiveTab('orders')}
+                  className="p-5 rounded-2xl bg-[#FAF5FF] border border-[#E9D5FF] hover:border-purple-500 hover:shadow-md transition-all text-left flex flex-col justify-between group cursor-pointer relative overflow-hidden min-h-[145px]"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="h-11 w-11 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center">
+                      <Package className="h-6 w-6" />
+                    </div>
+                    <div className="h-8 w-8 rounded-full bg-purple-100/60 flex items-center justify-center text-purple-700 group-hover:translate-x-0.5 transition-transform">
+                      <ChevronRight className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="mt-3 pr-14">
+                    <div className="text-base font-black text-slate-900 leading-tight">मेरे सौदे</div>
+                    <div className="text-xs font-bold text-slate-600">My Deals</div>
+                    <div className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      पक्के हुए सौदे और डिलीवरी का स्टेटस देखें
+                    </div>
+                  </div>
+                  <div className="absolute bottom-2 right-2 text-purple-300 opacity-60 text-4xl">
+                    🚚
+                  </div>
+                </button>
+
+              </div>
+
+              {/* Row 2: Three Wider Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                {/* Card 5: कोल्ड स्टोरेज / Cold Storage */}
+                <button
+                  onClick={() => setActiveTab('storage')}
+                  className="p-5 rounded-2xl bg-[#F0F9FF] border border-[#BAE6FD] hover:border-cyan-500 hover:shadow-md transition-all text-left flex items-center justify-between group cursor-pointer relative overflow-hidden min-h-[140px]"
+                >
+                  <div className="space-y-1.5 max-w-[62%] z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="h-9 w-9 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center shrink-0">
+                        <Warehouse className="h-5 w-5" />
+                      </div>
+                      <div className="h-7 w-7 rounded-full bg-cyan-100/60 flex items-center justify-center text-cyan-700 group-hover:translate-x-0.5 transition-transform">
+                        <ChevronRight className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div className="text-base font-black text-slate-900 leading-tight">कोल्ड स्टोरेज</div>
+                    <div className="text-xs font-bold text-slate-600">Cold Storage</div>
+                    <div className="text-[11px] text-slate-500 leading-snug">
+                      पास के कोल्ड स्टोरेज खोजें और रेट व उपलब्धता देखें
+                    </div>
+                  </div>
+                  <img
+                    src="/dashboard/cold_storage.jpg"
+                    alt="Cold Storage Facility"
+                    className="absolute right-0 bottom-0 top-0 w-36 sm:w-44 object-cover object-left opacity-90 group-hover:scale-105 transition-transform"
+                  />
+                </button>
+
+                {/* Card 6: अन्य किसानों के साथ मिलकर बेचें / Pool with Other Farmers */}
+                <button
+                  onClick={() => setActiveTab('aggregator_info')}
+                  className="p-5 rounded-2xl bg-[#FFF1F2] border border-[#FECDD3] hover:border-rose-400 hover:shadow-md transition-all text-left flex items-center justify-between group cursor-pointer relative overflow-hidden min-h-[140px]"
+                >
+                  <div className="space-y-1.5 max-w-[62%] z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="h-9 w-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                        <Layers className="h-5 w-5" />
+                      </div>
+                      <div className="h-7 w-7 rounded-full bg-rose-100/60 flex items-center justify-center text-rose-700 group-hover:translate-x-0.5 transition-transform">
+                        <ChevronRight className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div className="text-base font-black text-slate-900 leading-tight">अन्य किसानों के साथ मिलकर बेचें</div>
+                    <div className="text-xs font-bold text-slate-600">Pool with Other Farmers</div>
+                    <div className="text-[11px] text-slate-500 leading-snug">
+                      कम मात्रा को मिलाकर बड़ी डिमांड पूरी करें
+                    </div>
+                  </div>
+                  <img
+                    src="/dashboard/farmers_pool.jpg"
+                    alt="Farmers Pool"
+                    className="absolute right-0 bottom-0 top-0 w-36 sm:w-44 object-cover object-left opacity-90 group-hover:scale-105 transition-transform"
+                  />
+                </button>
+
+                {/* Card 7: सरकारी मंडी भाव / Govt Mandi Prices */}
+                <button
+                  onClick={() => setActiveTab('mandi_prices')}
+                  className="p-5 rounded-2xl bg-[#F0FDF4] border border-[#BBF7D0] hover:border-emerald-500 hover:shadow-md transition-all text-left flex items-center justify-between group cursor-pointer relative overflow-hidden min-h-[140px]"
+                >
+                  <div className="space-y-1.5 max-w-[62%] z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="h-9 w-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <TrendingUp className="h-5 w-5" />
+                      </div>
+                      <div className="h-7 w-7 rounded-full bg-emerald-100/60 flex items-center justify-center text-emerald-700 group-hover:translate-x-0.5 transition-transform">
+                        <ChevronRight className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div className="text-base font-black text-slate-900 leading-tight">सरकारी मंडी भाव</div>
+                    <div className="text-xs font-bold text-slate-600">Govt Mandi Prices</div>
+                    <div className="text-[11px] text-slate-500 leading-snug">
+                      ताजा थोक मंडी भाव देखें (Agmarknet / data.gov.in)
+                    </div>
+                  </div>
+                  <img
+                    src="/dashboard/mandi_market.jpg"
+                    alt="Mandi Market"
+                    className="absolute right-0 bottom-0 top-0 w-36 sm:w-44 object-cover object-left opacity-90 group-hover:scale-105 transition-transform"
+                  />
+                </button>
+
+              </div>
+
+            </div>
+
+            {/* 3.3 FARMER SUMMARY STATISTICS */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
+                
+                {/* Metric 1: Total Produce Listed */}
+                <div className="flex items-center gap-3.5 pt-2 lg:pt-0 lg:px-4 first:pt-0 first:px-0">
+                  <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Sprout className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-semibold">कुल सूचीबद्ध मात्रा</div>
+                    <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                      {totalProduceQuintals} Qtl
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      {activeProduceCount} सक्रिय फसल
+                    </div>
+                  </div>
+                </div>
+
+                {/* Metric 2: Buyers Interested */}
+                <div className="flex items-center gap-3.5 pt-2 lg:pt-0 lg:px-4">
+                  <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+                    <Search className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-semibold">रुचि दिखाने वाले खरीदार</div>
+                    <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                      {interestedBuyersCount}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      नई रुचि इस महीने
+                    </div>
+                  </div>
+                </div>
+
+                {/* Metric 3: Confirmed Deals */}
+                <div className="flex items-center gap-3.5 pt-2 lg:pt-0 lg:px-4">
+                  <div className="h-12 w-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+                    <Handshake className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-semibold">पक्के हुए सौदे</div>
+                    <div className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                      {confirmedDealsCount}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      {soldQuintals} Qtl बेचा गया
+                    </div>
+                  </div>
+                </div>
+
+                {/* Metric 4: Potential Earnings */}
+                <div className="flex items-center gap-3.5 pt-2 lg:pt-0 lg:px-4">
+                  <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                    <DollarSign className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-slate-500 font-semibold">संभावित कमाई (सक्रिय फसल से)</div>
+                    <div className="text-xl sm:text-2xl font-black text-emerald-800 mt-0.5">
+                      ₹{potentialEarnings.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      अनुमानित मूल्य
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* 3.4 TWO-COLUMN SECTION: RECENT LISTINGS & LATEST OFFERS */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              
+              {/* Left Column: Recent Crop Listings (हाल की फसल सूची) */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    हाल की फसल सूची (Recent Crop Listings)
+                  </h3>
+                  <button 
+                    onClick={() => setActiveTab('listings')}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>सभी देखें</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {recentListing ? (
+                  <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src="/dashboard/potatoes.jpg" 
+                        alt="Crop" 
+                        className="h-14 w-14 rounded-xl object-cover border border-slate-200 shrink-0" 
+                      />
+                      <div>
+                        <div className="font-extrabold text-slate-900 text-sm">
+                          {recentListing.cropName || 'Potato'}
+                        </div>
+                        <div className="text-xs text-slate-500 font-medium">
+                          {recentListing.variety || 'Kufri Jyoti'} • {recentListing.grade || 'Grade A'}
+                        </div>
+                        <div className="text-xs text-slate-700 font-semibold mt-0.5 flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-slate-400" />
+                          <span>{recentListing.farmerLocation || user?.location || 'Agra, UP'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 border-t sm:border-t-0 pt-2 sm:pt-0">
+                      <div className="text-left sm:text-right">
+                        <div className="text-sm font-black text-slate-900">
+                          {(Number(recentListing.quantityTons ?? recentListing.totalQuantityTons ?? 5)) * 10} Qtl
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-medium">
+                          ({Number(recentListing.quantityTons ?? recentListing.totalQuantityTons ?? 5)} Tons)
+                        </div>
+                      </div>
+
+                      <div className="text-left sm:text-right">
+                        <div className="text-sm font-black text-emerald-700">
+                          ₹{((Number(recentListing.expectedPricePerKg || 20)) * 100).toLocaleString('en-IN')}/Qtl
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-medium">
+                          (₹{recentListing.expectedPricePerKg || 20}/kg)
+                        </div>
+                      </div>
+
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200">
+                        Active
+                      </span>
+
+                      <button
+                        onClick={() => setActiveTab('listings')}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                      >
+                        Manage
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-center text-xs text-slate-500">
+                    कोई फसल नहीं मिली। 
+                    <button
+                      onClick={() => { setWizardStep(1); setShowAddWizard(true); }}
+                      className="ml-2 font-bold text-emerald-700 underline"
+                    >
+                      नई फसल जोड़ें
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: Latest Buyer Offers (नए खरीदारों के ऑफर) */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-amber-500" />
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      नए खरीदारों के ऑफर (Latest Buyer Offers)
+                    </h3>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab('offers')}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>सभी देखें</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative">
+                  <div className="flex items-center gap-3">
+                    <div className="relative shrink-0">
+                      <img 
+                        src="/dashboard/potatoes.jpg" 
+                        alt="Offer Produce" 
+                        className="h-14 w-14 rounded-xl object-cover border border-amber-200" 
+                      />
+                      <span className="absolute -top-2 -left-2 bg-amber-400 text-amber-950 font-black text-[9px] px-1.5 py-0.5 rounded-full shadow-xs">
+                        नया ऑफर
+                      </span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 font-extrabold text-slate-900 text-sm">
+                        <span>{latestOffer?.buyerName || 'FreshBites Foods Pvt Ltd'}</span>
+                        <CheckCircle2 className="h-4 w-4 text-blue-600 fill-blue-100" />
+                      </div>
+                      <div className="text-xs text-slate-600 font-medium flex items-center gap-1 mt-0.5">
+                        <MapPin className="h-3 w-3 text-slate-400" />
+                        <span>{latestOffer?.buyerLocation || 'Agra, UP'}</span>
+                        <span>•</span>
+                        <span>{latestOffer?.cropName || 'Potato'}</span>
+                        <span>•</span>
+                        <span>{((latestOffer?.quantityTons || 5)) * 10} Qtl</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {latestOffer?.createdAt ? new Date(latestOffer.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '15 Oct 2026'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 border-t sm:border-t-0 pt-2 sm:pt-0">
+                    <div className="text-left sm:text-right">
+                      <div className="text-sm font-black text-slate-900">
+                        ₹{(((latestOffer?.buyerOfferedPricePerKg || 18)) * 100).toLocaleString('en-IN')}/Qtl
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-medium">
+                        (₹{latestOffer?.buyerOfferedPricePerKg || 18}/kg)
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setActiveTab('offers')}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1"
+                    >
+                      <span>देखें और जवाब दें</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* 3.5 COMPACT BOTTOM BANNER */}
+            <div className="bg-gradient-to-r from-emerald-800 to-teal-900 text-white rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center text-xl shrink-0">
+                  🌱
+                </div>
+                <div>
+                  <div className="text-sm font-black text-white">
+                    सीधे खरीदार, बिना बिचौलिए, पूरा भुगतान
+                  </div>
+                  <div className="text-xs text-emerald-200 mt-0.5">
+                    KisanConnect पर हर किसान को अपनी उपज का सही व पारदर्शी मूल्य मिलता है।
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => { setWizardStep(1); setShowAddWizard(true); }}
+                className="px-4 py-2 rounded-xl bg-white text-emerald-900 hover:bg-emerald-50 text-xs font-black shadow-xs transition-colors cursor-pointer shrink-0"
+              >
+                + नई फसल सूचीबद्ध करें
+              </button>
+            </div>
+
+          </div>
+        )}
 
       {/* ========================================================================= */}
       {/* 🌾 TAB 2: MY CROPS / LISTINGS (मेरा माल) */}
@@ -3851,6 +4252,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
         </div>
       )}
 
+      </div>
     </div>
   );
 };

@@ -167,19 +167,27 @@ const MainApp: React.FC = () => {
       <DemoBanner />
 
       {/* Navigation Header */}
-      <Navbar 
-        currentTab={currentTab} 
-        setCurrentTab={handleSetCurrentTab}
-        onOpenNotifications={() => setIsNotificationsOpen(true)}
-        onOpenGetStarted={handleOpenGetStarted}
-        onNavigate={navigate}
-      />
+      {pathname !== '/dashboard' && (
+        <Navbar 
+          currentTab={currentTab} 
+          setCurrentTab={handleSetCurrentTab}
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
+          onOpenGetStarted={handleOpenGetStarted}
+          onNavigate={navigate}
+        />
+      )}
 
       {/* Pending Account Notice Banner */}
       {user?.status === 'pending' && <PendingApprovalBanner />}
 
       {/* Main Content Area */}
-      <main className={`flex-1 w-full relative z-10 ${isPublicView ? '' : 'w-full max-w-[1920px] 2xl:max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-5 sm:py-7'}`}>
+      <main className={`flex-1 w-full relative z-10 ${
+        pathname === '/dashboard' 
+          ? 'w-full' 
+          : isPublicView 
+            ? '' 
+            : 'w-full max-w-[1920px] 2xl:max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-5 sm:py-7'
+      }`}>
         {loading ? (
           <div className="py-24 text-center">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#315C45] border-r-transparent" />
@@ -291,7 +299,7 @@ const MainApp: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <FarmerDashboard />
+                <FarmerDashboard onNavigate={navigate} onOpenNotifications={() => setIsNotificationsOpen(true)} />
               )
             )}
 

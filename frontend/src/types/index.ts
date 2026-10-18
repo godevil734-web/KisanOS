@@ -394,6 +394,7 @@ export interface Offer {
   recipientRole?: 'farmer' | 'buyer' | 'aggregator' | string;
   buyerId: string;
   buyerName: string;
+  buyerLocation?: string;
   sellerId: string;
   sellerName: string;
   sellerRole?: string;

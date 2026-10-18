@@ -721,6 +721,40 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
   // Latest buyer offer for display
   const latestOffer = offers[0] || null;
 
+  // Market intelligence suggestions carousel state
+  const [suggestionIndex, setSuggestionIndex] = useState<number>(0);
+  const suggestions = [
+    {
+      id: 1,
+      image: '/dashboard/potatoes.jpg',
+      title: 'आलू का भाव इस सप्ताह स्थिर है।',
+      description: 'आगरा मंडी में आलू का औसत भाव ₹1,800 – ₹2,200 / क्विंटल चल रहा है। यदि गुणवत्ता अच्छी है तो अभी बेचने पर अच्छा मूल्य मिल सकता है।',
+      actionLabel: 'आज के मंडी भाव देखें →',
+      tabTarget: 'mandi_prices'
+    },
+    {
+      id: 2,
+      image: '/dashboard/cold_storage.jpg',
+      title: 'कोल्ड स्टोरेज में स्थान सीमित',
+      description: 'आगरा व आसपास के कोल्ड स्टोर 85% भर चुके हैं। बेहतर ऑफ-सीजन भाव के लिए अभी अपनी फसल का स्थान बुक करें।',
+      actionLabel: 'कोल्ड स्टोरेज खोजें →',
+      tabTarget: 'storage'
+    },
+    {
+      id: 3,
+      image: '/dashboard/farmers_pool.jpg',
+      title: 'सामूहिक बिक्री से अधिक मुनाफा',
+      description: 'आसपास के किसान मिलकर 60 टन का बड़ा लॉट बना रहे हैं। समूह में बेचने से ट्रांसपोर्ट खर्च 30% तक कम होता है।',
+      actionLabel: 'किसानों के साथ जुड़ें →',
+      tabTarget: 'aggregator_info'
+    }
+  ];
+  const currentSuggestion = suggestions[suggestionIndex] || suggestions[0];
+
+  const RupeeIcon = ({ className }: { className?: string }) => (
+    <span className={`inline-flex items-center justify-center font-black text-sm leading-none ${className}`}>₹</span>
+  );
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-slate-800 pb-20 relative z-10 font-sans">
       
@@ -870,7 +904,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
               { id: 'listings', label: `My Crops (${activeListings.length || 1})`, icon: Sprout },
               { id: 'mandi_prices', label: 'Mandi Prices', icon: Landmark },
               { id: 'buyers', label: 'Find Buyers', icon: Search },
-              { id: 'offers', label: 'My Offers', count: pendingOffersCount || 3, icon: DollarSign },
+              { id: 'offers', label: 'My Offers', count: pendingOffersCount || 3, icon: RupeeIcon },
               { id: 'orders', label: 'My Deals', icon: Package },
               { id: 'storage', label: 'Cold Storage', icon: Warehouse },
               { id: 'aggregator_info', label: 'Pool with Other Farmers', icon: Layers },
@@ -907,74 +941,164 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 sm:pt-6 space-y-6">
         
         {/* ========================================================================= */}
-        {/* 🏠 TAB 1: HOME SCREEN (Matches the reference screenshot precisely) */}
+        {/* 🏠 TAB 1: HOME SCREEN */}
         {/* ========================================================================= */}
         {activeTab === 'home' && (
           <div className="space-y-6 animate-fadeIn">
             
-            {/* 3.1 FARMER WELCOME BANNER */}
-            <div className="relative rounded-3xl overflow-hidden shadow-xs border border-emerald-100 bg-[#E8F5E9] min-h-[170px] sm:min-h-[190px] flex items-center">
-              {/* Scenic Farm Landscape Background */}
-              <div 
-                className="absolute inset-0 bg-cover bg-center opacity-85 pointer-events-none"
-                style={{ backgroundImage: "url('/dashboard/farm_landscape_banner.jpg')" }}
-              />
-              {/* Soft gradient wash across left so text remains ultra-legible */}
-              <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/85 to-white/40 pointer-events-none" />
+            {/* 3.1 WELCOME BANNER & TODAY'S SUGGESTION GRID */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-stretch">
+              
+              {/* LEFT: FARMER WELCOME BANNER */}
+              <div className="lg:col-span-7 xl:col-span-8 relative rounded-3xl overflow-hidden shadow-xs border border-emerald-100 bg-[#E8F5E9] p-4 sm:p-6 flex flex-col justify-between min-h-[210px]">
+                {/* Scenic Farm Landscape Background */}
+                <div 
+                  className="absolute inset-0 bg-cover bg-center opacity-85 pointer-events-none"
+                  style={{ backgroundImage: "url('/dashboard/farm_landscape_banner.jpg')" }}
+                />
+                {/* Soft gradient wash across left so text remains ultra-legible */}
+                <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/85 to-white/30 pointer-events-none" />
 
-              {/* Banner Content Container */}
-              <div className="relative z-10 w-full p-4 sm:p-6 lg:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
-                
-                {/* Left: Mascot & Farmer Details */}
-                <div className="flex items-center gap-4 sm:gap-5">
-                  <div className="relative shrink-0">
-                    <img
-                      src="/dashboard/farmer_mascot.jpg"
-                      alt="Farmer Mascot"
-                      className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover shadow-sm border-2 border-white bg-white"
-                    />
+                {/* Banner Content Container */}
+                <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 h-full">
+                  
+                  {/* Left: Mascot & Farmer Details */}
+                  <div className="flex items-center gap-4 sm:gap-5">
+                    <div className="relative shrink-0">
+                      <img
+                        src="/dashboard/farmer_mascot_new.png"
+                        alt="Farmer Mascot"
+                        className="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover shadow-sm border-2 border-white bg-white"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                          नमस्ते, {user?.name || 'Aryan Singh'} जी! 👋
+                        </h1>
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Verified Farmer</span>
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-700 font-medium">
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5 text-slate-500" />
+                          <span>{user?.location || 'Khanduali, Agra, Uttar Pradesh'}</span>
+                        </div>
+                        <span className="text-slate-400">•</span>
+                        <div className="flex items-center gap-1">
+                          <Sprout className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>{user?.farmerProfile?.acres || 12} एकड़ खेती</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs sm:text-sm text-slate-600 max-w-xl font-medium pt-0.5">
+                        KisanConnect के साथ अपनी फसल का सही दाम पाएं और सीधे खरीदारों से जुड़ें।
+                      </p>
+
+                      <button
+                        onClick={() => {
+                          setWizardStep(1);
+                          setShowAddWizard(true);
+                        }}
+                        className="mt-2.5 px-4 sm:px-5 py-2 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-colors cursor-pointer w-fit"
+                      >
+                        <span>मेरी फसल बेचें</span>
+                        <ArrowRight className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Far-Right Slogan */}
+                  <div className="hidden xl:flex flex-col items-end text-right pr-2">
+                    <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug max-w-[170px]">
+                      अच्छा दाम, सही खरीदार, आपकी मेहनत का सही मूल्य 🍃
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* RIGHT: आज का सुझाव (TODAY'S SUGGESTION) */}
+              <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col justify-between space-y-3">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💡</span>
+                    <h3 className="text-sm sm:text-base font-black text-slate-900">आज का सुझाव</h3>
+                  </div>
+                  <button 
+                    onClick={() => setActiveTab(currentSuggestion.tabTarget as any)}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <span>सभी सुझाव देखें</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex items-start gap-3">
+                  <img
+                    src={currentSuggestion.image}
+                    alt="Suggestion Produce"
+                    className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-cover border border-slate-200 shrink-0"
+                  />
                   <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                        नमस्ते, {user?.name || 'Aryan Singh'} जी! 👋
-                      </h1>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>Verified Farmer</span>
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-700 font-medium">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-slate-500" />
-                        <span>{user?.location || 'Khanduali, Agra, Uttar Pradesh'}</span>
-                      </div>
-                      <span className="text-slate-400">•</span>
-                      <div className="flex items-center gap-1">
-                        <Sprout className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>{user?.farmerProfile?.acres || 12} एकड़ खेती</span>
-                      </div>
-                    </div>
-
-                    <p className="text-xs sm:text-sm text-slate-600 max-w-xl font-medium pt-0.5">
-                      KisanConnect के साथ अपनी फसल का सही दाम पाएं और सीधे खरीदारों से जुड़ें।
+                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 leading-snug">
+                      {currentSuggestion.title}
+                    </h4>
+                    <p className="text-[11px] sm:text-xs text-slate-600 leading-relaxed line-clamp-3">
+                      {currentSuggestion.description}
                     </p>
                   </div>
                 </div>
 
-                {/* Right Floating Message Card */}
-                <div className="hidden lg:flex items-center gap-3 bg-white/95 backdrop-blur-xs px-5 py-3.5 rounded-2xl border border-emerald-200 shadow-xs max-w-xs shrink-0">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                    <Sprout className="h-6 w-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-800 leading-snug">
-                    अच्छा दाम, सही खरीदार, आपकी मेहनत का सही मूल्य
-                  </p>
-                </div>
+                {/* Action Button & Carousel Controls */}
+                <div className="pt-1 space-y-2">
+                  <button
+                    onClick={() => setActiveTab(currentSuggestion.tabTarget as any)}
+                    className="w-full py-2 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>{currentSuggestion.actionLabel}</span>
+                  </button>
 
+                  {/* Carousel Controls */}
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      onClick={() => setSuggestionIndex((prev) => (prev === 0 ? suggestions.length - 1 : prev - 1))}
+                      className="h-6 w-6 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 text-xs transition-colors cursor-pointer"
+                      title="पिछला सुझाव"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+
+                    {/* Dots */}
+                    <div className="flex items-center gap-1.5">
+                      {suggestions.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setSuggestionIndex(idx)}
+                          className={`h-2 rounded-full transition-all cursor-pointer ${
+                            suggestionIndex === idx ? 'w-5 bg-emerald-600' : 'w-2 bg-slate-200 hover:bg-slate-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => setSuggestionIndex((prev) => (prev === suggestions.length - 1 ? 0 : prev + 1))}
+                      className="h-6 w-6 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 text-xs transition-colors cursor-pointer"
+                      title="अगला सुझाव"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
               </div>
+
             </div>
 
             {/* 3.2 SEVEN PRIMARY ACTION CARDS */}
@@ -1045,8 +1169,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
                   className="p-5 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] hover:border-amber-500 hover:shadow-md transition-all text-left flex flex-col justify-between group cursor-pointer relative overflow-hidden min-h-[145px]"
                 >
                   <div className="flex items-start justify-between">
-                    <div className="h-11 w-11 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
-                      <DollarSign className="h-6 w-6" />
+                    <div className="h-11 w-11 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-black text-2xl shadow-2xs">
+                      ₹
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-xs font-black shadow-xs">
                       {pendingOffersCount || 3}
@@ -1059,8 +1183,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
                       आए हुए ऑफर देखें और जवाब दें
                     </div>
                   </div>
-                  <div className="absolute bottom-2 right-2 text-amber-300 opacity-60 text-4xl">
-                    💬
+                  <div className="absolute bottom-2 right-2 text-amber-300 opacity-60 text-4xl font-black">
+                    ₹
                   </div>
                 </button>
 

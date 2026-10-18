@@ -167,7 +167,7 @@ const MainApp: React.FC = () => {
       <DemoBanner />
 
       {/* Navigation Header */}
-      {pathname !== '/dashboard' && (
+      {!isFarmerRoute && !isFarmerProfileRoute && (
         <Navbar 
           currentTab={currentTab} 
           setCurrentTab={handleSetCurrentTab}

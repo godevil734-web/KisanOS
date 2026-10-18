@@ -188,7 +188,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
 
   // Target destination mapping
   const getRoleDestination = (role: string) => {
-    if (role === 'farmer') return '/list-crop';
+    if (role === 'farmer') return '/dashboard';
     if (role === 'aggregator') return '/aggregator';
     if (role === 'dealer' || role === 'buyer') return '/dealer';
     return '/dashboard';

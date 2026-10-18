@@ -49,7 +49,7 @@ const ROLE_CONFIG: Record<StakeholderRole, {
     microcopyEn: 'Access your farm, offers and market opportunities.',
     microcopyHi: 'अपनी फसल, ऑफर और बाजार के अवसरों का प्रबंधन करें।',
     emailPlaceholder: 'farmer@example.com',
-    targetUrl: '/list-crop',
+    targetUrl: '/dashboard',
   },
   dealer: {
     titleEn: 'Buyer',
@@ -129,7 +129,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ next, onSuccess, onNavigat
       case 'dealer':
       case 'buyer': return '/dealer';
       case 'farmer':
-      default: return '/list-crop';
+      default: return '/dashboard';
     }
   };
 

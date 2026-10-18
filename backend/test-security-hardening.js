@@ -116,8 +116,8 @@ async function runSecurityTests() {
     }
 
     // Farmer logs in: send OTP then verify
-    await post('/auth/otp/send', { phone: '9876543210' });
-    const farmerLogin = await post('/auth/otp/verify', { phone: '9876543210', code: '123456' });
+    await post('/auth/otp/send', { phone: '9876543212' });
+    const farmerLogin = await post('/auth/otp/verify', { phone: '9876543212', code: '123456' });
     assert(farmerLogin.status === 200, 'Farmer logs in via OTP');
     const farmerCookie = parseCookies(farmerLogin.headers['set-cookie']);
     const farmerListings = await get('/listings', { Cookie: farmerCookie });
@@ -152,7 +152,7 @@ async function runSecurityTests() {
 
     // 3. Dealer logs in
     const dealerLogin = await post('/auth/login', {
-      identifier: 'dealer@freshbites.in',
+      identifier: 'procurement@freshbites.com',
       password: 'password123',
       expectedRole: 'dealer'
     });

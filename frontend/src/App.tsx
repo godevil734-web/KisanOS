@@ -65,7 +65,7 @@ const MainApp: React.FC = () => {
     if (!loading && !user) {
       if (pathname === '/list-crop') {
         navigate('/login?next=/list-crop');
-      } else if (pathname === '/dashboard' || pathname === '/profile' || pathname === '/passport' || pathname === '/fields' || pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points') {
+      } else if (pathname === '/dashboard' || pathname === '/sell' || pathname === '/profile' || pathname === '/passport' || pathname === '/fields' || pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points') {
         navigate(`/login?next=${pathname}`);
       } else if (pathname === '/aggregator') {
         navigate('/login?next=/aggregator');
@@ -125,7 +125,7 @@ const MainApp: React.FC = () => {
     pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points';
 
   const isFarmerRoute = pathname === '/list-crop' || pathname === '/farmer' || pathname === '/dashboard' ||
-    pathname === '/buyers' || pathname === '/listings' || pathname === '/offers' ||
+    pathname === '/sell' || pathname === '/buyers' || pathname === '/listings' || pathname === '/offers' ||
     pathname === '/orders' || pathname === '/deals' || pathname === '/aggregator-info' || pathname === '/storage-farmer';
 
   const isAggregatorRoute = pathname === '/aggregator' || pathname === '/demand' || pathname === '/supply' ||

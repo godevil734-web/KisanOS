@@ -43,7 +43,9 @@ import {
   FlaskConical,
   ShieldAlert,
   Handshake,
-  Landmark
+  Landmark,
+  LayoutDashboard,
+  Menu
 } from 'lucide-react';
 import { VoiceListenButton } from './VoiceListenButton';
 import { VoiceSearchInput } from './VoiceSearchInput';
@@ -51,6 +53,7 @@ import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
 import { MandiPricesView } from './MandiPricesView';
 import { FarmerProfileView } from './FarmerProfileView';
+import { FarmerSellingOverview } from './FarmerSellingOverview';
 
 type Lang = 'hi' | 'hinglish' | 'en';
 
@@ -83,6 +86,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
   // Farmer Navigation Tabs: 'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'
   const [activeTab, setActiveTab] = useState<'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'profile' | 'aggregator_info' | 'activities'>('home');
   const [profileSubTab, setProfileSubTab] = useState<'overview' | 'passport' | 'fields' | 'crops' | 'sales' | 'points'>('overview');
+  const [dateRange, setDateRange] = useState<'all' | 'month' | 'quarter' | 'year'>('all');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Backend Data
   const [listings, setListings] = useState<FarmerListing[]>([]);
@@ -665,372 +670,319 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
   ).length;
   const activeOrdersCount = orders.filter(o => o.status !== 'COMPLETED' && o.status !== 'CANCELLED').length;
 
+  const negotiationsCount = offers.filter(o => 
+    o.status === 'COUNTERED' || 
+    (o.negotiationHistory && o.negotiationHistory.length > 1 && o.status !== 'ACCEPTED' && o.status !== 'REJECTED')
+  ).length;
+
+  const completedOrdersCount = orders.filter(o => 
+    o.status === 'COMPLETED' || o.status === 'DELIVERED'
+  ).length;
+
+  const getBreadcrumbTabLabel = () => {
+    switch (activeTab) {
+      case 'home':
+        return lang === 'hi' ? 'डैशबोर्ड' : 'Dashboard';
+      case 'listings':
+        return lang === 'hi' ? 'मेरी फसलें' : 'My Crop Listings';
+      case 'offers':
+        return lang === 'hi' ? 'खरीदार ऑफर' : 'Buyer Offers';
+      case 'orders':
+        return lang === 'hi' ? 'पुष्टि किए गए सौदे' : 'Confirmed Deals';
+      case 'mandi_prices':
+        return lang === 'hi' ? 'सरकारी मंडी भाव' : 'Mandi Prices';
+      case 'buyers':
+        return lang === 'hi' ? 'खरीदार खोजें' : 'Find Buyers';
+      case 'storage':
+        return lang === 'hi' ? 'कोल्ड स्टोरेज' : 'Cold Storage';
+      case 'aggregator_info':
+        return lang === 'hi' ? 'किसान पूलिंग' : 'Pool with Farmers';
+      default:
+        return lang === 'hi' ? 'डैशबोर्ड' : 'Dashboard';
+    }
+  };
+
+  const sellingNavItems = [
+    {
+      id: 'home',
+      label: lang === 'hi' ? 'बिक्री अवलोकन' : lang === 'hinglish' ? 'Selling Overview' : 'Selling Overview',
+      icon: LayoutDashboard,
+      badge: null,
+      action: () => setActiveTab('home')
+    },
+    {
+      id: 'listings',
+      label: lang === 'hi' ? 'मेरी फसलें' : lang === 'hinglish' ? 'My Crop Listings' : 'My Crop Listings',
+      icon: Sprout,
+      badge: activeListings.length,
+      action: () => { setCropSubTab('active'); setActiveTab('listings'); }
+    },
+    {
+      id: 'offers',
+      label: lang === 'hi' ? 'खरीदार ऑफर' : lang === 'hinglish' ? 'Buyer Offers' : 'Buyer Offers',
+      icon: DollarSign,
+      badge: pendingOffersCount > 0 ? pendingOffersCount : null,
+      action: () => { setOfferFilter('RECEIVED'); setActiveTab('offers'); }
+    },
+    {
+      id: 'negotiations',
+      label: lang === 'hi' ? 'बातचीत / मोलभाव' : lang === 'hinglish' ? 'Negotiations' : 'Negotiations',
+      icon: Handshake,
+      badge: negotiationsCount > 0 ? negotiationsCount : null,
+      action: () => { setOfferFilter('NEGOTIATING'); setActiveTab('offers'); }
+    },
+    {
+      id: 'orders',
+      label: lang === 'hi' ? 'पक्के सौदे' : lang === 'hinglish' ? 'Confirmed Deals' : 'Confirmed Deals',
+      icon: CheckCircle2,
+      badge: activeOrdersCount > 0 ? activeOrdersCount : null,
+      action: () => setActiveTab('orders')
+    },
+    {
+      id: 'history',
+      label: lang === 'hi' ? 'बिक्री इतिहास' : lang === 'hinglish' ? 'Sales History' : 'Sales History',
+      icon: Clock,
+      badge: completedOrdersCount > 0 ? completedOrdersCount : null,
+      action: () => setActiveTab('orders')
+    },
+    {
+      id: 'mandi_prices',
+      label: lang === 'hi' ? 'सरकारी मंडी भाव' : lang === 'hinglish' ? 'Mandi Prices' : 'Mandi Prices',
+      icon: Landmark,
+      badge: null,
+      action: () => setActiveTab('mandi_prices')
+    }
+  ];
+
+  const secondaryNavItems = [
+    {
+      id: 'buyers',
+      label: lang === 'hi' ? 'खरीदार खोजें' : lang === 'hinglish' ? 'Find Buyers' : 'Find Buyers',
+      icon: Search,
+      action: () => setActiveTab('buyers')
+    },
+    {
+      id: 'storage',
+      label: lang === 'hi' ? 'कोल्ड स्टोरेज' : lang === 'hinglish' ? 'Cold Storage' : 'Cold Storage',
+      icon: Warehouse,
+      action: () => setActiveTab('storage')
+    },
+    {
+      id: 'aggregator_info',
+      label: lang === 'hi' ? 'किसान पूलिंग' : lang === 'hinglish' ? 'Pool with Farmers' : 'Pool with Farmers',
+      icon: Layers,
+      action: () => setActiveTab('aggregator_info')
+    }
+  ];
+
   return (
     <div className="space-y-6 pb-24 md:pb-12 text-slate-800 relative z-10">
       
-      {/* 1. TOP HEADER & GREETING BAR */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="h-12 w-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl font-bold shadow-xs">
-            👨‍🌾
+      {/* 1. TOP HEADER & BREADCRUMB BAR (Inspired by CircularMatch Sell Dashboard) */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+        <div>
+          {/* Breadcrumb: Workspace / Sell / Dashboard */}
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mb-1">
+            <span>Workspace</span>
+            <span>/</span>
+            <span className="text-slate-700">Sell</span>
+            <span>/</span>
+            <span className="text-emerald-700 font-bold">{getBreadcrumbTabLabel()}</span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg sm:text-xl font-black text-slate-900">
-                {t.greeting}, {user?.name || 'रमेश कुमार'} 👋
-              </h1>
-              <span className="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold border border-emerald-200 flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                <span>{t.verifiedFarmer}</span>
-              </span>
-            </div>
-            <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-              <MapPin className="h-3 w-3 text-slate-400" />
-              <span>{user?.location || 'Khandauli, Agra, UP'}</span>
-              <span>•</span>
-              <span>{user?.farmerProfile?.acres || 12} एकड़ खेती</span>
-            </div>
-          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            {lang === 'hi' ? 'मेरा बिक्री डैशबोर्ड' : lang === 'hinglish' ? 'My Selling Dashboard' : 'My Selling Dashboard'}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+            {lang === 'hi' 
+              ? 'अपनी फसलों का प्रबंधन करें, प्रस्तावों की तुलना करें और बिक्री ट्रैक करें।' 
+              : lang === 'hinglish' 
+              ? 'Apni faslo ko manage karein, buyer offers compare karein aur sales track karein.' 
+              : 'Manage your crops, compare offers, and track your sales.'}
+          </p>
         </div>
 
-        {/* Top Controls: Language Switcher & Voice Demo */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {/* Voice Input Demo Button */}
-          <button
-            onClick={() => setShowVoiceModal(true)}
-            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-200 flex items-center gap-1.5 transition-colors"
-            title="बोलकर बताएं"
-          >
-            <Mic className="h-4 w-4 text-emerald-600" />
-            <span className="hidden sm:inline">बोलकर बताएं</span>
-            <span className="text-[10px] bg-emerald-200 text-emerald-900 px-1 rounded font-semibold">Demo</span>
-          </button>
+        {/* Right Header Controls: Date Range Selector + Language Switcher + Primary CTA */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Date Range Selector */}
+          <div className="relative">
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value as any)}
+              className="appearance-none bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-xs font-bold py-2.5 pl-3.5 pr-8 rounded-xl border border-slate-200 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">{lang === 'hi' ? 'सभी समय (All Time)' : 'All Time'}</option>
+              <option value="month">{lang === 'hi' ? 'इस महीने (This Month)' : 'This Month'}</option>
+              <option value="quarter">{lang === 'hi' ? 'इस तिमाही (This Quarter)' : 'This Quarter'}</option>
+              <option value="year">{lang === 'hi' ? 'इस वर्ष (This Year)' : 'This Year'}</option>
+            </select>
+            <ChevronDown className="h-3.5 w-3.5 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
 
           {/* Language Switcher */}
           <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
             <button
               onClick={() => handleLangChange('hi')}
-              className={`px-2.5 py-1 rounded-lg transition-all ${
-                lang === 'hi' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                lang === 'hi' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               हिंदी
             </button>
             <button
               onClick={() => handleLangChange('hinglish')}
-              className={`px-2.5 py-1 rounded-lg transition-all ${
-                lang === 'hinglish' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                lang === 'hinglish' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Hinglish
             </button>
             <button
               onClick={() => handleLangChange('en')}
-              className={`px-2.5 py-1 rounded-lg transition-all ${
-                lang === 'en' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              className={`px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${
+                lang === 'en' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               English
             </button>
           </div>
+
+          {/* Primary CTA: + List a Crop */}
+          <button
+            onClick={() => {
+              setWizardStep(1);
+              setShowAddWizard(true);
+            }}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-extrabold text-xs sm:text-sm shadow-sm hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <Plus className="h-4 w-4 stroke-[3]" />
+            <span>{lang === 'hi' ? '+ फसल जोड़ें' : '+ List a Crop'}</span>
+          </button>
         </div>
       </div>
 
-      {/* 2. DESKTOP & RESPONSIVE NAVIGATION TABS (One horizontal row on desktop, horizontal scrolling) */}
-      <div className="flex items-center border-b border-slate-200 gap-1 sm:gap-1.5 overflow-x-auto scrollbar-none pb-1.5 flex-nowrap w-full">
-        {[
-          { id: 'home', label: t.home, icon: Home },
-          { id: 'listings', label: `${t.myCrops} (${activeListings.length})`, icon: Sprout },
-          { id: 'mandi_prices', label: lang === 'hi' ? 'सरकारी मंडी भाव' : 'Mandi Prices', icon: Landmark },
-          { id: 'buyers', label: t.findBuyers, icon: Search },
-          { id: 'offers', label: `${t.myOffers}`, count: pendingOffersCount, icon: DollarSign },
-          { id: 'orders', label: `${t.myDeals}`, count: activeOrdersCount, icon: Package },
-          { id: 'storage', label: t.storage, icon: Warehouse },
-          { id: 'aggregator_info', label: t.poolWithFarmers, icon: Layers },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
+      {/* 2. MAIN SELLING WORKSPACE (RESPONSIVE SIDEBAR + MAIN CONTENT AREA) */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        
+        {/* SIDEBAR NAVIGATION */}
+        <aside className={`bg-white rounded-3xl border border-slate-200 shadow-xs p-3 transition-all shrink-0 w-full ${
+          isSidebarCollapsed ? 'lg:w-20' : 'lg:w-64'
+        }`}>
+          {/* Collapse Toggle on Desktop */}
+          <div className="hidden lg:flex items-center justify-between px-3 py-2 border-b border-slate-100 mb-2">
+            {!isSidebarCollapsed && (
+              <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+                {lang === 'hi' ? 'बिक्री मेनू' : 'Selling Menu'}
+              </span>
+            )}
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl text-xs font-bold transition-all relative shrink-0 whitespace-nowrap cursor-pointer ${
-                isActive
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors ml-auto cursor-pointer"
+              title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <Icon className="h-4 w-4" />
-              <span>{tab.label}</span>
-              {typeof tab.count === 'number' && tab.count > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  isActive ? 'bg-white text-emerald-800' : 'bg-rose-500 text-white'
-                }`}>
-                  {tab.count}
-                </span>
-              )}
+              {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </button>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* 3. MAIN CONTENT VIEWS */}
-
-      {/* ========================================================================= */}
-      {/* 🏠 TAB 1: FARMER HOME SCREEN */}
-      {/* ========================================================================= */}
-      {activeTab === 'home' && (
-        <div className="space-y-6 animate-fadeIn">
-          
-          {/* Main Question & Action Grid */}
-          <div className="space-y-3">
-            <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-              {t.whatToDo}
-            </h2>
-
-            {/* 5 Primary Large Action Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3.5 sm:gap-4">
-              
-              {/* ACTION 1: मेरा माल बेचें (Add Crop Wizard) */}
-              <button
-                onClick={() => {
-                  setWizardStep(1);
-                  setShowAddWizard(true);
-                }}
-                className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-left shadow-md hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
-                    🥔
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[11px] font-extrabold flex items-center gap-1">
-                    <Plus className="h-3 w-3" />
-                    <span>नया</span>
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black">{t.sellProduce}</div>
-                  <div className="text-xs text-emerald-100 mt-0.5">{t.sellProduceSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 2: खरीदार देखें */}
-              <button
-                onClick={() => setActiveTab('buyers')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-emerald-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl">
-                    🔎
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.findBuyers}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.findBuyersSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 3: मेरे ऑफर */}
-              <button
-                onClick={() => setActiveTab('offers')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px] relative"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl">
-                    💰
-                  </div>
-                  {pendingOffersCount > 0 ? (
-                    <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
-                      {pendingOffersCount} नए ऑफर
+          {/* Navigation Items */}
+          <div className="flex lg:flex-col overflow-x-auto lg:overflow-visible gap-1 pb-1 lg:pb-0 scrollbar-none">
+            {sellingNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={item.action}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 w-auto lg:w-full ${
+                    isActive
+                      ? 'bg-emerald-600 text-white shadow-xs font-black'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  } ${isSidebarCollapsed ? 'lg:justify-center' : ''}`}
+                  title={item.label}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
+                  {item.badge !== null && item.badge !== undefined && (
+                    <span className={`ml-auto px-1.5 py-0.2 rounded-full text-[10px] font-black shrink-0 ${
+                      isActive ? 'bg-white text-emerald-800' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {item.badge}
                     </span>
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-amber-600 transition-colors" />
                   )}
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.myOffers}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.myOffersSub}</div>
-                </div>
-              </button>
+                </button>
+              );
+            })}
 
-              {/* ACTION 4: मेरे सौदे */}
-              <button
-                onClick={() => setActiveTab('orders')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-purple-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl">
-                    📦
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.myDeals}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.myDealsSub}</div>
-                </div>
-              </button>
+            {/* Secondary Navigation Divider */}
+            <div className="hidden lg:block my-2 border-t border-slate-100" />
 
-              {/* ACTION 5: भंडारण / कोल्ड स्टोर */}
-              <button
-                onClick={() => setActiveTab('storage')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-cyan-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-2xl">
-                    🏠
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-cyan-600 transition-colors" />
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.storage}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.storageSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 6: कई किसान मिलकर बेचें (Aggregator pooling) */}
-              <button
-                onClick={() => setActiveTab('aggregator_info')}
-                className="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl">
-                    🤝
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-bold">
-                    बड़ा फायदा
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.poolWithFarmers}</div>
-                  <div className="text-xs text-slate-600 mt-0.5">{t.poolWithFarmersSub}</div>
-                </div>
-              </button>
-
-              {/* ACTION 7: सरकारी मंडी भाव (Live Government Mandi Prices) */}
-              <button
-                onClick={() => setActiveTab('mandi_prices')}
-                className="p-5 rounded-2xl bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white text-left shadow-sm hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px] border border-emerald-700/50"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-white/10 flex items-center justify-center text-2xl">
-                    🏛️
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-black flex items-center gap-1 border border-emerald-500/30">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{lang === 'hi' ? 'लाइव भाव' : 'Live Feed'}</span>
-                  </span>
-                </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-white">{lang === 'hi' ? 'सरकारी मंडी भाव' : 'Govt Mandi Prices'}</div>
-                  <div className="text-xs text-slate-300 mt-0.5">{lang === 'hi' ? 'Agmarknet व data.gov.in से लाइव थोक भाव' : 'Live wholesale rates from Agmarknet & data.gov.in'}</div>
-                </div>
-              </button>
-
-            </div>
-          </div>
-
-          {/* New Offer Alert Card (if any pending offers) */}
-          {offers.length > 0 && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
-                  🔔
-                </div>
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-wider text-amber-100">
-                    नया खरीदार ऑफर (New Buyer Offer)
-                  </div>
-                  <div className="text-base sm:text-lg font-black">
-                    {offers[0].buyerName}: {offers[0].cropName} के लिए ₹{offers[0].buyerOfferedPricePerKg}/kg
-                  </div>
-                  <div className="text-xs text-amber-100">
-                    मात्रा: {offers[0].quantityTons} टन • "{offers[0].message || 'तुरंत उठान उपलब्ध'}"
-                  </div>
-                </div>
+            {!isSidebarCollapsed && (
+              <div className="hidden lg:block px-3 py-1 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                {lang === 'hi' ? 'अतिरिक्त उपकरण' : 'Additional Tools'}
               </div>
-              <button
-                onClick={() => setActiveTab('offers')}
-                className="px-5 py-2.5 rounded-xl bg-white text-slate-900 font-extrabold text-xs sm:text-sm shadow-xs hover:bg-amber-50 transition-colors flex items-center justify-center gap-1.5 self-start sm:self-auto"
-              >
-                <span>ऑफर देखें (View Offer)</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            </div>
+            )}
+
+            {secondaryNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={item.action}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer shrink-0 w-auto lg:w-full ${
+                    isActive
+                      ? 'bg-slate-900 text-white shadow-xs font-black'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  } ${isSidebarCollapsed ? 'lg:justify-center' : ''}`}
+                  title={item.label}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {!isSidebarCollapsed && <span className="truncate">{item.label}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* MAIN CONTENT WORKSPACE */}
+        <div className="flex-1 min-w-0 w-full space-y-6">
+
+          {/* ========================================================================= */}
+          {/* 🏠 TAB 1: FARMER SELLING OVERVIEW (CIRCULARMATCH INSPIRED) */}
+          {/* ========================================================================= */}
+          {activeTab === 'home' && (
+            <FarmerSellingOverview
+              listings={listings}
+              activeListings={activeListings}
+              orders={orders}
+              offers={offers}
+              matchedBuyers={matchedBuyers}
+              lang={lang}
+              dateRange={dateRange}
+              setDateRange={setDateRange}
+              onListCrop={() => {
+                setWizardStep(1);
+                setShowAddWizard(true);
+              }}
+              onNavigateTab={(tab, filter) => {
+                if (filter) setOfferFilter(filter as any);
+                setActiveTab(tab as any);
+              }}
+              onRespondOffer={(off) => {
+                setCounterModal({
+                  isOpen: true,
+                  offer: off,
+                  counterPricePerKg: Number(off.counterPricePerKg || off.buyerOfferedPricePerKg || off.offeredPricePerKg || 20),
+                  counterQuantityTons: Number(off.counterQuantityTons || off.quantityTons || 10),
+                  pickupTerms: off.pickupTerms || 'Farm Gate Pickup',
+                  targetDate: off.targetDate || '',
+                  message: '',
+                  isSubmitting: false
+                });
+              }}
+              onAcceptOffer={handleAcceptOffer}
+            />
           )}
-
-          {/* Simple Month Summary Numbers (Not dense charts!) */}
-          <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-3">
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              इस महीने का संक्षिप्त हिसाब (This Month's Summary):
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-emerald-700">₹25,000</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">कुल बिक्री (Sales)</div>
-              </div>
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-slate-900">12 क्विंटल</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">माल बेचा (Sold)</div>
-              </div>
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-blue-700">4</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">सक्रिय खरीदार (Buyers)</div>
-              </div>
-              <div className="bg-white p-3 rounded-xl border border-slate-200">
-                <div className="text-xl sm:text-2xl font-black text-purple-700">{orders.length}</div>
-                <div className="text-xs text-slate-500 font-medium mt-0.5">सफल सौदे (Deals)</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Nearby Buyer Opportunities Preview */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-xs">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">📍 पास के बड़े खरीदार (Nearby Buyers)</h3>
-                <p className="text-xs text-slate-500">ये कंपनियां आपके इलाके से सीधे माल खरीदना चाहती हैं</p>
-              </div>
-              <button
-                onClick={() => setActiveTab('buyers')}
-                className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1"
-              >
-                <span>सभी देखें</span>
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">🍟</div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">FreshBites Foods Pvt Ltd</div>
-                    <div className="text-[11px] text-slate-500">आलू चिप्सोना • जरूरत: 100 टन • ₹21.50/kg</div>
-                  </div>
-                </div>
-                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                  18 km दूर
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="text-2xl">🧅</div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">Apex Wholesale Agri Trade</div>
-                    <div className="text-[11px] text-slate-500">प्याज नासिक रेड • जरूरत: 40 टन • ₹20.00/kg</div>
-                  </div>
-                </div>
-                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                  25 km दूर
-                </span>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      )}
 
       {/* ========================================================================= */}
       {/* 🌾 TAB 2: MY CROPS / LISTINGS (मेरा माल) */}
@@ -2887,6 +2839,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
           }}
         />
       )}
+        </div>
+      </div>
 
       {/* ========================================================================= */}
       {/* 4. MOBILE BOTTOM NAVIGATION BAR (Fixed at bottom on phones) */}

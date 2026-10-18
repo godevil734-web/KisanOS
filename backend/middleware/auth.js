@@ -75,7 +75,10 @@ async function authMiddleware(req, res, next) {
         message: `Your account registration was not approved by administration.${reasonMsg}` 
       });
     }
-    // Enforce that user.role in DB is authoritative
+    // Enforce that user.role in DB is authoritative & strip password hash
+    if (user.password) {
+      delete user.password;
+    }
     req.user = user;
     next();
   } catch (err) {
@@ -95,7 +98,11 @@ async function optionalAuth(req, res, next) {
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = await findUserById(decoded.id);
+      const user = await findUserById(decoded.id);
+      if (user && user.password) {
+        delete user.password;
+      }
+      req.user = user;
     } catch (e) {
       req.user = null;
     }

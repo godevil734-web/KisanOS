@@ -265,7 +265,6 @@ class PostgresDatabaseAdapter {
   async reset() {
     await pool.query("DELETE FROM farmer_listings WHERE is_demo = false OR (id LIKE 'list-%' AND id NOT IN ('list-101','list-102','list-103','list-104','list-105','list-106'))");
     await pool.query("DELETE FROM buyer_requirements WHERE is_demo = false OR (id LIKE 'req-%' AND id NOT IN ('req-201','req-202','req-203','req-204','req-205'))");
-    await pool.query("DELETE FROM users WHERE is_demo = false AND role != 'admin'");
     await pool.query("UPDATE farmer_listings SET status = 'ACTIVE'");
     await pool.query("UPDATE buyer_requirements SET status = 'OPEN'");
     return { success: true };

@@ -30,7 +30,7 @@ import { FarmerDashboardPreview } from './components/FarmerDashboardPreview';
 const MainApp: React.FC = () => {
   const { user, loading } = useAuth();
   const { t } = useLanguage();
-  const { appearance } = useDashboardAppearance();
+  const { appearance, refreshAppearance } = useDashboardAppearance();
   
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -98,6 +98,13 @@ const MainApp: React.FC = () => {
       }
     }
   }, [pathname, searchParams]);
+
+  // Always ensure fresh active appearance setting from server when entering farmer routes
+  useEffect(() => {
+    if (pathname === '/dashboard' || pathname === '/farmer' || pathname === '/list-crop') {
+      refreshAppearance();
+    }
+  }, [pathname, refreshAppearance]);
 
   // Unified Role Selection & Authentication Gateway States
   const [isRoleModalOpen, setIsRoleModalOpen] = useState<boolean>(false);
@@ -168,7 +175,10 @@ const MainApp: React.FC = () => {
   const isLegacyFarmer = isFarmerRoute && searchParams.get('legacy') === 'true';
 
   // Appearance theme routing: determine whether harvest theme is active in production or preview
-  const isHarvestProductionActive = isFarmerRoute && !isLegacyFarmer && appearance?.theme === 'harvest_premium';
+  const isHarvestTheme = 
+    appearance?.activeDesignId === 'harvest_standard' || 
+    appearance?.theme === 'harvest_premium';
+  const isHarvestProductionActive = isFarmerRoute && !isLegacyFarmer && isHarvestTheme;
   const isFullScreenView = isPreviewRoute || isHarvestProductionActive;
   const previewDesignParam = searchParams.get('design') || 'harvest_standard';
 

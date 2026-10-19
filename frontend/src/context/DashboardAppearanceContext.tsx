@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 import { DashboardAppearanceSetting, DashboardDesign } from '../types';
+import { useAuth } from './AuthContext';
 
 export const DEFAULT_APPEARANCE: DashboardAppearanceSetting = {
   activeDesignId: 'classic_standard',
@@ -61,6 +62,8 @@ const DashboardAppearanceContext = createContext<DashboardAppearanceContextType 
 const STORAGE_KEY = 'kc_farmer_appearance';
 
 export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, token } = useAuth();
+
   // Initialize from localStorage if present for immediate render without flicker, otherwise DEFAULT_APPEARANCE (Classic)
   const [appearance, setAppearance] = useState<DashboardAppearanceSetting>(() => {
     try {
@@ -81,7 +84,7 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
   const [error, setError] = useState<string | null>(null);
 
   // Sync with server
-  const refreshAppearance = useCallback(async () => {
+  const refreshAppearance = useCallback(async (): Promise<DashboardAppearanceSetting> => {
     try {
       const serverSetting = await api.getFarmerDashboardAppearance();
       if (serverSetting && serverSetting.activeDesignId) {
@@ -91,17 +94,36 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
         } catch {
           // ignore storage errors
         }
+        return serverSetting;
       }
     } catch (err: any) {
       console.warn('[APPEARANCE CONTEXT] Failed to load from server, using fallback/cached setting:', err.message);
     } finally {
       setIsLoading(false);
     }
+    return DEFAULT_APPEARANCE;
   }, []);
 
+  // Initial load
   useEffect(() => {
     refreshAppearance();
+  }, [refreshAppearance]);
 
+  // Re-fetch whenever an authenticated session is established, changed, or refreshed (login, logout, switchRole)
+  useEffect(() => {
+    refreshAppearance();
+  }, [user?.id, user?.role, token, refreshAppearance]);
+
+  // Re-fetch on window focus to immediately catch theme activations made in other tabs or sessions
+  useEffect(() => {
+    const handleFocus = () => {
+      refreshAppearance();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [refreshAppearance]);
+
+  useEffect(() => {
     // Listen for cross-tab or cross-component appearance changes
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY && e.newValue) {
@@ -130,7 +152,7 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('dashboard-appearance-changed', handleCustomChange);
     };
-  }, [refreshAppearance]);
+  }, []);
 
   // Activate a design (admin only)
   const activateDesign = async (designId: string): Promise<boolean> => {

@@ -238,7 +238,7 @@ export const api = {
   },
 
   // Farmer Dashboard Appearance (Admin-controlled UI/UX)
-  getFarmerDashboardAppearance: () => request<DashboardAppearanceSetting>('/settings/farmer-dashboard-appearance'),
+  getFarmerDashboardAppearance: () => request<DashboardAppearanceSetting>('/settings/farmer-dashboard-appearance', { cache: 'no-store' }),
   getAdminDashboardAppearance: () => request<{ activeSetting: DashboardAppearanceSetting; designs: DashboardDesign[] }>('/admin/dashboard-appearance'),
   updateFarmerDashboardAppearance: (data: { activeDesignId: string; theme?: string; layout?: string }) =>
     request<{ success: boolean; message: string; setting: DashboardAppearanceSetting }>('/admin/dashboard-appearance', {

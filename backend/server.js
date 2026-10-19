@@ -4016,24 +4016,30 @@ const REGISTERED_DESIGNS = [
 
 // Public/Farmer endpoint to fetch the active appearance setting (with safe fallback to Classic)
 app.get('/api/settings/farmer-dashboard-appearance', async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   try {
     const { pool } = require('./db');
-    const result = await pool.query(`SELECT value, updated_at, updated_by FROM system_settings WHERE key = 'farmer_dashboard_appearance' LIMIT 1`);
+    const result = await pool.query(`SELECT value, updated_at FROM system_settings WHERE key = 'farmer_dashboard_appearance' LIMIT 1`);
     if (result.rows.length > 0) {
-      const row = result.rows[0];
-      return res.json({
-        ...row.value,
-        updatedAt: row.updated_at,
-        updatedBy: row.updated_by
-      });
+      const val = result.rows[0].value;
+      const registered = REGISTERED_DESIGNS.find(d => d.id === val?.activeDesignId);
+      if (registered) {
+        return res.json({
+          activeDesignId: registered.id,
+          theme: val.theme || registered.theme,
+          layout: val.layout || registered.layout,
+          updatedAt: result.rows[0].updated_at
+        });
+      }
     }
     // Safe fallback to Classic
     res.json({
       activeDesignId: 'classic_standard',
       theme: 'classic',
       layout: 'standard',
-      updatedAt: null,
-      updatedBy: 'system'
+      updatedAt: null
     });
   } catch (err) {
     console.error('[SETTINGS] Error fetching farmer dashboard appearance:', err.message);
@@ -4041,7 +4047,7 @@ app.get('/api/settings/farmer-dashboard-appearance', async (req, res) => {
       activeDesignId: 'classic_standard',
       theme: 'classic',
       layout: 'standard',
-      fallback: true
+      updatedAt: null
     });
   }
 });

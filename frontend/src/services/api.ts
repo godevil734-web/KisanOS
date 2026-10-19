@@ -3,7 +3,9 @@ import {
   FarmerCropRecord, 
   KisanPointsLedgerEntry, 
   FarmerTrustMetrics, 
-  FarmerDigitalProfile 
+  FarmerDigitalProfile,
+  DashboardDesign,
+  DashboardAppearanceSetting
 } from '../types';
 
 function resolveApiBase(): string {
@@ -234,6 +236,19 @@ export const api = {
     const query = new URLSearchParams(cleanParams).toString();
     return request<any[]>(`/admin/audit-logs${query ? `?${query}` : ''}`);
   },
+
+  // Farmer Dashboard Appearance (Admin-controlled UI/UX)
+  getFarmerDashboardAppearance: () => request<DashboardAppearanceSetting>('/settings/farmer-dashboard-appearance'),
+  getAdminDashboardAppearance: () => request<{ activeSetting: DashboardAppearanceSetting; designs: DashboardDesign[] }>('/admin/dashboard-appearance'),
+  updateFarmerDashboardAppearance: (data: { activeDesignId: string; theme?: string; layout?: string }) =>
+    request<{ success: boolean; message: string; setting: DashboardAppearanceSetting }>('/admin/dashboard-appearance', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+  restoreClassicDashboardAppearance: () =>
+    request<{ success: boolean; message: string; setting: DashboardAppearanceSetting }>('/admin/dashboard-appearance/restore', {
+      method: 'POST'
+    }),
 
   // Notifications
   getNotifications: () => request<any[]>('/notifications'),

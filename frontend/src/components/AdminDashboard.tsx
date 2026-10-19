@@ -22,13 +22,19 @@ import {
   AlertTriangle,
   ChevronRight,
   Trash2,
-  CheckSquare
+  CheckSquare,
+  Palette
 } from 'lucide-react';
 import { RegisterModal } from './RegisterModal';
+import { DashboardAppearanceManager } from './DashboardAppearanceManager';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
-export const AdminDashboard: React.FC = () => {
+interface AdminDashboardProps {
+  onNavigate?: (path: string) => void;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
   const { user, switchRole } = useAuth();
   const { t, language } = useLanguage();
   const isHi = language === 'hi';
@@ -39,8 +45,22 @@ export const AdminDashboard: React.FC = () => {
   const [auditFilter, setAuditFilter] = useState('all');
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
-  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'approvals' | 'users' | 'audit' | 'plans' | 'crops'>('approvals');
+  const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'approvals' | 'users' | 'audit' | 'plans' | 'crops' | 'appearance'>('approvals');
   const [loading, setLoading] = useState(true);
+
+  // Parse initial tab from URL query params (e.g. /admin?tab=appearance)
+  useEffect(() => {
+    try {
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam === 'appearance' || tabParam === 'ui' || tabParam === 'theme') {
+        setActiveAdminTab('appearance');
+      } else if (tabParam === 'users' || tabParam === 'approvals' || tabParam === 'overview' || tabParam === 'audit' || tabParam === 'plans' || tabParam === 'crops') {
+        setActiveAdminTab(tabParam as any);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Sub-section filter inside Stakeholder Directory ('all' | 'farmer' | 'aggregator' | 'buyer' | 'cold_storage' | 'transporter')
   const [selectedRoleSection, setSelectedRoleSection] = useState<'all' | UserRole>('all');
@@ -586,6 +606,12 @@ export const AdminDashboard: React.FC = () => {
             id: 'crops', 
             label: `${t('admin.tabCrops') || 'Crops'} (${crops.length})`, 
             icon: Sprout 
+          },
+          { 
+            id: 'appearance', 
+            label: isHi ? 'डैशबोर्ड रूप-रंग' : 'Farmer Dashboard UI/UX', 
+            icon: Palette,
+            badge: null
           }
         ].map((tab) => {
           const Icon = tab.icon;
@@ -1821,6 +1847,13 @@ export const AdminDashboard: React.FC = () => {
             ))}
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🎨 TAB 7: FARMER DASHBOARD APPEARANCE (UI/UX MANAGER) */}
+      {/* ========================================================================= */}
+      {activeAdminTab === 'appearance' && (
+        <DashboardAppearanceManager onNavigate={onNavigate || ((path) => window.location.assign(path))} />
       )}
 
       {/* Reject Reason Modal */}

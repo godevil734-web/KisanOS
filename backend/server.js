@@ -3976,6 +3976,206 @@ app.post('/api/admin/reset-demo', authMiddleware, requireRole(['admin']), async 
 });
 
 // ---------------------------------------------
+// 14.5. FARMER DASHBOARD APPEARANCE (ADMIN-CONTROLLED)
+// ---------------------------------------------
+
+const REGISTERED_DESIGNS = [
+  {
+    id: 'classic_standard',
+    name: 'Classic — Original Dashboard',
+    theme: 'classic',
+    themeName: 'Classic KisanConnect',
+    layout: 'standard',
+    layoutName: 'Standard Layout',
+    description: 'Original farmer dashboard with ivory background, green action headers, comprehensive crop cards, and classic layout.',
+    isDefault: true,
+    features: [
+      'Original KisanConnect production design',
+      'Familiar workflow cards & layout',
+      'Full weather and mandi integrations',
+      'Stable production baseline'
+    ]
+  },
+  {
+    id: 'harvest_standard',
+    name: 'Harvest Premium — Standard Layout',
+    theme: 'harvest_premium',
+    themeName: 'Harvest Premium',
+    layout: 'standard',
+    layoutName: 'Standard Layout',
+    description: 'Modern agricultural theme featuring warm ivory canvas (#F7F4E9), deep forest green (#104B35) sidebar, amber accents, balanced action grid, and rectangular 12px cards.',
+    isDefault: false,
+    features: [
+      'Warm ivory (#F7F4E9) high-contrast canvas',
+      'Deep forest green (#104B35) collapsible sidebar',
+      'Clean 12px rectangular card geometry',
+      'Dedicated hero crop search & stats banner'
+    ]
+  }
+];
+
+// Public/Farmer endpoint to fetch the active appearance setting (with safe fallback to Classic)
+app.get('/api/settings/farmer-dashboard-appearance', async (req, res) => {
+  try {
+    const { pool } = require('./db');
+    const result = await pool.query(`SELECT value, updated_at, updated_by FROM system_settings WHERE key = 'farmer_dashboard_appearance' LIMIT 1`);
+    if (result.rows.length > 0) {
+      const row = result.rows[0];
+      return res.json({
+        ...row.value,
+        updatedAt: row.updated_at,
+        updatedBy: row.updated_by
+      });
+    }
+    // Safe fallback to Classic
+    res.json({
+      activeDesignId: 'classic_standard',
+      theme: 'classic',
+      layout: 'standard',
+      updatedAt: null,
+      updatedBy: 'system'
+    });
+  } catch (err) {
+    console.error('[SETTINGS] Error fetching farmer dashboard appearance:', err.message);
+    res.json({
+      activeDesignId: 'classic_standard',
+      theme: 'classic',
+      layout: 'standard',
+      fallback: true
+    });
+  }
+});
+
+// Admin endpoint to view available designs and active appearance status
+app.get('/api/admin/dashboard-appearance', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { pool } = require('./db');
+    const result = await pool.query(`SELECT value, updated_at, updated_by FROM system_settings WHERE key = 'farmer_dashboard_appearance' LIMIT 1`);
+    const activeSetting = result.rows.length > 0 ? result.rows[0].value : { activeDesignId: 'classic_standard', theme: 'classic', layout: 'standard' };
+    
+    res.json({
+      activeSetting: {
+        ...activeSetting,
+        updatedAt: result.rows[0]?.updated_at || null,
+        updatedBy: result.rows[0]?.updated_by || 'system'
+      },
+      designs: REGISTERED_DESIGNS
+    });
+  } catch (err) {
+    console.error('[ADMIN APPEARANCE] Error fetching designs:', err.message);
+    res.status(500).json({ error: 'Failed to fetch dashboard appearance designs' });
+  }
+});
+
+// Admin endpoint to activate a design for all farmers
+app.put('/api/admin/dashboard-appearance', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { activeDesignId, theme, layout } = req.body;
+    const targetDesign = REGISTERED_DESIGNS.find(d => d.id === activeDesignId);
+    if (!targetDesign) {
+      return res.status(400).json({ error: 'Invalid design ID. Must be one of registered designs.' });
+    }
+
+    const newSetting = {
+      activeDesignId: targetDesign.id,
+      theme: theme || targetDesign.theme,
+      layout: layout || targetDesign.layout
+    };
+
+    const { pool } = require('./db');
+    const { logAudit } = require('./services/auditService');
+
+    // Fetch previous setting for audit log
+    const prevRes = await pool.query(`SELECT value FROM system_settings WHERE key = 'farmer_dashboard_appearance'`);
+    const prevSetting = prevRes.rows[0]?.value || null;
+
+    const result = await pool.query(`
+      INSERT INTO system_settings (key, value, updated_at, updated_by)
+      VALUES ('farmer_dashboard_appearance', $1::jsonb, NOW(), $2)
+      ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+      RETURNING *
+    `, [JSON.stringify(newSetting), req.user.id]);
+
+    await logAudit({
+      adminId: req.user.id,
+      action: 'update_farmer_dashboard_appearance',
+      targetUserId: null,
+      details: {
+        previousDesign: prevSetting?.activeDesignId || 'classic_standard',
+        newDesign: targetDesign.id,
+        designName: targetDesign.name,
+        theme: newSetting.theme,
+        layout: newSetting.layout,
+        adminName: req.user.name
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully activated design: ${targetDesign.name}`,
+      setting: {
+        ...result.rows[0].value,
+        updatedAt: result.rows[0].updated_at,
+        updatedBy: req.user.id
+      }
+    });
+  } catch (err) {
+    console.error('[ADMIN APPEARANCE] Error updating dashboard appearance:', err.message);
+    res.status(500).json({ error: 'Failed to update farmer dashboard appearance' });
+  }
+});
+
+// Admin endpoint to restore original classic design
+app.post('/api/admin/dashboard-appearance/restore', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const defaultSetting = {
+      activeDesignId: 'classic_standard',
+      theme: 'classic',
+      layout: 'standard'
+    };
+
+    const { pool } = require('./db');
+    const { logAudit } = require('./services/auditService');
+
+    const prevRes = await pool.query(`SELECT value FROM system_settings WHERE key = 'farmer_dashboard_appearance'`);
+    const prevSetting = prevRes.rows[0]?.value || null;
+
+    const result = await pool.query(`
+      INSERT INTO system_settings (key, value, updated_at, updated_by)
+      VALUES ('farmer_dashboard_appearance', $1::jsonb, NOW(), $2)
+      ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+      RETURNING *
+    `, [JSON.stringify(defaultSetting), req.user.id]);
+
+    await logAudit({
+      adminId: req.user.id,
+      action: 'restore_farmer_dashboard_appearance',
+      targetUserId: null,
+      details: {
+        previousDesign: prevSetting?.activeDesignId || 'unknown',
+        newDesign: 'classic_standard',
+        adminName: req.user.name
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Classic — Original Dashboard has been restored successfully.',
+      setting: {
+        ...result.rows[0].value,
+        updatedAt: result.rows[0].updated_at,
+        updatedBy: req.user.id
+      }
+    });
+  } catch (err) {
+    console.error('[ADMIN APPEARANCE] Error restoring dashboard appearance:', err.message);
+    res.status(500).json({ error: 'Failed to restore classic dashboard appearance' });
+  }
+});
+
+// ---------------------------------------------
 // 15. NOTIFICATIONS
 // ---------------------------------------------
 

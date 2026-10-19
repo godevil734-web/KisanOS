@@ -113,7 +113,8 @@ const TABLE_MAP = {
   procurementPlans: 'procurement_plans',
   farmerFields: 'farmer_fields',
   farmerCropRecords: 'farmer_crop_records',
-  kisanPointsLedger: 'kisan_points_ledger'
+  kisanPointsLedger: 'kisan_points_ledger',
+  systemSettings: 'system_settings'
 };
 
 let tableColumnsCache = null;

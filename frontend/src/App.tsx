@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { DashboardAppearanceProvider, useDashboardAppearance } from './context/DashboardAppearanceContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { LoginPage } from './components/LoginPage';
@@ -24,10 +25,12 @@ import { DemoBanner } from './components/DemoBanner';
 import { KisanSaathiWidget } from './components/KisanSaathiWidget';
 import { FarmerProfilePage } from './components/FarmerProfilePage';
 import { QuickTourModal } from './components/QuickTourModal';
+import { FarmerDashboardPreview } from './components/FarmerDashboardPreview';
 
 const MainApp: React.FC = () => {
   const { user, loading } = useAuth();
   const { t } = useLanguage();
+  const { appearance } = useDashboardAppearance();
   
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -128,6 +131,8 @@ const MainApp: React.FC = () => {
     pathname === '/buyers' || pathname === '/listings' || pathname === '/offers' ||
     pathname === '/orders' || pathname === '/deals' || pathname === '/aggregator-info' || pathname === '/storage-farmer';
 
+  const isPreviewRoute = pathname === '/preview-dashboard' || pathname === '/dashboard-preview' || pathname === '/preview-farmer-dashboard';
+
   const isAggregatorRoute = pathname === '/aggregator' || pathname === '/demand' || pathname === '/supply' ||
     pathname === '/procurement' || pathname === '/aggregation' || pathname === '/batches' || pathname === '/logistics' ||
     pathname === '/transactions';
@@ -160,14 +165,24 @@ const MainApp: React.FC = () => {
 
   const isPublicView = pathname === '/' || pathname === '/how-it-works' || pathname === '/login' || pathname === '/signup' || pathname === '/admin-login';
   const isAuthPage = pathname === '/login' || pathname === '/signup' || pathname === '/admin-login';
+  const isLegacyFarmer = isFarmerRoute && searchParams.get('legacy') === 'true';
+
+  // Appearance theme routing: determine whether harvest theme is active in production or preview
+  const isHarvestProductionActive = isFarmerRoute && !isLegacyFarmer && appearance?.theme === 'harvest_premium';
+  const isFullScreenView = isPreviewRoute || isHarvestProductionActive;
+  const previewDesignParam = searchParams.get('design') || 'harvest_standard';
 
   return (
-    <div className={`min-h-screen flex flex-col bg-[#F7F5EF] font-sans text-[#26332C] overflow-x-hidden ${isAuthPage ? 'watermark-farm-landscape' : 'watermark-india-map'}`}>
+    <div className={`font-sans ${
+      isFullScreenView
+        ? 'h-screen h-[100dvh] overflow-hidden flex flex-col bg-[#F7F4E9] text-[#17251D]' 
+        : `min-h-screen flex flex-col overflow-x-hidden bg-[#F7F5EF] text-[#26332C] ${isAuthPage ? 'watermark-farm-landscape' : 'watermark-india-map'}`
+    }`}>
       {/* Demo Mode Global Banner */}
-      <DemoBanner />
+      {!isFullScreenView && <DemoBanner />}
 
       {/* Navigation Header */}
-      {!isFarmerRoute && !isFarmerProfileRoute && (
+      {!isFarmerProfileRoute && !isFullScreenView && (
         <Navbar 
           currentTab={currentTab} 
           setCurrentTab={handleSetCurrentTab}
@@ -181,12 +196,12 @@ const MainApp: React.FC = () => {
       {user?.status === 'pending' && <PendingApprovalBanner />}
 
       {/* Main Content Area */}
-      <main className={`flex-1 w-full relative z-10 ${
-        pathname === '/dashboard' 
-          ? 'w-full' 
+      <main className={`w-full relative z-10 ${
+        isFullScreenView
+          ? 'w-full flex-1 h-full overflow-hidden' 
           : isPublicView 
-            ? '' 
-            : 'w-full max-w-[1920px] 2xl:max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-5 sm:py-7'
+            ? 'flex-1' 
+            : 'flex-1 w-full max-w-[1920px] 2xl:max-w-[2400px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-5 sm:py-7'
       }`}>
         {loading ? (
           <div className="py-24 text-center">
@@ -299,7 +314,51 @@ const MainApp: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <FarmerDashboard onNavigate={navigate} onOpenNotifications={() => setIsNotificationsOpen(true)} />
+                isHarvestProductionActive ? (
+                  <FarmerDashboardPreview 
+                    onNavigate={navigate} 
+                    onOpenNotifications={() => setIsNotificationsOpen(true)} 
+                    isProductionMode={true} 
+                  />
+                ) : (
+                  <FarmerDashboard 
+                    onNavigate={navigate} 
+                    onOpenNotifications={() => setIsNotificationsOpen(true)} 
+                  />
+                )
+              )
+            )}
+
+            {isPreviewRoute && (
+              previewDesignParam === 'classic_standard' ? (
+                <div className="space-y-4 max-w-[1920px] mx-auto py-2">
+                  <div className="bg-[#104B35] text-white px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs font-bold border border-[#37A86B]/30 shadow-md">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full bg-[#E6A52E] text-[#17251D] text-[10px] font-black uppercase tracking-wider">
+                        PREVIEW MODE
+                      </span>
+                      <span className="font-extrabold text-sm">Classic — Original Dashboard</span>
+                      <span className="text-[#37A86B] font-medium hidden sm:inline">
+                        ({appearance?.activeDesignId === 'classic_standard' ? 'Currently Active in Production' : 'Preview Only • Not Active'})
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => navigate('/admin?tab=appearance')}
+                      className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-[#E8F1E5] text-[#104B35] font-black text-xs transition-colors cursor-pointer shadow-xs flex items-center gap-1"
+                    >
+                      ← Return to Appearance Manager
+                    </button>
+                  </div>
+                  <FarmerDashboard onNavigate={navigate} onOpenNotifications={() => setIsNotificationsOpen(true)} />
+                </div>
+              ) : (
+                <FarmerDashboardPreview 
+                  onNavigate={navigate} 
+                  onOpenNotifications={() => setIsNotificationsOpen(true)} 
+                  isPreviewMode={true}
+                  returnUrl={searchParams.get('from') === 'admin' ? '/admin?tab=appearance' : '/admin?tab=appearance'}
+                  returnLabel="Return to Appearance Manager"
+                />
               )
             )}
 
@@ -382,7 +441,7 @@ const MainApp: React.FC = () => {
             {pathname === '/intelligence' && <MarketIntelligenceDashboard />}
             {(pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) && (
               user && user.role === 'admin' ? (
-                <AdminDashboard />
+                <AdminDashboard onNavigate={navigate} />
               ) : (
                 <AdminLoginPage 
                   onSuccess={(target) => navigate(target)} 
@@ -391,7 +450,7 @@ const MainApp: React.FC = () => {
               )
             )}
             {/* Fallback to prevent black/blank screens on any unmatched route */}
-            {!isFarmerProfileRoute && !isFarmerRoute && !isAggregatorRoute && !isBuyerRoute && 
+            {!isFarmerProfileRoute && !isFarmerRoute && !isPreviewRoute && !isAggregatorRoute && !isBuyerRoute && 
              pathname !== '/storage' && pathname !== '/transport' && pathname !== '/intelligence' && 
              !pathname.startsWith('/admin') && pathname !== '/how-it-works' && 
              pathname !== '/login' && pathname !== '/signup' && pathname !== '/admin-login' && pathname !== '/' && (
@@ -442,30 +501,32 @@ const MainApp: React.FC = () => {
       {/* First-Visit Full-Screen Language Gate Picker */}
       <LanguageGateModal />
 
-      {/* Floating On-Demand Role-Aware Kisan Saathi AI Assistant */}
-      <KisanSaathiWidget 
-        onNavigateTab={(tab, payload) => {
-          const uRole = user?.role || 'farmer';
-          if (uRole === 'farmer') {
-            if (pathname !== '/dashboard' && pathname !== '/farmer') {
-              navigate('/dashboard?tab=' + tab);
+      {/* Floating On-Demand Role-Aware Kisan Saathi AI Assistant (Only on non-farmer routes, farmer dashboard has it built into sidebar) */}
+      {!isFarmerRoute && !isPreviewRoute && (
+        <KisanSaathiWidget 
+          onNavigateTab={(tab, payload) => {
+            const uRole = user?.role || 'farmer';
+            if (uRole === 'farmer') {
+              if (pathname !== '/dashboard' && pathname !== '/farmer') {
+                navigate('/dashboard?tab=' + tab);
+              }
+              window.dispatchEvent(new CustomEvent('farmer-navigate-tab', { detail: { tab, ...payload } }));
+            } else if (uRole === 'aggregator') {
+              if (pathname !== '/aggregator') {
+                navigate('/aggregator?tab=' + tab);
+              }
+              window.dispatchEvent(new CustomEvent('aggregator-navigate-tab', { detail: { tab, ...payload } }));
+            } else if (uRole === 'buyer' || uRole === 'dealer') {
+              if (pathname !== '/buyer' && pathname !== '/dealer') {
+                navigate('/buyer?tab=' + tab);
+              }
+              window.dispatchEvent(new CustomEvent('buyer-navigate-tab', { detail: { tab, ...payload } }));
+            } else {
+              navigate('/' + tab);
             }
-            window.dispatchEvent(new CustomEvent('farmer-navigate-tab', { detail: { tab, ...payload } }));
-          } else if (uRole === 'aggregator') {
-            if (pathname !== '/aggregator') {
-              navigate('/aggregator?tab=' + tab);
-            }
-            window.dispatchEvent(new CustomEvent('aggregator-navigate-tab', { detail: { tab, ...payload } }));
-          } else if (uRole === 'buyer' || uRole === 'dealer') {
-            if (pathname !== '/buyer' && pathname !== '/dealer') {
-              navigate('/buyer?tab=' + tab);
-            }
-            window.dispatchEvent(new CustomEvent('buyer-navigate-tab', { detail: { tab, ...payload } }));
-          } else {
-            navigate('/' + tab);
-          }
-        }} 
-      />
+          }} 
+        />
+      )}
 
       {/* Layout-Specific Footer Rendering:
           - Public Landing Layout (/): Agricultural Landscape Banner + Full Marketing Footer
@@ -490,7 +551,9 @@ export const App: React.FC = () => {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <MainApp />
+        <DashboardAppearanceProvider>
+          <MainApp />
+        </DashboardAppearanceProvider>
       </AuthProvider>
     </LanguageProvider>
   );

@@ -30,6 +30,22 @@
   --table-stripe: #F9F8F5;
 }
 
+/* ========================================================================= */
+/* HARVEST PREMIUM THEME (ISOLATED PREVIEW SCOPE)                            */
+/* ========================================================================= */
+.harvest-premium-theme {
+  --harvest-bg: #F7F4E9;              /* Warm ivory */
+  --harvest-primary: #176B45;         /* Primary green */
+  --harvest-deep: #104B35;            /* Deep green */
+  --harvest-accent: #37A86B;          /* Fresh green accent */
+  --harvest-amber: #E6A52E;           /* Harvest amber */
+  --harvest-sage: #E8F1E5;            /* Soft sage */
+  --harvest-text: #17251D;            /* Dark forest charcoal */
+  --harvest-text-secondary: #657468;  /* Muted sage charcoal */
+  --harvest-card: #FFFFFF;            /* Clean white card surface */
+  --harvest-border: #E5E0D5;          /* Subtle warm border */
+}
+
 @layer base {
   html {
     color-scheme: light;

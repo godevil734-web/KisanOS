@@ -694,6 +694,30 @@ export interface FarmerDigitalProfile {
   recentSales: any[];
 }
 
+export type DashboardThemeType = 'classic' | 'harvest_premium' | string;
+export type DashboardLayoutType = 'standard' | 'compact' | string;
+
+export interface DashboardDesign {
+  id: string;
+  name: string;
+  theme: DashboardThemeType;
+  themeName: string;
+  layout: DashboardLayoutType;
+  layoutName: string;
+  description: string;
+  isDefault?: boolean;
+  features: string[];
+}
+
+export interface DashboardAppearanceSetting {
+  activeDesignId: string;
+  theme: DashboardThemeType;
+  layout: DashboardLayoutType;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  fallback?: boolean;
+}
+
 
 
 

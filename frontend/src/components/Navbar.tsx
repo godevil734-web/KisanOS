@@ -27,7 +27,8 @@ import {
   Sparkles,
   FileText,
   Phone,
-  Eye
+  Eye,
+  Palette
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -414,7 +415,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </div>
 
                         {/* SEPARATE ADMIN SECTION */}
-                        <div className="pt-2 border-t border-[#EAE5D8]">
+                        <div className="pt-2 border-t border-[#EAE5D8] space-y-1.5">
                           <button
                             type="button"
                             onClick={async () => {
@@ -433,6 +434,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                               </div>
                             </div>
                             <Check className="w-4 h-4 text-emerald-400" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setRoleSwitcherOpen(false);
+                              await switchRole('admin');
+                              setCurrentTab('admin');
+                              handleNav('/admin?tab=appearance');
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 cursor-pointer transition-colors"
+                            id="navbar-admin-appearance-link"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Palette className="w-4 h-4 text-purple-600" />
+                              <div>
+                                <div className="font-extrabold">{isHi ? 'सेटिंग्स → डैशबोर्ड रूप-रंग' : 'Settings → Dashboard Appearance'}</div>
+                                <div className="text-[10px] text-purple-600 font-medium">{isHi ? 'किसान डैशबोर्ड थीम व रूप-रंग' : 'Farmer Dashboard Themes'}</div>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-purple-200/80 text-purple-800">
+                              Theme
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -530,6 +554,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                       >
                         {isHi ? 'सेटिंग्स (Settings)' : 'Settings'}
                       </button>
+
+                      {/* Admin Appearance Settings */}
+                      {user?.role === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            handleNav('/admin?tab=appearance');
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold flex items-center justify-between text-purple-900 hover:bg-purple-50 transition-colors cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Palette className="w-4 h-4 text-purple-600" />
+                            <span>{isHi ? 'सेटिंग्स → डैशबोर्ड रूप-रंग' : 'Settings → Dashboard Appearance'}</span>
+                          </span>
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">Admin</span>
+                        </button>
+                      )}
 
                       {/* Divider */}
                       <div className="my-1 border-t border-[#F0ECE1]" />
@@ -798,7 +840,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setCurrentTab('admin');
                         handleNav('/admin');
                       }}
-                      className="w-full py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-between border bg-slate-900 text-white border-slate-900"
+                      className="w-full py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-between border bg-slate-900 text-white border-slate-900 cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -806,6 +848,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                       <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">
                         Admin
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setMobileMenuOpen(false);
+                        await switchRole('admin');
+                        setCurrentTab('admin');
+                        handleNav('/admin?tab=appearance');
+                      }}
+                      className="w-full py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-between border bg-purple-50 text-purple-900 border-purple-200 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Palette className="w-4 h-4 text-purple-600" />
+                        <span>{isHi ? 'सेटिंग्स → डैशबोर्ड रूप-रंग' : 'Settings → Dashboard Appearance'}</span>
+                      </div>
+                      <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-purple-200/80 text-purple-800">
+                        Theme
                       </span>
                     </button>
                   </div>

@@ -23,7 +23,8 @@ import {
   ChevronRight,
   Trash2,
   CheckSquare,
-  Palette
+  Palette,
+  Settings
 } from 'lucide-react';
 import { RegisterModal } from './RegisterModal';
 import { DashboardAppearanceManager } from './DashboardAppearanceManager';
@@ -48,11 +49,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [activeAdminTab, setActiveAdminTab] = useState<'overview' | 'approvals' | 'users' | 'audit' | 'plans' | 'crops' | 'appearance'>('approvals');
   const [loading, setLoading] = useState(true);
 
-  // Parse initial tab from URL query params (e.g. /admin?tab=appearance)
+  // Handler to switch admin tab and synchronize the browser URL
+  const handleSelectTab = (tab: 'overview' | 'approvals' | 'users' | 'audit' | 'plans' | 'crops' | 'appearance') => {
+    setActiveAdminTab(tab);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    } catch {
+      // ignore
+    }
+  };
+
+  // Parse initial tab from URL query params (e.g. /admin?tab=appearance, /admin?tab=settings) or pathname
   useEffect(() => {
     try {
-      const tabParam = new URLSearchParams(window.location.search).get('tab');
-      if (tabParam === 'appearance' || tabParam === 'ui' || tabParam === 'theme') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = (searchParams.get('tab') || searchParams.get('subtab') || searchParams.get('section') || '').toLowerCase();
+      const pathname = window.location.pathname.toLowerCase();
+
+      if (
+        tabParam === 'appearance' || 
+        tabParam === 'settings' || 
+        tabParam === 'dashboard-appearance' || 
+        tabParam === 'theme' || 
+        tabParam === 'ui' ||
+        pathname.includes('/appearance') ||
+        pathname.includes('/dashboard-appearance') ||
+        (pathname.includes('/settings') && !pathname.includes('/profile'))
+      ) {
         setActiveAdminTab('appearance');
       } else if (tabParam === 'users' || tabParam === 'approvals' || tabParam === 'overview' || tabParam === 'audit' || tabParam === 'plans' || tabParam === 'crops') {
         setActiveAdminTab(tabParam as any);
@@ -552,6 +577,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Prominent Quick Access: Settings → Dashboard Appearance */}
+          <button
+            onClick={() => handleSelectTab('appearance')}
+            className={`px-3.5 py-2 rounded-xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs border ${
+              activeAdminTab === 'appearance'
+                ? 'bg-purple-700 text-white border-purple-800 shadow-purple-200 ring-2 ring-purple-300'
+                : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200 hover:border-purple-300'
+            }`}
+            title={isHi ? 'सेटिंग्स → डैशबोर्ड रूप-रंग' : 'Settings → Dashboard Appearance'}
+            id="admin-btn-dashboard-appearance"
+          >
+            <Palette className="h-4 w-4 text-purple-600 shrink-0" />
+            <span>{isHi ? 'सेटिंग्स → डैशबोर्ड रूप-रंग' : 'Settings → Dashboard Appearance'}</span>
+          </button>
+
           <button
             onClick={() => {
               setRegisterInitialRole('farmer');
@@ -574,7 +614,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       </div>
 
       {/* Main Tabs Navigation */}
-      <div className="flex border-b border-slate-200 space-x-1 overflow-x-auto scrollbar-none">
+      <div className="flex border-b border-slate-200 space-x-1 overflow-x-auto scrollbar-thin py-0.5">
         {[
           { 
             id: 'approvals', 
@@ -609,9 +649,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           },
           { 
             id: 'appearance', 
-            label: isHi ? 'डैशबोर्ड रूप-रंग' : 'Farmer Dashboard UI/UX', 
+            label: isHi ? 'सेटिंग्स → डैशबोर्ड रूप-रंग' : 'Settings → Dashboard Appearance', 
             icon: Palette,
-            badge: null
+            badge: 'Theme'
           }
         ].map((tab) => {
           const Icon = tab.icon;
@@ -619,17 +659,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveAdminTab(tab.id as any)}
-              className={`flex items-center gap-2 py-3 px-4 border-b-2 text-xs font-bold whitespace-nowrap transition-colors ${
+              id={`admin-tab-${tab.id}`}
+              onClick={() => handleSelectTab(tab.id as any)}
+              className={`flex items-center gap-2 py-3 px-4 border-b-2 text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
                 isActive
-                  ? 'border-slate-900 text-slate-900 bg-slate-100/50'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                  ? tab.id === 'appearance'
+                    ? 'border-purple-600 text-purple-900 bg-purple-50/70 font-extrabold'
+                    : 'border-slate-900 text-slate-900 bg-slate-100/50'
+                  : tab.id === 'appearance'
+                    ? 'border-transparent text-purple-700 hover:text-purple-900 hover:border-purple-300 bg-purple-50/30'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className={`h-4 w-4 ${tab.id === 'appearance' ? 'text-purple-600' : ''}`} />
               <span>{tab.label}</span>
               {typeof tab.badge === 'number' && tab.badge > 0 && (
                 <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-white">
+                  {tab.badge}
+                </span>
+              )}
+              {typeof tab.badge === 'string' && (
+                <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
                   {tab.badge}
                 </span>
               )}

@@ -29,7 +29,7 @@ export const INITIAL_REGISTERED_DESIGNS: DashboardDesign[] = [
   },
   {
     id: 'harvest_standard',
-    name: 'Harvest Premium — Standard Layout',
+    name: 'Harvest Premium — Standard',
     theme: 'harvest_premium',
     themeName: 'Harvest Premium',
     layout: 'standard',

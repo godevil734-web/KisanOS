@@ -103,12 +103,17 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
       <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-black text-purple-700 uppercase tracking-wider mb-0.5">
+              <span>Settings</span>
+              <ChevronRight className="h-3 w-3 text-slate-400" />
+              <span>Dashboard Appearance</span>
+            </div>
             <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-emerald-100 text-emerald-800">
+              <span className="p-2 rounded-xl bg-purple-100 text-purple-800">
                 <Palette className="h-5 w-5" />
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-                {isHi ? 'किसान डैशबोर्ड रूप-रंग प्रबंधक' : 'Farmer Dashboard UI/UX Manager'}
+                {isHi ? 'सेटिंग्स: डैशबोर्ड रूप-रंग' : 'Settings → Dashboard Appearance'}
               </h2>
             </div>
             <p className="text-xs sm:text-sm text-slate-600 max-w-3xl">
@@ -129,9 +134,10 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
                   : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 hover:border-amber-400'
               }`}
               title={isClassicActive ? 'Classic design is already active' : 'Restore original Classic dashboard'}
+              id="appearance-restore-classic-btn"
             >
               <RotateCcw className="h-4 w-4" />
-              <span>{isHi ? 'मूल क्लासिक बहाल करें' : 'Restore Original Dashboard'}</span>
+              <span>{isHi ? 'मूल क्लासिक बहाल करें' : 'Restore Classic'}</span>
             </button>
           </div>
         </div>
@@ -372,18 +378,22 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
                   </button>
 
                   {isActive ? (
-                    <div className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-black text-xs flex items-center justify-center gap-1.5">
+                    <div 
+                      id={`status-active-design-${design.id}`}
+                      className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-black text-xs flex items-center justify-center gap-1.5"
+                    >
                       <Check className="h-4 w-4 text-emerald-600" />
-                      <span>{isHi ? 'सक्रिय है' : 'Currently Active'}</span>
+                      <span>{isHi ? 'सक्रिय (Active)' : 'Active'}</span>
                     </div>
                   ) : (
                     <button
+                      id={`btn-activate-design-${design.id}`}
                       onClick={() => setConfirmActivationDesign(design)}
                       disabled={isSaving}
                       className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      <span>{isHi ? 'सक्रिय करें' : 'Activate Design'}</span>
+                      <span>{isHi ? 'थीम सक्रिय करें' : 'Activate Theme'}</span>
                     </button>
                   )}
                 </div>

@@ -74,12 +74,12 @@ const MainApp: React.FC = () => {
         navigate('/login?next=/aggregator');
       } else if (pathname === '/dealer') {
         navigate('/login?next=/dealer');
-      } else if (pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) {
+      } else if (pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/') || pathname === '/admin-appearance') {
         navigate('/admin-login');
       }
     } else if (!loading && user) {
       // Non-admin attempting to access admin routes
-      if ((pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) && user.role !== 'admin') {
+      if ((pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/') || pathname === '/admin-appearance') && user.role !== 'admin') {
         if (user.role === 'farmer') navigate('/dashboard');
         else if (user.role === 'aggregator') navigate('/aggregator');
         else if (user.role === 'buyer' || user.role === 'dealer') navigate('/buyer');
@@ -151,7 +151,7 @@ const MainApp: React.FC = () => {
   else if (pathname === '/storage') currentTab = 'storage';
   else if (pathname === '/transport') currentTab = 'transport';
   else if (pathname === '/intelligence') currentTab = 'intelligence';
-  else if (pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) currentTab = 'admin';
+  else if (pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/') || pathname === '/admin-appearance') currentTab = 'admin';
   else if (pathname === '/how-it-works') currentTab = 'how-it-works';
   else currentTab = 'landing';
 
@@ -439,7 +439,7 @@ const MainApp: React.FC = () => {
             {pathname === '/storage' && <ColdStorageDashboard />}
             {pathname === '/transport' && <TransporterDashboard />}
             {pathname === '/intelligence' && <MarketIntelligenceDashboard />}
-            {(pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/')) && (
+            {(pathname === '/admin' || pathname === '/admin-dashboard' || pathname.startsWith('/admin/') || pathname === '/admin-appearance') && (
               user && user.role === 'admin' ? (
                 <AdminDashboard onNavigate={navigate} />
               ) : (
@@ -452,7 +452,7 @@ const MainApp: React.FC = () => {
             {/* Fallback to prevent black/blank screens on any unmatched route */}
             {!isFarmerProfileRoute && !isFarmerRoute && !isPreviewRoute && !isAggregatorRoute && !isBuyerRoute && 
              pathname !== '/storage' && pathname !== '/transport' && pathname !== '/intelligence' && 
-             !pathname.startsWith('/admin') && pathname !== '/how-it-works' && 
+             !pathname.startsWith('/admin') && pathname !== '/admin-appearance' && pathname !== '/how-it-works' && 
              pathname !== '/login' && pathname !== '/signup' && pathname !== '/admin-login' && pathname !== '/' && (
               <LandingPage 
                 onSelectTab={handleSetCurrentTab} 

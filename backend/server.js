@@ -4352,20 +4352,29 @@ app.put('/api/admin/theme-palette/draft/:designId', authMiddleware, requireRole(
 app.post('/api/admin/theme-palette/publish/:designId', authMiddleware, requireRole(['admin']), async (req, res) => {
   try {
     const { designId } = req.params;
-    const { palette } = req.body;
-    
-    const validation = validatePalette(palette);
-    if (!validation.valid) {
-      return res.status(400).json({ error: `Invalid palette: ${validation.error}` });
-    }
-    
+    let { palette } = req.body || {};
+    const { pool } = require('./db');
+    const { logAudit } = require('./services/auditService');
+
     const targetDesign = REGISTERED_DESIGNS.find(d => d.id === designId);
     if (!targetDesign) {
       return res.status(400).json({ error: 'Invalid design ID' });
     }
 
-    const { pool } = require('./db');
-    const { logAudit } = require('./services/auditService');
+    if (!palette) {
+      const draftRes = await pool.query(`SELECT value FROM system_settings WHERE key = $1 LIMIT 1`, [`theme_palette_draft_${designId}`]);
+      palette = draftRes.rows[0]?.value;
+    }
+
+    if (!palette) {
+      return res.status(400).json({ error: 'No palette or saved draft found to publish' });
+    }
+    
+    const validation = validatePalette(palette);
+    if (!validation.valid) {
+      return res.status(400).json({ error: `Invalid palette: ${validation.error}` });
+    }
+
     const key = `theme_palette_published_${designId}`;
     
     const prevRes = await pool.query(`SELECT value FROM system_settings WHERE key = $1`, [key]);
@@ -4378,6 +4387,9 @@ app.post('/api/admin/theme-palette/publish/:designId', authMiddleware, requireRo
       SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by
       RETURNING *
     `, [key, JSON.stringify(palette), req.user.id]);
+
+    // Clear draft after successful publish
+    await pool.query(`DELETE FROM system_settings WHERE key = $1`, [`theme_palette_draft_${designId}`]);
 
     await logAudit({
       adminId: req.user.id,
@@ -4400,6 +4412,19 @@ app.post('/api/admin/theme-palette/publish/:designId', authMiddleware, requireRo
   } catch (err) {
     console.error('[THEME PALETTE] Error publishing palette:', err.message);
     res.status(500).json({ error: 'Failed to publish theme palette' });
+  }
+});
+
+// Discard draft palette for a specific design
+app.post('/api/admin/theme-palette/discard/:designId', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { designId } = req.params;
+    const { pool } = require('./db');
+    await pool.query(`DELETE FROM system_settings WHERE key = $1`, [`theme_palette_draft_${designId}`]);
+    res.json({ success: true, message: 'Draft palette discarded' });
+  } catch (err) {
+    console.error('[THEME PALETTE] Error discarding draft:', err.message);
+    res.status(500).json({ error: 'Failed to discard draft palette' });
   }
 });
 
@@ -4457,18 +4482,27 @@ app.get('/api/settings/theme-palette/:designId', async (req, res) => {
   try {
     const { designId } = req.params;
     const { pool } = require('./db');
+
+    // Check if draft requested
+    if (req.query.draft === 'true') {
+      const draftRes = await pool.query(`SELECT value, updated_at FROM system_settings WHERE key = $1 LIMIT 1`, [`theme_palette_draft_${designId}`]);
+      if (draftRes.rows.length > 0) {
+        return res.json({ success: true, palette: draftRes.rows[0].value, hasDraft: true, updatedAt: draftRes.rows[0].updated_at });
+      }
+    }
+
     const key = `theme_palette_published_${designId}`;
     const result = await pool.query(`SELECT value, updated_at FROM system_settings WHERE key = $1 LIMIT 1`, [key]);
     if (result.rows.length > 0) {
-      return res.json({ success: true, palette: result.rows[0].value, updatedAt: result.rows[0].updated_at });
+      return res.json({ success: true, palette: result.rows[0].value, hasDraft: false, updatedAt: result.rows[0].updated_at });
     }
     // Return default palette if no custom published
     const def = DEFAULT_PALETTES[designId] || DEFAULT_PALETTES['classic_standard'];
-    res.json({ success: true, palette: def, updatedAt: null, isDefault: true });
+    res.json({ success: true, palette: def, hasDraft: false, updatedAt: null, isDefault: true });
   } catch (err) {
     console.error('[THEME PALETTE] Error fetching published palette:', err.message);
     const def = DEFAULT_PALETTES[req.params.designId] || DEFAULT_PALETTES['classic_standard'];
-    res.json({ success: true, palette: def, updatedAt: null, isDefault: true });
+    res.json({ success: true, palette: def, hasDraft: false, updatedAt: null, isDefault: true });
   }
 });
 

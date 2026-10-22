@@ -39,6 +39,7 @@ interface FarmerDashboardPreviewProps {
   onOpenNotifications?: () => void;
   isProductionMode?: boolean;
   isPreviewMode?: boolean;
+  designVariant?: string;
   returnUrl?: string;
   returnLabel?: string;
 }
@@ -48,12 +49,17 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
   onOpenNotifications,
   isProductionMode = false,
   isPreviewMode,
+  designVariant,
   returnUrl,
   returnLabel
 }) => {
   const { user } = useAuth();
   const actualIsPreview = isPreviewMode !== undefined ? isPreviewMode : !isProductionMode;
   const { language, setLanguage: setGlobalLang } = useLanguage();
+
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const activeDesignParam = designVariant || searchParams.get('design') || 'harvest_standard';
+  const isCanvasTheme = activeDesignParam === 'harvest_canvas';
 
   // Language state: synchronized with global language and persisted in localStorage
   const [lang, setLang] = useState<DashboardLang>(() => {
@@ -396,15 +402,19 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
     <div className="harvest-premium-theme h-full h-[100dvh] w-full bg-[#F7F4E9] text-[#17251D] font-sans selection:bg-[#37A86B]/20 antialiased flex flex-row overflow-hidden">
 
       {/* ========================================================================= */}
-      {/* 🌟 FULL-PAGE SLIDING SIDEBAR (Deep Agricultural Green #104B35) */}
+      {/* 🌟 FULL-PAGE SLIDING SIDEBAR */}
       {/* ========================================================================= */}
       <aside 
-        className={`hidden md:flex flex-col bg-[#104B35] border-r border-[#176B45]/40 transition-all duration-300 ease-in-out shrink-0 h-full select-none z-30 ${
+        className={`hidden md:flex flex-col ${
+          isCanvasTheme 
+            ? 'bg-[#F7F4E9] border-r border-[#E5E0D5] text-[#17251D]' 
+            : 'bg-[#104B35] border-r border-[#176B45]/40 text-white'
+        } transition-all duration-300 ease-in-out shrink-0 h-full select-none z-30 ${
           isSidebarCollapsed ? 'w-[72px]' : 'w-[250px]'
         }`}
       >
         {/* Top Brand Header & Minimize/Expand Sidebar Button - h-16 (64px) matching top header */}
-        <div className={`h-16 px-4 border-b border-[#176B45]/40 flex items-center shrink-0 ${isSidebarCollapsed ? 'flex-col gap-2 justify-center' : 'justify-between'}`}>
+        <div className={`h-16 px-4 border-b ${isCanvasTheme ? 'border-[#E5E0D5]' : 'border-[#176B45]/40'} flex items-center shrink-0 ${isSidebarCollapsed ? 'flex-col gap-2 justify-center' : 'justify-between'}`}>
           <div 
             onClick={() => handleNavClick('home')}
             className="flex items-center gap-2.5 cursor-pointer select-none group"
@@ -415,7 +425,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
             </div>
             {!isSidebarCollapsed && (
               <div className="overflow-hidden">
-                <div className="text-base font-black tracking-tight text-white flex items-center gap-1 leading-none">
+                <div className={`text-base font-black tracking-tight ${isCanvasTheme ? 'text-[#17251D]' : 'text-white'} flex items-center gap-1 leading-none`}>
                   <span>Kisan</span>
                   <span className="text-[#37A86B]">Connect</span>
                 </div>
@@ -430,7 +440,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
           {/* Minimize / Expand Toggle Button with Tooltip */}
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="p-1.5 rounded-lg text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40 border border-[#176B45]/40 transition-all cursor-pointer relative group shrink-0"
+            className={`p-1.5 rounded-lg ${
+              isCanvasTheme
+                ? 'text-[#17251D]/70 hover:text-[#17251D] hover:bg-[#E8F1E5] border border-[#E5E0D5]'
+                : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40 border border-[#176B45]/40'
+            } transition-all cursor-pointer relative group shrink-0`}
             title={isSidebarCollapsed ? t.nav.expandSidebar : t.nav.collapseSidebar}
             aria-label={isSidebarCollapsed ? t.nav.expandSidebar : t.nav.collapseSidebar}
           >
@@ -446,11 +460,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
         </div>
 
         {/* Categorized Nav Sections */}
-        <nav className="flex-1 p-3 space-y-3 overflow-y-auto scrollbar-thin scrollbar-thumb-[#176B45]/50">
+        <nav className={`flex-1 p-3 space-y-3 overflow-y-auto scrollbar-thin ${isCanvasTheme ? 'scrollbar-thumb-stone-300' : 'scrollbar-thumb-[#176B45]/50'}`}>
           {navSections.map((sec) => (
             <div key={sec.title} className="space-y-1">
               {!isSidebarCollapsed && (
-                <div className="text-[10px] font-black tracking-wider text-[#37A86B] uppercase px-3 pt-1.5 pb-0.5">
+                <div className={`text-[10px] font-black tracking-wider ${isCanvasTheme ? 'text-[#176B45]' : 'text-[#37A86B]'} uppercase px-3 pt-1.5 pb-0.5`}>
                   {sec.title}
                 </div>
               )}
@@ -474,12 +488,14 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                     } ${
                       isActive
                         ? 'bg-[#176B45] text-white shadow-xs font-black'
-                        : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/35 hover:text-white'
+                        : isCanvasTheme
+                          ? 'text-[#17251D]/80 hover:bg-[#E8F1E5] hover:text-[#17251D]'
+                          : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/35 hover:text-white'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <Icon className={`h-4 w-4 shrink-0 transition-transform ${
-                        isActive ? 'text-white scale-105' : 'text-[#37A86B] group-hover:text-white'
+                        isActive ? 'text-white scale-105' : isCanvasTheme ? 'text-[#176B45]' : 'text-[#37A86B] group-hover:text-white'
                       }`} />
                       {!isSidebarCollapsed && (
                         <span className="tracking-wide truncate">
@@ -510,8 +526,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
       </aside>
 
       {/* ========================================================================= */}
-      {/* ========================================================================= */}
-      {/* 📱 MOBILE NAVIGATION DRAWER (Deep Green #104B35) */}
+      {/* 📱 MOBILE NAVIGATION DRAWER */}
       {/* ========================================================================= */}
       {isMobileDrawerOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
@@ -519,17 +534,17 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
             className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs"
             onClick={() => setIsMobileDrawerOpen(false)}
           />
-          <div className="relative w-72 max-w-[80vw] bg-[#104B35] text-white h-full flex flex-col border-r border-[#176B45]/40 z-10 shadow-2xl">
-            <div className="h-16 px-4 border-b border-[#176B45]/40 flex items-center justify-between">
+          <div className={`relative w-72 max-w-[80vw] ${isCanvasTheme ? 'bg-[#F7F4E9] text-[#17251D] border-r border-[#E5E0D5]' : 'bg-[#104B35] text-white border-r border-[#176B45]/40'} h-full flex flex-col z-10 shadow-2xl`}>
+            <div className={`h-16 px-4 border-b ${isCanvasTheme ? 'border-[#E5E0D5]' : 'border-[#176B45]/40'} flex items-center justify-between`}>
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded-lg bg-[#176B45] text-white flex items-center justify-center font-bold shadow-xs">
                   <Sprout className="h-4 w-4 text-[#E8F1E5]" />
                 </div>
-                <span className="font-black text-sm">KisanConnect</span>
+                <span className={`font-black text-sm ${isCanvasTheme ? 'text-[#17251D]' : 'text-white'}`}>KisanConnect</span>
               </div>
               <button
                 onClick={() => setIsMobileDrawerOpen(false)}
-                className="p-1.5 rounded-full text-[#E8F1E5]/80 hover:bg-[#176B45]/50"
+                className={`p-1.5 rounded-full ${isCanvasTheme ? 'text-[#17251D]/70 hover:bg-[#E8F1E5]' : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/50'}`}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -553,7 +568,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                       }
                     }}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
-                      isActive ? 'bg-[#176B45] text-white shadow-xs' : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/40'
+                      isActive ? 'bg-[#176B45] text-white shadow-xs' : isCanvasTheme ? 'text-[#17251D]/80 hover:bg-[#E8F1E5]' : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/40'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
@@ -580,36 +595,40 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
 
         {/* Global Isolated Preview Mode Indicator Bar */}
         {actualIsPreview && (
-          <div className="bg-[#104B35] text-white px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs font-bold border-b border-[#37A86B]/30 shrink-0 z-30">
+          <div className={`${isCanvasTheme ? 'bg-[#EAE4D3] text-[#17251D] border-b border-[#D5CFBE]' : 'bg-[#104B35] text-white border-b border-[#37A86B]/30'} px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs font-bold shrink-0 z-30`}>
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 rounded-full bg-[#E6A52E] text-[#17251D] text-[10px] font-black uppercase tracking-wider">
                 PREVIEW MODE
               </span>
               <span className="font-extrabold">
-                Harvest Premium — Standard Layout
+                {isCanvasTheme ? 'Harvest Canvas — Unified Ivory Layout' : 'Harvest Premium — Standard Layout'}
               </span>
-              <span className="text-[#37A86B] text-[11px] hidden sm:inline">
+              <span className={`${isCanvasTheme ? 'text-[#176B45]' : 'text-[#37A86B]'} text-[11px] hidden sm:inline`}>
                 • Visual Theme Preview (Underlying Functionality & Data Intact)
               </span>
             </div>
             <button
               onClick={() => onNavigate ? onNavigate(returnUrl || '/admin?tab=appearance') : (window.location.href = returnUrl || '/admin?tab=appearance')}
-              className="px-3 py-1 rounded-md bg-white hover:bg-[#E8F1E5] text-[#104B35] font-black text-xs transition-colors cursor-pointer shadow-xs flex items-center gap-1"
+              className={`px-3 py-1 rounded-md ${isCanvasTheme ? 'bg-white hover:bg-[#F7F4E9] text-[#17251D] border border-[#D5CFBE]' : 'bg-white hover:bg-[#E8F1E5] text-[#104B35]'} font-black text-xs transition-colors cursor-pointer shadow-xs flex items-center gap-1`}
             >
               ← {returnLabel || (returnUrl?.includes('admin') ? 'Return to Appearance Manager' : 'Return to Dashboard')}
             </button>
           </div>
         )}
 
-        {/* TOP HEADER - Exact Same Deep Green as Sidebar (#104B35) */}
-        <header className="h-16 shrink-0 w-full bg-[#104B35] border-b border-[#176B45]/40 px-4 sm:px-6 flex items-center z-20 shadow-xs">
+        {/* TOP HEADER */}
+        <header className={`h-16 shrink-0 w-full ${
+          isCanvasTheme 
+            ? 'bg-[#F7F4E9] border-b border-[#E5E0D5]' 
+            : 'bg-[#104B35] border-b border-[#176B45]/40'
+        } px-4 sm:px-6 flex items-center z-20 shadow-xs`}>
           <div className="w-full max-w-[1920px] mx-auto flex items-center justify-between gap-3 sm:gap-4">
 
             {/* Left: Mobile Hamburger & Clean Dashboard Breadcrumb */}
             <div className="flex items-center gap-3 shrink-0">
               <button
                 onClick={() => setIsMobileDrawerOpen(true)}
-                className="md:hidden p-2 rounded-lg text-white hover:bg-[#176B45]/50 transition-colors cursor-pointer"
+                className={`md:hidden p-2 rounded-lg ${isCanvasTheme ? 'text-[#17251D] hover:bg-[#E8F1E5]' : 'text-white hover:bg-[#176B45]/50'} transition-colors cursor-pointer`}
                 aria-label="Open Navigation Drawer"
               >
                 <Menu className="h-5 w-5" />
@@ -617,11 +636,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
 
               {/* Breadcrumb / Clean Section Title */}
               <div className="flex items-center gap-2 sm:gap-2.5 text-xs">
-                <span className="text-[#37A86B] font-extrabold tracking-wider uppercase text-[11px]">
+                <span className={`${isCanvasTheme ? 'text-[#176B45]' : 'text-[#37A86B]'} font-extrabold tracking-wider uppercase text-[11px]`}>
                   {t.nav.overview}
                 </span>
-                <span className="text-white/40 font-bold">•</span>
-                <span className="text-white font-black text-sm tracking-tight">
+                <span className={`${isCanvasTheme ? 'text-[#17251D]/30' : 'text-white/40'} font-bold`}>•</span>
+                <span className={`${isCanvasTheme ? 'text-[#17251D]' : 'text-white'} font-black text-sm tracking-tight`}>
                   {t.nav.dashboard}
                 </span>
               </div>
@@ -634,7 +653,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {actualIsPreview && (
                 <button
                   onClick={() => onNavigate ? onNavigate(returnUrl || '/admin?tab=appearance') : (window.location.href = returnUrl || '/admin?tab=appearance')}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-[#176B45]/60 hover:bg-[#176B45] text-white font-bold text-xs border border-[#37A86B]/30 transition-colors cursor-pointer shadow-2xs shrink-0"
+                  className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg ${
+                    isCanvasTheme
+                      ? 'bg-white hover:bg-[#E8F1E5] text-[#104B35] border border-[#E5E0D5]'
+                      : 'bg-[#176B45]/60 hover:bg-[#176B45] text-white border border-[#37A86B]/30'
+                  } font-bold text-xs transition-colors cursor-pointer shadow-2xs shrink-0`}
                   title="Return to Appearance Manager or Dashboard"
                 >
                   <span>{returnLabel || (returnUrl?.includes('admin') ? '← UI/UX Manager' : t.nav.returnToCurrent)}</span>
@@ -642,11 +665,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               )}
 
               {/* Language Selection: हिंदी | Hinglish | English */}
-              <div className="flex items-center h-9 bg-[#0C3B29]/90 p-0.5 rounded-lg border border-[#176B45]/60 text-xs font-bold text-white shrink-0">
+              <div className={`flex items-center h-9 ${isCanvasTheme ? 'bg-[#E8F1E5] border border-[#37A86B]/30 text-[#17251D]' : 'bg-[#0C3B29]/90 border border-[#176B45]/60 text-white'} p-0.5 rounded-lg text-xs font-bold shrink-0`}>
                 <button
                   onClick={() => handleLangChange('hi')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'hi' ? 'bg-[#176B45] text-white font-black shadow-xs' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
+                    lang === 'hi' ? 'bg-[#176B45] text-white font-black shadow-xs' : isCanvasTheme ? 'text-[#17251D] hover:text-[#176B45]' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
                   }`}
                 >
                   हिंदी
@@ -654,7 +677,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 <button
                   onClick={() => handleLangChange('hinglish')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'hinglish' ? 'bg-[#176B45] text-white font-black shadow-xs' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
+                    lang === 'hinglish' ? 'bg-[#176B45] text-white font-black shadow-xs' : isCanvasTheme ? 'text-[#17251D] hover:text-[#176B45]' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
                   }`}
                 >
                   Hinglish
@@ -662,7 +685,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 <button
                   onClick={() => handleLangChange('en')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'en' ? 'bg-[#176B45] text-white font-black shadow-xs' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
+                    lang === 'en' ? 'bg-[#176B45] text-white font-black shadow-xs' : isCanvasTheme ? 'text-[#17251D] hover:text-[#176B45]' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
                   }`}
                 >
                   English
@@ -672,11 +695,15 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* Notification Bell */}
               <button
                 onClick={onOpenNotifications}
-                className="h-9 w-9 rounded-lg bg-[#176B45]/50 hover:bg-[#176B45] border border-[#176B45]/80 text-white flex items-center justify-center relative transition-colors cursor-pointer shadow-xs shrink-0"
+                className={`h-9 w-9 rounded-lg ${
+                  isCanvasTheme
+                    ? 'bg-white hover:bg-[#E8F1E5] border border-[#E5E0D5] text-[#17251D]'
+                    : 'bg-[#176B45]/50 hover:bg-[#176B45] border border-[#176B45]/80 text-white'
+                } flex items-center justify-center relative transition-colors cursor-pointer shadow-xs shrink-0`}
                 title={t.nav.notifications}
               >
-                <Bell className="h-4 w-4 text-white" />
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-[#104B35]">
+                <Bell className="h-4 w-4" />
+                <span className={`absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ${isCanvasTheme ? 'ring-2 ring-white' : 'ring-2 ring-[#104B35]'}`}>
                   3
                 </span>
               </button>
@@ -684,11 +711,13 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* User Profile Avatar */}
               <div 
                 onClick={() => handleNavClick('profile')}
-                className="h-9 w-9 rounded-lg bg-[#176B45] text-white font-black text-xs flex items-center justify-center border border-[#37A86B]/40 cursor-pointer shadow-xs relative shrink-0 ring-2 ring-[#104B35] hover:bg-[#1c7e52] transition-colors"
+                className={`h-9 w-9 rounded-lg bg-[#176B45] text-white font-black text-xs flex items-center justify-center border ${
+                  isCanvasTheme ? 'border-[#176B45] ring-2 ring-white hover:bg-[#104B35]' : 'border-[#37A86B]/40 ring-2 ring-[#104B35] hover:bg-[#1c7e52]'
+                } cursor-pointer shadow-xs relative shrink-0 transition-colors`}
                 title={t.nav.profile}
               >
                 AS
-                <span className="h-2 w-2 rounded-full bg-[#37A86B] absolute -bottom-0.5 -right-0.5 ring-2 ring-[#104B35]" />
+                <span className={`h-2 w-2 rounded-full bg-[#37A86B] absolute -bottom-0.5 -right-0.5 ${isCanvasTheme ? 'ring-2 ring-white' : 'ring-2 ring-[#104B35]'}`} />
               </div>
 
             </div>

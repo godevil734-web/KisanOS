@@ -212,7 +212,8 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {designs.map((design) => {
             const isActive = design.id === activeDesignId;
-            const isHarvest = design.theme === 'harvest_premium';
+            const isHarvest = design.theme === 'harvest_premium' || design.id === 'harvest_standard';
+            const isCanvas = design.theme === 'harvest_canvas' || design.id === 'harvest_canvas';
 
             return (
               <div
@@ -227,9 +228,11 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
                   {/* Top Card Mockup Thumbnail Header */}
                   <div
                     className={`h-40 relative p-4 flex flex-col justify-between border-b ${
-                      isHarvest
-                        ? 'bg-gradient-to-br from-[#FFFDF9] via-[#FAF6ED] to-[#F2EFE4] border-[#E5E0D5]'
-                        : 'bg-gradient-to-br from-[#F7F5EF] via-[#FAF7F0] to-[#EAE6D9] border-slate-200'
+                      isCanvas
+                        ? 'bg-[#F7F4E9] border-[#E5E0D5]'
+                        : isHarvest
+                          ? 'bg-gradient-to-br from-[#FFFDF9] via-[#FAF6ED] to-[#F2EFE4] border-[#E5E0D5]'
+                          : 'bg-gradient-to-br from-[#F7F5EF] via-[#FAF7F0] to-[#EAE6D9] border-slate-200'
                     }`}
                   >
                     {/* Status Badge */}
@@ -239,9 +242,11 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
                           {design.layoutName}
                         </span>
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          isHarvest
-                            ? 'bg-[#104B35] text-white'
-                            : 'bg-[#315C45] text-white'
+                          isCanvas
+                            ? 'bg-[#176B45] text-white'
+                            : isHarvest
+                              ? 'bg-[#104B35] text-white'
+                              : 'bg-[#315C45] text-white'
                         }`}>
                           {design.themeName}
                         </span>
@@ -263,11 +268,11 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
                     <div className="bg-white/90 backdrop-blur-xs rounded-xl p-3 border border-slate-200/80 shadow-xs space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className={`h-3 w-12 rounded-sm ${isHarvest ? 'bg-[#176B45]' : 'bg-[#315C45]'}`} />
+                          <div className={`h-3 w-12 rounded-sm ${isCanvas || isHarvest ? 'bg-[#176B45]' : 'bg-[#315C45]'}`} />
                           <div className="h-2 w-16 bg-slate-200 rounded-sm" />
                         </div>
                         <div className="flex gap-1">
-                          <div className={`h-2.5 w-6 rounded-sm ${isHarvest ? 'bg-[#E6A52E]' : 'bg-amber-400'}`} />
+                          <div className={`h-2.5 w-6 rounded-sm ${isHarvest ? 'bg-[#E6A52E]' : isCanvas ? 'bg-[#37A86B]' : 'bg-amber-400'}`} />
                           <div className="h-2.5 w-6 bg-slate-200 rounded-sm" />
                         </div>
                       </div>
@@ -278,7 +283,7 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
                           <div
                             key={i}
                             className={`h-6 rounded-md border flex items-center justify-center text-[8px] font-bold ${
-                              isHarvest
+                              isCanvas || isHarvest
                                 ? 'bg-[#FAF6ED] border-[#E5E0D5] text-[#104B35]'
                                 : 'bg-[#F7F5EF] border-slate-200 text-[#315C45]'
                             }`}
@@ -327,7 +332,26 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
                         {isHi ? 'रंग पैलेट' : 'Curated Color Palette'}
                       </span>
                       <div className="flex items-center gap-2">
-                        {isHarvest ? (
+                        {isCanvas ? (
+                          <>
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                              <span className="h-3.5 w-3.5 rounded-full bg-[#F7F4E9] border border-slate-300" />
+                              <span>Canvas #F7F4E9</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                              <span className="h-3.5 w-3.5 rounded-full bg-[#176B45]" />
+                              <span>Emerald #176B45</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                              <span className="h-3.5 w-3.5 rounded-full bg-[#E8F1E5] border border-slate-200" />
+                              <span>Mint #E8F1E5</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                              <span className="h-3.5 w-3.5 rounded-full bg-[#17251D]" />
+                              <span>Dark #17251D</span>
+                            </div>
+                          </>
+                        ) : isHarvest ? (
                           <>
                             <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
                               <span className="h-3.5 w-3.5 rounded-full bg-[#F7F4E9] border border-slate-300" />

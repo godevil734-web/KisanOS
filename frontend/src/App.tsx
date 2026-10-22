@@ -177,7 +177,9 @@ const MainApp: React.FC = () => {
   // Appearance theme routing: determine whether harvest theme is active in production or preview
   const isHarvestTheme = 
     appearance?.activeDesignId === 'harvest_standard' || 
-    appearance?.theme === 'harvest_premium';
+    appearance?.activeDesignId === 'harvest_canvas' || 
+    appearance?.theme === 'harvest_premium' ||
+    appearance?.theme === 'harvest_canvas';
   const isHarvestProductionActive = isFarmerRoute && !isLegacyFarmer && isHarvestTheme;
   const isFullScreenView = isPreviewRoute || isHarvestProductionActive;
   const previewDesignParam = searchParams.get('design') || 'harvest_standard';
@@ -329,6 +331,7 @@ const MainApp: React.FC = () => {
                     onNavigate={navigate} 
                     onOpenNotifications={() => setIsNotificationsOpen(true)} 
                     isProductionMode={true} 
+                    designVariant={appearance?.activeDesignId}
                   />
                 ) : (
                   <FarmerDashboard 
@@ -366,6 +369,7 @@ const MainApp: React.FC = () => {
                   onNavigate={navigate} 
                   onOpenNotifications={() => setIsNotificationsOpen(true)} 
                   isPreviewMode={true}
+                  designVariant={previewDesignParam}
                   returnUrl={searchParams.get('from') === 'admin' ? '/admin?tab=appearance' : '/admin?tab=appearance'}
                   returnLabel="Return to Appearance Manager"
                 />

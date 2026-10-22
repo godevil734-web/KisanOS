@@ -4003,13 +4003,29 @@ const REGISTERED_DESIGNS = [
     themeName: 'Harvest Premium',
     layout: 'standard',
     layoutName: 'Standard Layout',
-    description: 'Modern agricultural theme featuring warm ivory canvas (#F7F4E9), deep forest green (#104B35) sidebar, amber accents, balanced action grid, and rectangular 12px cards.',
+    description: 'Modern agricultural theme featuring warm ivory canvas (#F7F4E9), deep forest green (#104B35) sidebar & header, amber accents, balanced action grid, and rectangular 12px cards.',
     isDefault: false,
     features: [
       'Warm ivory (#F7F4E9) high-contrast canvas',
-      'Deep forest green (#104B35) collapsible sidebar',
+      'Deep forest green (#104B35) matching sidebar & header',
       'Clean 12px rectangular card geometry',
       'Dedicated hero crop search & stats banner'
+    ]
+  },
+  {
+    id: 'harvest_canvas',
+    name: 'Harvest Canvas — Unified Ivory',
+    theme: 'harvest_canvas',
+    themeName: 'Harvest Canvas',
+    layout: 'standard',
+    layoutName: 'Unified Canvas Layout',
+    description: 'Unified theme where the sidebar and top header match the exact same website canvas color (#F7F4E9), creating a seamless monochromatic aesthetic with emerald navigation accents.',
+    isDefault: false,
+    features: [
+      'Sidebar & header seamlessly match website color (#F7F4E9)',
+      'Monochromatic ivory canvas with clean slate borders (#E5E0D5)',
+      'High-contrast dark typography and emerald action buttons',
+      'All 7 crop management cards & live mandi prices intact'
     ]
   }
 ];

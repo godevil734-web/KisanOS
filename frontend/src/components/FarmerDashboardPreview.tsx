@@ -601,86 +601,52 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
           </div>
         )}
 
-        {/* TOP HEADER - Crisp White / Ivory Header with Harvest Theme Badges */}
-        <header className="h-16 shrink-0 w-full bg-white/95 backdrop-blur-md border-b border-[#E5E0D5] px-4 sm:px-6 flex items-center z-20 shadow-xs">
+        {/* TOP HEADER - Rich Kisan Green Header */}
+        <header className="h-16 shrink-0 w-full bg-[#176B45] border-b border-[#104B35] px-4 sm:px-6 flex items-center z-20 shadow-sm">
           <div className="w-full max-w-[1920px] mx-auto flex items-center justify-between gap-3 sm:gap-4">
 
-            {/* Left: Mobile Hamburger & Breadcrumb */}
+            {/* Left: Mobile Hamburger & Clean Dashboard Breadcrumb */}
             <div className="flex items-center gap-3 shrink-0">
               <button
                 onClick={() => setIsMobileDrawerOpen(true)}
-                className="md:hidden p-2 rounded-lg text-[#17251D] hover:bg-[#E8F1E5] transition-colors cursor-pointer"
+                className="md:hidden p-2 rounded-lg text-white hover:bg-white/15 transition-colors cursor-pointer"
                 aria-label="Open Navigation Drawer"
               >
                 <Menu className="h-5 w-5" />
               </button>
 
-              {/* Breadcrumb: OVERVIEW • Dashboard • Harvest Preview Badge */}
+              {/* Breadcrumb / Clean Section Title */}
               <div className="flex items-center gap-2 sm:gap-2.5 text-xs">
-                <span className="text-[#176B45] font-black tracking-wider uppercase text-[11px]">
+                <span className="text-emerald-200 font-extrabold tracking-wider uppercase text-[11px]">
                   {t.nav.overview}
                 </span>
-                <span className="text-[#657468] font-bold">•</span>
-                <span className="text-[#17251D] font-black text-sm tracking-tight">
+                <span className="text-emerald-300/70 font-bold">•</span>
+                <span className="text-white font-black text-sm tracking-tight">
                   {t.nav.dashboard}
                 </span>
-                {actualIsPreview ? (
-                  <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E8F1E5] border border-[#37A86B]/40 text-[#176B45] text-[11px] font-bold tracking-wide shadow-2xs ml-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#37A86B] animate-pulse" />
-                    <span>🌾 HARVEST PREVIEW • Standard</span>
-                  </span>
-                ) : (
-                  <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#E8F1E5] text-[#176B45] text-[11px] font-bold tracking-wide ml-1">
-                    <span>🌾 Harvest Edition</span>
-                  </span>
-                )}
               </div>
             </div>
 
-            {/* Center Search Input */}
-            <div className="flex-1 max-w-lg mx-2 hidden md:block">
-              <div className="relative flex items-center">
-                <Search className="h-3.5 w-3.5 absolute left-3.5 text-[#657468] pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder={t.nav.searchPlaceholder}
-                  value={headerSearchQuery}
-                  onChange={(e) => setHeaderSearchQuery(e.target.value)}
-                  className="w-full h-9 pl-9 pr-8 rounded-lg border border-[#E5E0D5] bg-[#F7F4E9] text-xs font-medium text-[#17251D] placeholder:text-[#657468] focus:outline-none focus:ring-1 focus:ring-[#176B45]/30 focus:border-[#176B45] transition-all"
-                />
-                <ChevronDown className="h-3.5 w-3.5 absolute right-3 text-[#657468] pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Right: Return to Dashboard, Voice Button, Language Tabs, Notifications, Profile */}
+            {/* Right: Return to Dashboard (Preview Mode), Language Tabs, Notifications, Profile */}
             <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
               
               {/* Return Button (Only in Preview Mode) */}
               {actualIsPreview && (
                 <button
                   onClick={() => onNavigate ? onNavigate(returnUrl || '/admin?tab=appearance') : (window.location.href = returnUrl || '/admin?tab=appearance')}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-[#E8F1E5] hover:bg-[#d8e7d4] text-[#176B45] font-bold text-xs border border-[#37A86B]/40 transition-colors cursor-pointer shadow-2xs shrink-0"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs border border-white/25 transition-colors cursor-pointer shadow-2xs shrink-0 backdrop-blur-xs"
                   title="Return to Appearance Manager or Dashboard"
                 >
                   <span>{returnLabel || (returnUrl?.includes('admin') ? '← UI/UX Manager' : t.nav.returnToCurrent)}</span>
                 </button>
               )}
 
-              {/* Voice Input Button */}
-              <button
-                onClick={() => setShowVoiceModal(true)}
-                className="flex items-center gap-1.5 h-9 px-3 rounded-full bg-[#176B45] hover:bg-[#104B35] text-white font-bold text-xs shadow-xs transition-colors cursor-pointer shrink-0"
-              >
-                <Mic className="h-3.5 w-3.5 text-white" />
-                <span className="hidden sm:inline">{t.nav.voiceSearch}</span>
-              </button>
-
               {/* Language Selection: हिंदी | Hinglish | English */}
-              <div className="flex items-center h-9 bg-[#E8F1E5] p-0.5 rounded-lg border border-[#37A86B]/30 text-xs font-bold text-[#17251D] shrink-0">
+              <div className="flex items-center h-9 bg-[#104B35]/70 p-0.5 rounded-lg border border-white/20 text-xs font-bold text-white shrink-0 backdrop-blur-xs">
                 <button
                   onClick={() => handleLangChange('hi')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'hi' ? 'bg-[#176B45] text-white font-black shadow-2xs' : 'text-[#17251D] hover:text-[#176B45]'
+                    lang === 'hi' ? 'bg-white text-[#104B35] font-black shadow-xs' : 'text-emerald-100 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   हिंदी
@@ -688,7 +654,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 <button
                   onClick={() => handleLangChange('hinglish')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'hinglish' ? 'bg-[#176B45] text-white font-black shadow-2xs' : 'text-[#17251D] hover:text-[#176B45]'
+                    lang === 'hinglish' ? 'bg-white text-[#104B35] font-black shadow-xs' : 'text-emerald-100 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   Hinglish
@@ -696,7 +662,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 <button
                   onClick={() => handleLangChange('en')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'en' ? 'bg-[#176B45] text-white font-black shadow-2xs' : 'text-[#17251D] hover:text-[#176B45]'
+                    lang === 'en' ? 'bg-white text-[#104B35] font-black shadow-xs' : 'text-emerald-100 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   English
@@ -706,11 +672,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* Notification Bell */}
               <button
                 onClick={onOpenNotifications}
-                className="h-9 w-9 rounded-lg bg-white hover:bg-[#F7F4E9] border border-[#E5E0D5] text-[#17251D] flex items-center justify-center relative transition-colors cursor-pointer shadow-2xs shrink-0"
+                className="h-9 w-9 rounded-lg bg-white/15 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center relative transition-colors cursor-pointer shadow-xs shrink-0"
                 title={t.nav.notifications}
               >
-                <Bell className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white">
+                <Bell className="h-4 w-4 text-white" />
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-[#176B45]">
                   3
                 </span>
               </button>
@@ -718,11 +684,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* User Profile Avatar */}
               <div 
                 onClick={() => handleNavClick('profile')}
-                className="h-9 w-9 rounded-lg bg-[#176B45] text-white font-black text-xs flex items-center justify-center border border-[#176B45] cursor-pointer shadow-xs relative shrink-0"
-                title="Profile"
+                className="h-9 w-9 rounded-lg bg-white text-[#104B35] font-black text-xs flex items-center justify-center border border-white/30 cursor-pointer shadow-xs relative shrink-0 hover:bg-emerald-50 transition-colors"
+                title={t.nav.profile}
               >
                 AS
-                <span className="h-2 w-2 rounded-full bg-[#37A86B] absolute -bottom-0.5 -right-0.5 ring-2 ring-white" />
+                <span className="h-2 w-2 rounded-full bg-emerald-400 absolute -bottom-0.5 -right-0.5 ring-2 ring-[#176B45]" />
               </div>
 
             </div>

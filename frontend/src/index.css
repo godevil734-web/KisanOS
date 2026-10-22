@@ -28,6 +28,46 @@
   --navbar-border: #E5E0D5;
   --table-header: #EFECE4;
   --table-stripe: #F9F8F5;
+
+  /* ========================================================================= */
+  /* GLOBAL APP THEME TOKENS — Dynamically set by admin theme customizer       */
+  /* Defaults = Classic KisanConnect palette                                   */
+  /* ========================================================================= */
+  /* Sidebar */
+  --app-sidebar-bg: #315C45;
+  --app-sidebar-text: #FFFFFF;
+  --app-sidebar-icon: #FFFFFF;
+  --app-sidebar-active-bg: #264A37;
+  --app-sidebar-active-text: #FFFFFF;
+  --app-sidebar-hover-bg: #3A6B50;
+  --app-sidebar-border: #264A37;
+  /* Header */
+  --app-header-bg: #F7F5EF;
+  --app-header-text: #26332C;
+  --app-header-icon: #637067;
+  --app-header-border: #E5E0D5;
+  --app-header-dropdown-bg: #FFFFFF;
+  --app-header-dropdown-text: #26332C;
+  /* Page & content */
+  --app-page-bg: #F7F5EF;
+  --app-text-primary: #26332C;
+  --app-text-secondary: #637067;
+  --app-card-bg: #FFFFFF;
+  --app-card-border: #E5E0D5;
+  --app-card-heading: #26332C;
+  --app-input-bg: #FFFFFF;
+  --app-input-border: #D8D2C4;
+  --app-modal-bg: #FFFFFF;
+  /* Buttons & interaction */
+  --app-primary-button-bg: #315C45;
+  --app-primary-button-text: #FFFFFF;
+  --app-secondary-button-bg: #EFECE4;
+  --app-secondary-button-text: #26332C;
+  --app-hover-state: #264A37;
+  --app-focus-ring: #315C45;
+  --app-disabled-state: #D8D2C4;
+  --app-link: #315C45;
+  --app-accent: #C58B4E;
 }
 
 /* ========================================================================= */
@@ -45,6 +85,7 @@
   --harvest-card: #FFFFFF;            /* Clean white card surface */
   --harvest-border: #E5E0D5;          /* Subtle warm border */
 }
+
 
 @layer base {
   html {

@@ -17,6 +17,7 @@ import {
 import { useDashboardAppearance } from '../context/DashboardAppearanceContext';
 import { useLanguage } from '../context/LanguageContext';
 import { DashboardDesign } from '../types';
+import { ThemeColorCustomizer } from './ThemeColorCustomizer';
 
 interface DashboardAppearanceManagerProps {
   onNavigate: (path: string) => void;
@@ -426,6 +427,17 @@ export const DashboardAppearanceManager: React.FC<DashboardAppearanceManagerProp
           })}
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 🎨 GLOBAL COLORS & BRANDING CUSTOMIZER */}
+      {/* ========================================================================= */}
+      <ThemeColorCustomizer
+        activeDesignId={activeDesignId}
+        designName={designs.find(d => d.id === activeDesignId)?.name || 'Classic — Original Dashboard'}
+        onPalettePublished={() => {
+          showFeedback('success', isHi ? 'थीम पैलेट सफलतापूर्वक प्रकाशित!' : 'Theme palette published successfully!');
+        }}
+      />
 
       {/* ========================================================================= */}
       {/* 🚀 FUTURE EXTENSIBILITY NOTICE */}

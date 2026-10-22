@@ -13,12 +13,16 @@ async function runTests() {
 
   try {
     // 1. Create test farmer users
+    const testPhone1 = '98' + Math.floor(10000000 + Math.random() * 90000000);
+    const testPhone2 = '98' + Math.floor(10000000 + Math.random() * 90000000);
+    const testEmail1 = `ram.kumar.${Date.now()}@test.in`;
+    const testEmail2 = `sita.devi.${Date.now()}@test.in`;
     await pool.query(`
       INSERT INTO users (id, name, phone, email, role, status, verified, village, district, state)
       VALUES 
-        ($1, 'Ram Kumar', '9811122334', 'ram.kumar@test.in', 'farmer', 'approved', true, 'Kishanpur', 'Agra', 'Uttar Pradesh'),
-        ($2, 'Sita Devi', '9822233445', 'sita.devi@test.in', 'farmer', 'approved', true, 'Fatehpur', 'Agra', 'Uttar Pradesh')
-    `, [testFarmerId, testFarmer2Id]);
+        ($1, 'Ram Kumar', $3, $4, 'farmer', 'approved', true, 'Kishanpur', 'Agra', 'Uttar Pradesh'),
+        ($2, 'Sita Devi', $5, $6, 'farmer', 'approved', true, 'Fatehpur', 'Agra', 'Uttar Pradesh')
+    `, [testFarmerId, testFarmer2Id, testPhone1, testEmail1, testPhone2, testEmail2]);
 
     console.log('[Test 1] Initial Profile & Points Balance');
     const profile = await farmerProfileService.getFarmerProfile(testFarmerId);

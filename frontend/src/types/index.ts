@@ -709,6 +709,44 @@ export interface DashboardDesign {
   features: string[];
 }
 
+export interface ThemePalette {
+  // Sidebar
+  sidebarBg: string;
+  sidebarText: string;
+  sidebarIcon: string;
+  sidebarActiveBg: string;
+  sidebarActiveText: string;
+  sidebarHoverBg: string;
+  sidebarBorder: string;
+  // Header
+  headerBg: string;
+  headerText: string;
+  headerIcon: string;
+  headerBorder: string;
+  headerDropdownBg: string;
+  headerDropdownText: string;
+  // Page & content
+  pageBg: string;
+  textPrimary: string;
+  textSecondary: string;
+  cardBg: string;
+  cardBorder: string;
+  cardHeadingText: string;
+  inputBg: string;
+  inputBorder: string;
+  modalBg: string;
+  // Buttons & interaction
+  primaryButtonBg: string;
+  primaryButtonText: string;
+  secondaryButtonBg: string;
+  secondaryButtonText: string;
+  hoverState: string;
+  focusRing: string;
+  disabledState: string;
+  linkColor: string;
+  accentColor: string;
+}
+
 export interface DashboardAppearanceSetting {
   activeDesignId: string;
   theme: DashboardThemeType;
@@ -716,9 +754,6 @@ export interface DashboardAppearanceSetting {
   updatedAt?: string | null;
   updatedBy?: string | null;
   fallback?: boolean;
+  publishedPalette?: ThemePalette | null;
 }
-
-
-
-
 

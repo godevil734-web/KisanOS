@@ -1,7 +1,50 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
-import { DashboardAppearanceSetting, DashboardDesign } from '../types';
+import { DashboardAppearanceSetting, DashboardDesign, ThemePalette } from '../types';
 import { useAuth } from './AuthContext';
+
+// Default palettes per layout (mirrors backend DEFAULT_PALETTES)
+export const DEFAULT_PALETTES: Record<string, ThemePalette> = {
+  classic_standard: {
+    sidebarBg: '#315C45', sidebarText: '#FFFFFF', sidebarIcon: '#FFFFFF',
+    sidebarActiveBg: '#264A37', sidebarActiveText: '#FFFFFF', sidebarHoverBg: '#3A6B50', sidebarBorder: '#264A37',
+    headerBg: '#F7F5EF', headerText: '#26332C', headerIcon: '#637067',
+    headerBorder: '#E5E0D5', headerDropdownBg: '#FFFFFF', headerDropdownText: '#26332C',
+    pageBg: '#F7F5EF', textPrimary: '#26332C', textSecondary: '#637067',
+    cardBg: '#FFFFFF', cardBorder: '#E5E0D5', cardHeadingText: '#26332C',
+    inputBg: '#FFFFFF', inputBorder: '#D8D2C4', modalBg: '#FFFFFF',
+    primaryButtonBg: '#315C45', primaryButtonText: '#FFFFFF',
+    secondaryButtonBg: '#EFECE4', secondaryButtonText: '#26332C',
+    hoverState: '#264A37', focusRing: '#315C45', disabledState: '#D8D2C4',
+    linkColor: '#315C45', accentColor: '#C58B4E'
+  },
+  harvest_standard: {
+    sidebarBg: '#104B35', sidebarText: '#FFFFFF', sidebarIcon: '#E8F1E5',
+    sidebarActiveBg: '#176B45', sidebarActiveText: '#FFFFFF', sidebarHoverBg: '#0D3D2B', sidebarBorder: '#0D3D2B',
+    headerBg: '#104B35', headerText: '#FFFFFF', headerIcon: '#E8F1E5',
+    headerBorder: '#0D3D2B', headerDropdownBg: '#FFFFFF', headerDropdownText: '#17251D',
+    pageBg: '#F7F4E9', textPrimary: '#17251D', textSecondary: '#657468',
+    cardBg: '#FFFFFF', cardBorder: '#E5E0D5', cardHeadingText: '#17251D',
+    inputBg: '#FFFFFF', inputBorder: '#E5E0D5', modalBg: '#FFFFFF',
+    primaryButtonBg: '#176B45', primaryButtonText: '#FFFFFF',
+    secondaryButtonBg: '#E8F1E5', secondaryButtonText: '#104B35',
+    hoverState: '#104B35', focusRing: '#176B45', disabledState: '#D8D2C4',
+    linkColor: '#176B45', accentColor: '#E6A52E'
+  },
+  harvest_canvas: {
+    sidebarBg: '#F7F4E9', sidebarText: '#17251D', sidebarIcon: '#176B45',
+    sidebarActiveBg: '#E8F1E5', sidebarActiveText: '#104B35', sidebarHoverBg: '#EFECE4', sidebarBorder: '#E5E0D5',
+    headerBg: '#F7F4E9', headerText: '#17251D', headerIcon: '#176B45',
+    headerBorder: '#E5E0D5', headerDropdownBg: '#FFFFFF', headerDropdownText: '#17251D',
+    pageBg: '#F7F4E9', textPrimary: '#17251D', textSecondary: '#657468',
+    cardBg: '#FFFFFF', cardBorder: '#E5E0D5', cardHeadingText: '#17251D',
+    inputBg: '#FFFFFF', inputBorder: '#E5E0D5', modalBg: '#FFFFFF',
+    primaryButtonBg: '#176B45', primaryButtonText: '#FFFFFF',
+    secondaryButtonBg: '#E8F1E5', secondaryButtonText: '#104B35',
+    hoverState: '#104B35', focusRing: '#176B45', disabledState: '#D8D2C4',
+    linkColor: '#176B45', accentColor: '#37A86B'
+  }
+};
 
 export const DEFAULT_APPEARANCE: DashboardAppearanceSetting = {
   activeDesignId: 'classic_standard',
@@ -62,20 +105,59 @@ export const INITIAL_REGISTERED_DESIGNS: DashboardDesign[] = [
   }
 ];
 
+// Apply a palette to CSS custom properties on document root
+function applyPaletteToCSSVars(palette: ThemePalette) {
+  const root = document.documentElement;
+  root.style.setProperty('--app-sidebar-bg', palette.sidebarBg);
+  root.style.setProperty('--app-sidebar-text', palette.sidebarText);
+  root.style.setProperty('--app-sidebar-icon', palette.sidebarIcon);
+  root.style.setProperty('--app-sidebar-active-bg', palette.sidebarActiveBg);
+  root.style.setProperty('--app-sidebar-active-text', palette.sidebarActiveText);
+  root.style.setProperty('--app-sidebar-hover-bg', palette.sidebarHoverBg);
+  root.style.setProperty('--app-sidebar-border', palette.sidebarBorder);
+  root.style.setProperty('--app-header-bg', palette.headerBg);
+  root.style.setProperty('--app-header-text', palette.headerText);
+  root.style.setProperty('--app-header-icon', palette.headerIcon);
+  root.style.setProperty('--app-header-border', palette.headerBorder);
+  root.style.setProperty('--app-header-dropdown-bg', palette.headerDropdownBg);
+  root.style.setProperty('--app-header-dropdown-text', palette.headerDropdownText);
+  root.style.setProperty('--app-page-bg', palette.pageBg);
+  root.style.setProperty('--app-text-primary', palette.textPrimary);
+  root.style.setProperty('--app-text-secondary', palette.textSecondary);
+  root.style.setProperty('--app-card-bg', palette.cardBg);
+  root.style.setProperty('--app-card-border', palette.cardBorder);
+  root.style.setProperty('--app-card-heading', palette.cardHeadingText);
+  root.style.setProperty('--app-input-bg', palette.inputBg);
+  root.style.setProperty('--app-input-border', palette.inputBorder);
+  root.style.setProperty('--app-modal-bg', palette.modalBg);
+  root.style.setProperty('--app-primary-button-bg', palette.primaryButtonBg);
+  root.style.setProperty('--app-primary-button-text', palette.primaryButtonText);
+  root.style.setProperty('--app-secondary-button-bg', palette.secondaryButtonBg);
+  root.style.setProperty('--app-secondary-button-text', palette.secondaryButtonText);
+  root.style.setProperty('--app-hover-state', palette.hoverState);
+  root.style.setProperty('--app-focus-ring', palette.focusRing);
+  root.style.setProperty('--app-disabled-state', palette.disabledState);
+  root.style.setProperty('--app-link', palette.linkColor);
+  root.style.setProperty('--app-accent', palette.accentColor);
+}
+
 interface DashboardAppearanceContextType {
   appearance: DashboardAppearanceSetting;
   designs: DashboardDesign[];
+  activePalette: ThemePalette;
   isLoading: boolean;
   isSaving: boolean;
   error: string | null;
   activateDesign: (designId: string) => Promise<boolean>;
   restoreClassic: () => Promise<boolean>;
   refreshAppearance: () => Promise<void>;
+  refreshPalette: () => Promise<void>;
 }
 
 const DashboardAppearanceContext = createContext<DashboardAppearanceContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'kc_farmer_appearance';
+const PALETTE_STORAGE_KEY = 'kc_active_palette';
 
 export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, token } = useAuth();
@@ -94,10 +176,45 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
     return DEFAULT_APPEARANCE;
   });
 
+  const [activePalette, setActivePalette] = useState<ThemePalette>(() => {
+    try {
+      const cached = localStorage.getItem(PALETTE_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed?.sidebarBg) return parsed;
+      }
+    } catch {
+      // Fallback
+    }
+    return DEFAULT_PALETTES['classic_standard'];
+  });
+
   const [designs, setDesigns] = useState<DashboardDesign[]>(INITIAL_REGISTERED_DESIGNS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch and apply palette for the active design
+  const refreshPalette = useCallback(async (designId?: string): Promise<void> => {
+    const targetDesignId = designId || appearance?.activeDesignId || 'classic_standard';
+    try {
+      const res = await api.getPublishedThemePalette(targetDesignId);
+      if (res?.palette) {
+        setActivePalette(res.palette);
+        applyPaletteToCSSVars(res.palette);
+        try {
+          localStorage.setItem(PALETTE_STORAGE_KEY, JSON.stringify(res.palette));
+        } catch {
+          // ignore storage errors
+        }
+      }
+    } catch (err: any) {
+      console.warn('[PALETTE] Failed to load published palette, using default:', err.message);
+      const fallback = DEFAULT_PALETTES[targetDesignId] || DEFAULT_PALETTES['classic_standard'];
+      setActivePalette(fallback);
+      applyPaletteToCSSVars(fallback);
+    }
+  }, [appearance?.activeDesignId]);
 
   // Sync with server
   const refreshAppearance = useCallback(async (): Promise<DashboardAppearanceSetting> => {
@@ -110,6 +227,8 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
         } catch {
           // ignore storage errors
         }
+        // Also refresh palette for the active design
+        await refreshPalette(serverSetting.activeDesignId);
         return serverSetting;
       }
     } catch (err: any) {
@@ -118,7 +237,7 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
       setIsLoading(false);
     }
     return DEFAULT_APPEARANCE;
-  }, []);
+  }, [refreshPalette]);
 
   // Initial load
   useEffect(() => {
@@ -152,6 +271,17 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
           // ignore
         }
       }
+      if (e.key === PALETTE_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed?.sidebarBg) {
+            setActivePalette(parsed);
+            applyPaletteToCSSVars(parsed);
+          }
+        } catch {
+          // ignore
+        }
+      }
     };
 
     const handleCustomChange = (e: Event) => {
@@ -161,13 +291,30 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
       }
     };
 
+    const handlePaletteChange = (e: Event) => {
+      const customEvent = e as CustomEvent<ThemePalette>;
+      if (customEvent.detail?.sidebarBg) {
+        setActivePalette(customEvent.detail);
+        applyPaletteToCSSVars(customEvent.detail);
+      }
+    };
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('dashboard-appearance-changed', handleCustomChange);
+    window.addEventListener('theme-palette-changed', handlePaletteChange);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('dashboard-appearance-changed', handleCustomChange);
+      window.removeEventListener('theme-palette-changed', handlePaletteChange);
     };
+  }, []);
+
+  // Apply palette from cache on initial mount (before server response)
+  useEffect(() => {
+    if (activePalette?.sidebarBg) {
+      applyPaletteToCSSVars(activePalette);
+    }
   }, []);
 
   // Activate a design (admin only)
@@ -192,6 +339,8 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
           // ignore
         }
         window.dispatchEvent(new CustomEvent('dashboard-appearance-changed', { detail: res.setting }));
+        // Refresh palette for the newly activated design
+        await refreshPalette(designId);
         return true;
       }
       return false;
@@ -218,6 +367,8 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
           // ignore
         }
         window.dispatchEvent(new CustomEvent('dashboard-appearance-changed', { detail: res.setting }));
+        // Apply classic palette
+        await refreshPalette('classic_standard');
         return true;
       }
       return false;
@@ -235,12 +386,14 @@ export const DashboardAppearanceProvider: React.FC<{ children: React.ReactNode }
       value={{
         appearance,
         designs,
+        activePalette,
         isLoading,
         isSaving,
         error,
         activateDesign,
         restoreClassic,
-        refreshAppearance
+        refreshAppearance,
+        refreshPalette
       }}
     >
       {children}

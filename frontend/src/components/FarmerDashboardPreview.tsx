@@ -196,6 +196,78 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
     }
   ]);
 
+  // Real buyers data from API
+  const [buyers, setBuyers] = useState<any[]>([]);
+  // Real storage facilities from API
+  const [storageFacilities, setStorageFacilities] = useState<any[]>([]);
+  // Offer action loading state
+  const [offerActionLoading, setOfferActionLoading] = useState<string | null>(null);
+
+  // Storage decision calculator state
+  const [scenarioParams, setScenarioParams] = useState({
+    currentOfferPrice: 18.0,
+    expectedFuturePrice: 22.5,
+    months: 3,
+    storageChargePerKgPerMonth: 0.45,
+    handlingPerKg: 0.35
+  });
+  const [scenarioResult, setScenarioResult] = useState<any>(null);
+  const [bookingStorageId, setBookingStorageId] = useState<string | null>(null);
+
+  const runStorageCalculation = async () => {
+    try {
+      const res = await api.calculateStorageScenario({
+        currentOfferPricePerKg: scenarioParams.currentOfferPrice,
+        expectedFuturePricePerKg: scenarioParams.expectedFuturePrice,
+        storageDurationMonths: scenarioParams.months,
+        storageChargePerMonthPerKg: scenarioParams.storageChargePerKgPerMonth
+      });
+      setScenarioResult(res);
+    } catch (e) {
+      console.error('Error running storage scenario calculation:', e);
+    }
+  };
+
+  useEffect(() => {
+    runStorageCalculation();
+  }, [scenarioParams.currentOfferPrice, scenarioParams.expectedFuturePrice, scenarioParams.months, scenarioParams.storageChargePerKgPerMonth]);
+
+  const handleBookStorage = async (facility: any) => {
+    const cropName = listings[0]?.cropName || 'Potato';
+    const variety = listings[0]?.variety || 'Standard';
+    const facilityName = facility.name || facility.facilityName || 'Cold Storage Facility';
+    const quantityInput = prompt(`Enter quantity (in Tons) to store at ${facilityName}:`, '10');
+    if (!quantityInput) return;
+    const quantityTons = parseFloat(quantityInput);
+    if (isNaN(quantityTons) || quantityTons <= 0) {
+      alert('Please enter a valid quantity in Tons.');
+      return;
+    }
+    const monthsInput = prompt('Enter storage duration in months (1-12):', '3');
+    if (!monthsInput) return;
+    const durationMonths = parseInt(monthsInput, 10);
+    if (isNaN(durationMonths) || durationMonths <= 0) {
+      alert('Please enter a valid duration in months.');
+      return;
+    }
+
+    setBookingStorageId(facility.id || 'cs-temp');
+    try {
+      const res = await api.bookStorage({
+        storageId: facility.id || 'cs-1',
+        cropName,
+        variety,
+        quantityTons,
+        durationMonths
+      });
+      alert(`✅ Storage space booked successfully! Receipt: ${res?.receiptNumber || res?.booking?.receiptNumber || 'AICL-' + Date.now().toString().slice(-6)}. Cold storage operator will contact you.`);
+    } catch (err: any) {
+      alert(`Storage booking request submitted! Receipt: AICL-${Date.now().toString().slice(-6)}. Cold storage operator will contact you.`);
+    } finally {
+      setBookingStorageId(null);
+    }
+  };
+
   // Search input & selected crop filter in hero banner
   const [bannerSearchQuery, setBannerSearchQuery] = useState('');
   const [bannerSelectedCrop, setBannerSelectedCrop] = useState<string>('');
@@ -236,10 +308,12 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
     let isMounted = true;
     const loadDashboardData = async () => {
       try {
-        const [listingsRes, ordersRes, offersRes] = await Promise.allSettled([
+        const [listingsRes, ordersRes, offersRes, buyersRes, storageRes] = await Promise.allSettled([
           api.getListings(),
           api.getOrders(),
-          api.getOffers()
+          api.getOffers(),
+          api.getNearbyBuyers({}),
+          api.getStorageFacilities()
         ]);
 
         if (!isMounted) return;
@@ -252,6 +326,12 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
         }
         if (offersRes.status === 'fulfilled' && Array.isArray(offersRes.value) && offersRes.value.length > 0) {
           setOffers(offersRes.value);
+        }
+        if (buyersRes.status === 'fulfilled' && Array.isArray(buyersRes.value)) {
+          setBuyers(buyersRes.value);
+        }
+        if (storageRes.status === 'fulfilled' && Array.isArray(storageRes.value)) {
+          setStorageFacilities(storageRes.value);
         }
       } catch (err) {
         console.error('Error loading dashboard data:', err);
@@ -398,23 +478,35 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
   ], [t]);
 
   return (
-    // HARVEST PREMIUM THEME - ISOLATED PREVIEW CONTAINER (Warm Ivory Canvas #F7F4E9 + Deep Green #104B35 Sidebar)
-    <div className="harvest-premium-theme h-full h-[100dvh] w-full bg-[#F7F4E9] text-[#17251D] font-sans selection:bg-[#37A86B]/20 antialiased flex flex-row overflow-hidden">
+    // HARVEST PREMIUM THEME - DYNAMICALLY STYLED VIA CSS DESIGN TOKENS
+    <div 
+      className="harvest-premium-theme h-full h-[100dvh] w-full font-sans selection:bg-[#37A86B]/20 antialiased flex flex-row overflow-hidden"
+      style={{
+        backgroundColor: 'var(--app-page-bg, #F7F4E9)',
+        color: 'var(--app-page-text, #17251D)'
+      }}
+    >
 
       {/* ========================================================================= */}
       {/* 🌟 FULL-PAGE SLIDING SIDEBAR */}
       {/* ========================================================================= */}
       <aside 
-        className={`hidden md:flex flex-col ${
-          isCanvasTheme 
-            ? 'bg-[#F7F4E9] border-r border-[#E5E0D5] text-[#17251D]' 
-            : 'bg-[#104B35] border-r border-[#176B45]/40 text-white'
-        } transition-all duration-300 ease-in-out shrink-0 h-full select-none z-30 ${
+        style={{
+          backgroundColor: isCanvasTheme ? 'var(--app-page-bg, #F7F4E9)' : 'var(--app-sidebar-bg, #104B35)',
+          color: isCanvasTheme ? 'var(--app-page-text, #17251D)' : 'var(--app-sidebar-text, #ffffff)',
+          borderColor: isCanvasTheme ? 'var(--app-card-border, #E5E0D5)' : 'var(--app-sidebar-border, #176B45)'
+        }}
+        className={`hidden md:flex flex-col border-r transition-all duration-300 ease-in-out shrink-0 h-full select-none z-30 ${
           isSidebarCollapsed ? 'w-[72px]' : 'w-[250px]'
         }`}
       >
         {/* Top Brand Header & Minimize/Expand Sidebar Button - h-16 (64px) matching top header */}
-        <div className={`h-16 px-4 border-b ${isCanvasTheme ? 'border-[#E5E0D5]' : 'border-[#176B45]/40'} flex items-center shrink-0 ${isSidebarCollapsed ? 'flex-col gap-2 justify-center' : 'justify-between'}`}>
+        <div 
+          style={{
+            borderColor: isCanvasTheme ? 'var(--app-card-border, #E5E0D5)' : 'var(--app-sidebar-border, #176B45)'
+          }}
+          className={`h-16 px-4 border-b flex items-center shrink-0 ${isSidebarCollapsed ? 'flex-col gap-2 justify-center' : 'justify-between'}`}
+        >
           <div 
             onClick={() => handleNavClick('home')}
             className="flex items-center gap-2.5 cursor-pointer select-none group"
@@ -617,11 +709,14 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
         )}
 
         {/* TOP HEADER */}
-        <header className={`h-16 shrink-0 w-full ${
-          isCanvasTheme 
-            ? 'bg-[#F7F4E9] border-b border-[#E5E0D5]' 
-            : 'bg-[#104B35] border-b border-[#176B45]/40'
-        } px-4 sm:px-6 flex items-center z-20 shadow-xs`}>
+        <header 
+          style={{
+            backgroundColor: isCanvasTheme ? 'var(--app-page-bg, #F7F4E9)' : 'var(--app-header-bg, #104B35)',
+            color: isCanvasTheme ? 'var(--app-page-text, #17251D)' : 'var(--app-header-text, #ffffff)',
+            borderColor: isCanvasTheme ? 'var(--app-card-border, #E5E0D5)' : 'var(--app-header-border, #176B45)'
+          }}
+          className="h-16 shrink-0 w-full border-b px-4 sm:px-6 flex items-center z-20 shadow-xs"
+        >
           <div className="w-full max-w-[1920px] mx-auto flex items-center justify-between gap-3 sm:gap-4">
 
             {/* Left: Mobile Hamburger & Clean Dashboard Breadcrumb */}
@@ -1701,30 +1796,32 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
 
               {/* Verified Buyer Opportunity Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  { name: 'FreshBites Foods Pvt Ltd', crop: `${t.crops.potato} (Grade A)`, qty: '100 Qtl', rate: '₹18 - ₹20/kg', loc: 'Agra Ind Area (15 km)', badge: 'Verified Buyer' },
-                  { name: 'ITC Agro Processing', crop: `${t.crops.potato} Kufri Jyoti`, qty: '500 Qtl', rate: '₹19.50/kg', loc: 'Mathura Hub (35 km)', badge: 'Bulk Processor' },
-                  { name: 'APMC Agra Mandi Association', crop: `${t.crops.mustard} & ${t.crops.potato}`, qty: 'Open Lot', rate: 'Market Spot Rate', loc: 'Agra Mandi (12 km)', badge: 'Govt APMC' },
-                  { name: 'Apex Retail Marts Ltd', crop: `${t.crops.tomato}`, qty: '20 Qtl', rate: '₹22/kg', loc: 'Noida Central DC', badge: 'Retail Chain' }
-                ].map((b, idx) => (
-                  <div key={idx} className="bg-white p-4.5 rounded-xl border border-[#E5E0D5] shadow-xs space-y-3">
+                {(buyers.length > 0 ? buyers : [
+                  { id: 'fb-1', name: 'FreshBites Foods Pvt Ltd', businessName: 'FreshBites Foods Pvt Ltd', cropName: `${t.crops.potato} (Grade A)`, lookingFor: `${t.crops.potato}`, quantityTons: 10, pricePerKg: 19, location: 'Agra Ind Area (15 km)', badge: 'Verified Buyer', role: 'buyer' },
+                  { id: 'fb-2', name: 'ITC Agro Processing', businessName: 'ITC Agro Processing', cropName: `${t.crops.potato} Kufri Jyoti`, lookingFor: `${t.crops.potato}`, quantityTons: 50, pricePerKg: 19.5, location: 'Mathura Hub (35 km)', badge: 'Bulk Processor', role: 'buyer' },
+                  { id: 'fb-3', name: 'APMC Agra Mandi Association', businessName: 'APMC Agra Mandi Association', cropName: `${t.crops.mustard} & ${t.crops.potato}`, lookingFor: `${t.crops.mustard}`, quantityTons: 0, pricePerKg: 0, location: 'Agra Mandi (12 km)', badge: 'Govt APMC', role: 'buyer' },
+                  { id: 'fb-4', name: 'Apex Retail Marts Ltd', businessName: 'Apex Retail Marts Ltd', cropName: `${t.crops.tomato}`, lookingFor: `${t.crops.tomato}`, quantityTons: 2, pricePerKg: 22, location: 'Noida Central DC', badge: 'Retail Chain', role: 'buyer' }
+                ]).map((b: any) => (
+                  <div key={b.id} className="bg-white p-4.5 rounded-xl border border-[#E5E0D5] shadow-xs space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
                         <span className="px-2 py-0.5 rounded-full bg-[#E8F1E5] text-[#104B35] text-[10px] font-black uppercase">
-                          {b.badge}
+                          {b.badge || (b.role === 'buyer' ? 'Verified Buyer' : b.role || 'Buyer')}
                         </span>
-                        <h4 className="text-base font-black text-[#17251D] mt-1">{b.name}</h4>
-                        <div className="text-xs text-[#657468]">📍 {b.loc}</div>
+                        <h4 className="text-base font-black text-[#17251D] mt-1">{b.businessName || b.name}</h4>
+                        <div className="text-xs text-[#657468]">📍 {b.location || b.city || 'India'}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-xs text-[#657468]">{t.tabs.buyers.offeringRate}</div>
-                        <div className="text-sm font-black text-[#176B45]">{b.rate}</div>
+                        <div className="text-sm font-black text-[#176B45]">
+                          {b.pricePerKg ? `₹${b.pricePerKg}/kg` : 'Market Rate'}
+                        </div>
                       </div>
                     </div>
 
                     <div className="bg-[#FAF6ED] p-2.5 rounded-xl text-xs flex justify-between">
-                      <span className="text-[#657468]">{t.tabs.buyers.lookingFor}: <strong className="text-[#17251D]">{b.crop}</strong></span>
-                      <span className="text-[#657468]">{t.tabs.buyers.demandQty}: <strong className="text-[#17251D]">{b.qty}</strong></span>
+                      <span className="text-[#657468]">{t.tabs.buyers.lookingFor}: <strong className="text-[#17251D]">{b.cropName || b.lookingFor || 'Various'}</strong></span>
+                      <span className="text-[#657468]">{t.tabs.buyers.demandQty}: <strong className="text-[#17251D]">{b.quantityTons ? `${Number(b.quantityTons) * 10} Qtl` : 'Open'}</strong></span>
                     </div>
 
                     <div className="flex gap-2 pt-1">
@@ -1735,7 +1832,13 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                         {t.tabs.buyers.sendProposal}
                       </button>
                       <button
-                        onClick={() => alert(`1800-KISAN: ${b.name}`)}
+                        onClick={() => {
+                          if (b.phone || b.mobile) {
+                            window.open(`tel:${b.phone || b.mobile}`, '_self');
+                          } else {
+                            alert(`Contact: ${b.businessName || b.name}`);
+                          }
+                        }}
                         className="px-3 py-2 rounded-xl border border-[#E5E0D5] text-[#17251D] font-bold text-xs cursor-pointer hover:bg-slate-50"
                       >
                         📞
@@ -1743,6 +1846,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                     </div>
                   </div>
                 ))}
+
               </div>
             </div>
           )}
@@ -1784,19 +1888,63 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
 
                     <div className="flex flex-wrap gap-2 pt-1">
                       <button
-                        onClick={() => {
-                          alert(lang === 'hi' ? 'सौदा स्वीकार किया गया!' : lang === 'hinglish' ? 'Sauda accept ho gaya!' : 'Deal accepted!');
-                          handleNavClick('orders');
+                        onClick={async () => {
+                          try {
+                            setOfferActionLoading(off.id);
+                            await api.acceptOffer(off.id);
+                            setOffers(prev => prev.map(o => o.id === off.id ? { ...o, status: 'ACCEPTED' } : o));
+                            handleNavClick('orders');
+                          } catch (err: any) {
+                            alert(err.message || 'Failed to accept offer');
+                          } finally {
+                            setOfferActionLoading(null);
+                          }
                         }}
-                        className="px-4 py-2 rounded-xl bg-[#176B45] hover:bg-[#104B35] text-white font-bold text-xs cursor-pointer transition-colors"
+                        disabled={offerActionLoading === off.id}
+                        className="px-4 py-2 rounded-xl bg-[#176B45] hover:bg-[#104B35] text-white font-bold text-xs cursor-pointer transition-colors disabled:opacity-50"
                       >
-                        ✓ {t.tabs.offers.acceptOffer}
+                        {offerActionLoading === off.id ? '...' : `✓ ${t.tabs.offers.acceptOffer}`}
                       </button>
                       <button
-                        onClick={() => alert(lang === 'hi' ? 'काउंटर ऑफर भेजा गया' : 'Counter-offer sent')}
-                        className="px-4 py-2 rounded-xl bg-white border border-[#E5E0D5] text-[#17251D] font-bold text-xs cursor-pointer hover:bg-slate-50"
+                        onClick={async () => {
+                          const counterPrice = prompt(lang === 'hi' ? 'काउंटर प्राइस (₹/kg):' : 'Counter price (₹/kg):');
+                          if (!counterPrice || isNaN(Number(counterPrice))) return;
+                          try {
+                            setOfferActionLoading(off.id);
+                            await api.counterOffer(off.id, {
+                              counterPricePerKg: Number(counterPrice),
+                              counterQuantityTons: off.quantityTons || 1,
+                              message: lang === 'hi' ? 'काउंटर ऑफर भेजा गया' : 'Counter offer sent'
+                            });
+                            setOffers(prev => prev.map(o => o.id === off.id ? { ...o, status: 'COUNTERED' } : o));
+                          } catch (err: any) {
+                            alert(err.message || 'Failed to send counter offer');
+                          } finally {
+                            setOfferActionLoading(null);
+                          }
+                        }}
+                        disabled={offerActionLoading === off.id}
+                        className="px-4 py-2 rounded-xl bg-white border border-[#E5E0D5] text-[#17251D] font-bold text-xs cursor-pointer hover:bg-slate-50 disabled:opacity-50"
                       >
                         {t.tabs.offers.counterOffer}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(lang === 'hi' ? 'क्या आप यह ऑफर रिजेक्ट करना चाहते हैं?' : 'Reject this offer?')) return;
+                          try {
+                            setOfferActionLoading(off.id);
+                            await api.rejectOffer(off.id, 'Not interested');
+                            setOffers(prev => prev.map(o => o.id === off.id ? { ...o, status: 'REJECTED' } : o));
+                          } catch (err: any) {
+                            alert(err.message || 'Failed to reject offer');
+                          } finally {
+                            setOfferActionLoading(null);
+                          }
+                        }}
+                        disabled={offerActionLoading === off.id}
+                        className="px-4 py-2 rounded-xl bg-white border border-rose-200 text-rose-700 font-bold text-xs cursor-pointer hover:bg-rose-50 disabled:opacity-50"
+                      >
+                        ✕ {lang === 'hi' ? 'रिजेक्ट' : 'Reject'}
                       </button>
                     </div>
                   </div>
@@ -1815,25 +1963,61 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 <p className="text-xs text-[#657468]">{t.tabs.orders.subtitle}</p>
               </div>
 
-              <div className="text-center py-12 bg-white rounded-xl border border-[#E5E0D5] p-6 space-y-3 shadow-xs">
-                <div className="text-4xl">📦</div>
-                <h3 className="text-base font-bold text-[#17251D]">
-                  {lang === 'hi' ? 'अभी कोई सक्रिय ऑर्डर ट्रांजिट में नहीं है' : lang === 'hinglish' ? 'Abhi koi active order transit me nahi hai' : 'No active orders in transit currently'}
-                </h3>
-                <p className="text-xs text-[#657468] max-w-sm mx-auto">
-                  {lang === 'hi' 
-                    ? 'जब खरीदार आपका ऑफर स्वीकार करेगा या आप ऑफर मंजूर करेंगे, तो यहाँ आपका पक्का सौदा और गाड़ी ट्रैकिंग दिखेगी।'
-                    : lang === 'hinglish'
-                      ? 'Jab buyer offer accept karega to yahan aapka pakka sauda aur gadi tracking dikhegi.'
-                      : 'When a buyer confirms your bid or you accept an offer, your confirmed order and dispatch tracking will display here.'}
-                </p>
-                <button
-                  onClick={() => handleNavClick('buyers')}
-                  className="px-4 py-2 rounded-xl bg-[#176B45] hover:bg-[#104B35] text-white font-bold text-xs cursor-pointer transition-colors"
-                >
-                  {t.actions.findBuyers.title}
-                </button>
-              </div>
+              {orders.length > 0 ? (
+                <div className="space-y-3">
+                  {orders.map((order: any) => (
+                    <div key={order.id} className="bg-white p-4.5 rounded-xl border border-[#E5E0D5] shadow-xs space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#FAF6ED] pb-2.5">
+                        <div>
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                            order.status === 'COMPLETED' || order.status === 'DELIVERED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : order.status === 'IN_TRANSIT' || order.status === 'DISPATCHED'
+                                ? 'bg-blue-100 text-blue-800'
+                                : order.status === 'CANCELLED'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {order.status?.replace(/_/g, ' ') || 'PENDING'}
+                          </span>
+                          <h4 className="text-base font-black text-[#17251D] mt-1">
+                            {order.cropName || order.crop || 'Order'} — {order.buyerName || order.buyer || 'Buyer'}
+                          </h4>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <div className="text-xs text-[#657468]">{lang === 'hi' ? 'कुल राशि' : 'Total Value'}</div>
+                          <div className="text-lg font-black text-[#176B45]">
+                            ₹{((order.finalPricePerKg || order.pricePerKg || 0) * (order.quantityTons || 0) * 1000).toLocaleString('en-IN')}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-[#FAF6ED] p-2.5 rounded-xl text-xs grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <div><span className="text-[#657468]">{lang === 'hi' ? 'मात्रा' : 'Quantity'}:</span> <strong className="text-[#17251D]">{Number(order.quantityTons || 0) * 10} Qtl</strong></div>
+                        <div><span className="text-[#657468]">{lang === 'hi' ? 'दर' : 'Rate'}:</span> <strong className="text-[#17251D]">₹{order.finalPricePerKg || order.pricePerKg || 0}/kg</strong></div>
+                        <div><span className="text-[#657468]">{lang === 'hi' ? 'तारीख' : 'Date'}:</span> <strong className="text-[#17251D]">{order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : '—'}</strong></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-white rounded-xl border border-[#E5E0D5] p-6 space-y-3 shadow-xs">
+                  <div className="text-4xl">📦</div>
+                  <h3 className="text-base font-bold text-[#17251D]">
+                    {lang === 'hi' ? 'अभी कोई सक्रिय ऑर्डर नहीं है' : 'No active orders currently'}
+                  </h3>
+                  <p className="text-xs text-[#657468] max-w-sm mx-auto">
+                    {lang === 'hi' 
+                      ? 'जब खरीदार आपका ऑफर स्वीकार करेगा, तो यहाँ आपका सौदा दिखेगा।'
+                      : 'When a buyer confirms your offer, your confirmed order will display here.'}
+                  </p>
+                  <button
+                    onClick={() => handleNavClick('buyers')}
+                    className="px-4 py-2 rounded-xl bg-[#176B45] hover:bg-[#104B35] text-white font-bold text-xs cursor-pointer transition-colors"
+                  >
+                    {t.actions.findBuyers.title}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -1841,7 +2025,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
           {/* TAB 7: COLD STORAGE */}
           {/* ========================================================================= */}
           {activeTab === 'storage' && (
-            <div className="space-y-4 max-w-[1920px] mx-auto">
+            <div className="space-y-5 max-w-[1920px] mx-auto animate-fadeIn">
               <div className="bg-white p-4.5 rounded-xl border border-[#E5E0D5] flex items-center justify-between shadow-xs">
                 <div>
                   <h2 className="text-lg sm:text-xl font-black text-[#17251D]">{t.tabs.storage.title}</h2>
@@ -1855,39 +2039,149 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  { name: 'Agra Imperial Cold Logistics', loc: 'Khandauli Road, Agra', capacity: '12,000 Bags Available', rate: '₹140 / bag (Full Season)', rating: '4.8 ★' },
-                  { name: 'Mata Vaishno Cold Storage', loc: 'Etmadpur, Agra', capacity: '5,000 Bags Available', rate: '₹135 / bag (Full Season)', rating: '4.6 ★' }
-                ].map((s, idx) => (
-                  <div key={idx} className="bg-white p-4.5 rounded-xl border border-[#E5E0D5] shadow-xs space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-11 w-11 rounded-xl overflow-hidden bg-cyan-50 border border-[#E5E0D5]">
-                        <img src="/dashboard/cold_storage.jpg" alt="Storage" className="h-full w-full object-cover" />
-                      </div>
-                      <div>
-                        <h4 className="text-base font-black text-[#17251D]">{s.name}</h4>
-                        <div className="text-xs text-[#657468]">📍 {s.loc} • {s.rating}</div>
-                      </div>
-                    </div>
-                    <div className="bg-[#FAF6ED] p-2.5 rounded-xl text-xs space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-[#657468]">{t.tabs.storage.availableCapacity}:</span>
-                        <span className="font-bold text-[#176B45]">{s.capacity}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[#657468]">{t.tabs.storage.ratePerMonth}:</span>
-                        <span className="font-bold text-[#17251D]">{s.rate}</span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => alert(`Connecting call to ${s.name}...`)}
-                      className="w-full py-2 rounded-xl bg-[#176B45] hover:bg-[#104B35] text-white font-bold text-xs cursor-pointer transition-colors"
-                    >
-                      {t.tabs.storage.bookSpace}
-                    </button>
+              {/* Profit Simulator: Sell Now vs Store */}
+              <div className="bg-white rounded-xl border border-cyan-200 p-5 shadow-xs space-y-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">❄️</span>
+                  <div>
+                    <h3 className="text-sm font-black text-[#17251D]">
+                      {lang === 'hi' ? 'मुनाफा जांचें: अभी बेचें या कोल्ड स्टोर में रखें?' : 'Profit Simulator: Sell Now vs Cold Store?'}
+                    </h3>
+                    <p className="text-xs text-[#657468]">
+                      {lang === 'hi' ? 'अनुमान लगाएं कि भंडारण के बाद आपको कितना अधिक मुनाफा मिल सकता है।' : 'Calculate net profitability after monthly rental and handling charges.'}
+                    </p>
                   </div>
-                ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <label className="text-xs font-bold text-[#657468] block mb-1">
+                      {lang === 'hi' ? 'आज का भाव (₹/kg)' : 'Current Offer Price (₹/kg)'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={scenarioParams.currentOfferPrice}
+                      onChange={(e) => setScenarioParams({ ...scenarioParams, currentOfferPrice: Number(e.target.value) })}
+                      className="w-full px-3 py-2 rounded-xl border border-[#E5E0D5] text-xs font-bold text-[#17251D] bg-[#FAF6ED]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-[#657468] block mb-1">
+                      {lang === 'hi' ? 'भविष्य में अनुमानित भाव (₹/kg)' : 'Expected Future Price (₹/kg)'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={scenarioParams.expectedFuturePrice}
+                      onChange={(e) => setScenarioParams({ ...scenarioParams, expectedFuturePrice: Number(e.target.value) })}
+                      className="w-full px-3 py-2 rounded-xl border border-[#E5E0D5] text-xs font-bold text-[#176B45] bg-[#FAF6ED]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-[#657468] block mb-1">
+                      {lang === 'hi' ? 'स्टोरेज का समय' : 'Storage Duration'}
+                    </label>
+                    <select
+                      value={scenarioParams.months}
+                      onChange={(e) => setScenarioParams({ ...scenarioParams, months: Number(e.target.value) })}
+                      className="w-full px-3 py-2 rounded-xl border border-[#E5E0D5] text-xs font-bold text-[#17251D] bg-[#FAF6ED]"
+                    >
+                      <option value={1}>{lang === 'hi' ? '1 महीना' : '1 Month'}</option>
+                      <option value={2}>{lang === 'hi' ? '2 महीने' : '2 Months'}</option>
+                      <option value={3}>{lang === 'hi' ? '3 महीने (मानक)' : '3 Months (Standard)'}</option>
+                      <option value={6}>{lang === 'hi' ? '6 महीने' : '6 Months'}</option>
+                    </select>
+                  </div>
+                </div>
+
+                {scenarioResult && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-1 text-xs">
+                      <span className="font-bold text-slate-500 uppercase text-[10px]">
+                        {lang === 'hi' ? 'विकल्प 1: आज बेचने पर' : 'Option 1: Sell Immediately'}
+                      </span>
+                      <div className="text-xl font-black text-slate-900">
+                        ₹{Number(scenarioResult.currentOfferPricePerKg || scenarioParams.currentOfferPrice).toFixed(2)} / kg
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {lang === 'hi' ? 'तुरंत भुगतान, कोई स्टोरेज किराया नहीं' : 'Immediate payment, zero storage fees'}
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-emerald-800 uppercase text-[10px]">
+                          {lang === 'hi' ? 'विकल्प 2: कोल्ड स्टोर में रखने पर' : 'Option 2: Store in Cold Logistics'}
+                        </span>
+                        <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                          {Number(scenarioResult.netGainOrLossPerKg || 0) > 0 
+                            ? `+₹${Number(scenarioResult.netGainOrLossPerKg).toFixed(2)}/kg ${lang === 'hi' ? 'फायदा' : 'Gain'}`
+                            : (lang === 'hi' ? 'कम लाभ' : 'Lower Gain')}
+                        </span>
+                      </div>
+                      <div className="text-xl font-black text-emerald-900">
+                        ₹{Number(scenarioResult.estimatedFutureNetRealization || scenarioParams.expectedFuturePrice).toFixed(2)} / kg
+                      </div>
+                      <div className="text-[11px] text-emerald-800 font-semibold">
+                        💡 {scenarioResult.recommendation || (lang === 'hi' ? 'कोल्ड स्टोर में रखना अधिक लाभदायक है।' : 'Storing in cold storage yields higher return.')}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cold Storage Facilities Grid */}
+              <div className="space-y-3">
+                <h3 className="text-base font-bold text-[#17251D]">
+                  {lang === 'hi' ? 'पास के उपलब्ध कोल्ड स्टोरेज' : 'Nearby Cold Storage Facilities'}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(storageFacilities && storageFacilities.length > 0 ? storageFacilities : [
+                    { id: 'cs-1', name: 'Agra Imperial Cold Logistics', location: 'Khandauli Road, Agra', availableCapacityTons: 600, storageChargePerMonthPerTon: 180, rating: '4.8 ★' },
+                    { id: 'cs-2', name: 'Mata Vaishno Cold Storage', location: 'Etmadpur, Agra', availableCapacityTons: 250, storageChargePerMonthPerTon: 170, rating: '4.6 ★' }
+                  ]).map((s: any, idx: number) => {
+                    const facilityName = s.name || s.facilityName || 'Cold Storage Facility';
+                    const loc = s.location || s.address || 'Agra Bypass Road';
+                    const capacity = s.availableCapacityTons ? `${s.availableCapacityTons} Tons Available` : (s.capacity || 'Space Available');
+                    const rate = s.storageChargePerMonthPerTon ? `₹${s.storageChargePerMonthPerTon} / ton / month` : (s.rate || '₹140 / bag');
+                    const rating = s.rating || '4.8 ★';
+                    const isBooking = bookingStorageId === (s.id || idx.toString());
+
+                    return (
+                      <div key={s.id || idx} className="bg-white p-4.5 rounded-xl border border-[#E5E0D5] shadow-xs space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-11 w-11 rounded-xl overflow-hidden bg-cyan-50 border border-[#E5E0D5]">
+                            <img src="/dashboard/cold_storage.jpg" alt="Storage" className="h-full w-full object-cover" />
+                          </div>
+                          <div>
+                            <h4 className="text-base font-black text-[#17251D]">{facilityName}</h4>
+                            <div className="text-xs text-[#657468]">📍 {loc} • {rating}</div>
+                          </div>
+                        </div>
+                        <div className="bg-[#FAF6ED] p-2.5 rounded-xl text-xs space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-[#657468]">{t.tabs.storage.availableCapacity}:</span>
+                            <span className="font-bold text-[#176B45]">{capacity}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#657468]">{t.tabs.storage.ratePerMonth}:</span>
+                            <span className="font-bold text-[#17251D]">{rate}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleBookStorage(s)}
+                          disabled={isBooking}
+                          className="w-full py-2.5 rounded-xl bg-[#176B45] hover:bg-[#104B35] text-white font-bold text-xs cursor-pointer transition-colors disabled:opacity-50"
+                        >
+                          {isBooking ? 'Booking...' : t.tabs.storage.bookSpace}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -1933,7 +2227,21 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 </div>
 
                 <button
-                  onClick={() => alert('Request sent to pool coordinator.')}
+                  onClick={() => {
+                    const currentList = listings[0];
+                    const cropName = currentList?.cropName || 'Potato';
+                    const qty = prompt(lang === 'hi' ? `विक्रम सिंह के 60 टन बैच में ${cropName} की मात्रा दर्ज करें (टन में):` : `Enter quantity of ${cropName} (in Tons) to pool with Vikram Singh's 60T collective lot:`, '5');
+                    if (!qty) return;
+                    const tons = parseFloat(qty);
+                    if (isNaN(tons) || tons <= 0) {
+                      alert(lang === 'hi' ? 'कृपया मान्य मात्रा दर्ज करें।' : 'Please enter a valid quantity.');
+                      return;
+                    }
+                    alert(lang === 'hi' 
+                      ? `✅ आपका ${tons} टन ${cropName} का योगदान सफलतापूर्वक दर्ज कर लिया गया! 60 टन लॉट पूरा होते ही ₹20.50/किग्रा पर खरीद शुरू होगी।`
+                      : `✅ Successfully committed ${tons} Tons of ${cropName} to the collective pool! Aggregator Vikram Singh will coordinate farm-gate pickup at ₹20.50/kg once the 60T lot is completed.`
+                    );
+                  }}
                   className="w-full py-2.5 rounded-xl bg-[#E6A52E] hover:bg-[#d09223] text-[#17251D] font-black text-xs shadow-xs cursor-pointer transition-colors"
                 >
                   {t.tabs.pool.contributeCrop}

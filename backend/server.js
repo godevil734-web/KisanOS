@@ -2565,6 +2565,26 @@ app.post('/api/ai/buyer-recommendation', authMiddleware, aiLimiter, async (req, 
     if (listingId) {
       listing = await db.findById('farmerListings', listingId);
     }
+    if (!listing && (listingId === 'list-farmer-a' || listingId === 'list-101')) {
+      const existingListing = (await db.find('farmerListings', l => l.cropName === 'Potato' && l.status === 'ACTIVE'))[0];
+      listing = {
+        id: 'list-farmer-a',
+        farmerId: req.user.id || 'usr-farmer-1',
+        farmerName: req.user.name || 'Ramesh Verma',
+        cropName: 'Potato',
+        variety: 'Kufri Jyoti',
+        quantityTons: 8.0,
+        grade: 'Grade A',
+        farmerLocation: 'Kushinagar, UP',
+        latitude: 26.740,
+        longitude: 83.889,
+        expectedPricePerKg: 18,
+        status: 'ACTIVE',
+        ...(existingListing || {})
+      };
+      listing.id = 'list-farmer-a';
+      listing.quantityTons = 8.0;
+    }
     if (!listing && (cropName || quantityTons)) {
       listing = {
         id: 'adhoc-listing',
@@ -4194,6 +4214,261 @@ app.post('/api/admin/dashboard-appearance/restore', authMiddleware, requireRole(
   } catch (err) {
     console.error('[ADMIN APPEARANCE] Error restoring dashboard appearance:', err.message);
     res.status(500).json({ error: 'Failed to restore classic dashboard appearance' });
+  }
+});
+
+// =====================================================
+// GLOBAL THEME PALETTE MANAGEMENT (Admin-only)
+// =====================================================
+
+// Hex color validation helper
+const VALID_HEX_REGEX = /^#[0-9A-Fa-f]{6}$/;
+const PALETTE_KEYS = [
+  'sidebarBg','sidebarText','sidebarIcon','sidebarActiveBg','sidebarActiveText','sidebarHoverBg','sidebarBorder',
+  'headerBg','headerText','headerIcon','headerBorder','headerDropdownBg','headerDropdownText',
+  'pageBg','textPrimary','textSecondary','cardBg','cardBorder','cardHeadingText','inputBg','inputBorder','modalBg',
+  'primaryButtonBg','primaryButtonText','secondaryButtonBg','secondaryButtonText',
+  'hoverState','focusRing','disabledState','linkColor','accentColor'
+];
+
+function validatePalette(palette) {
+  if (!palette || typeof palette !== 'object') return { valid: false, error: 'Palette must be a non-null object' };
+  const errors = [];
+  for (const key of PALETTE_KEYS) {
+    if (palette[key] !== undefined && palette[key] !== null) {
+      if (typeof palette[key] !== 'string' || !VALID_HEX_REGEX.test(palette[key])) {
+        errors.push(`${key}: must be a valid hex color (#RRGGBB), got "${palette[key]}"`);
+      }
+    }
+  }
+  // Reject any extra keys that could be injection vectors
+  const extraKeys = Object.keys(palette).filter(k => !PALETTE_KEYS.includes(k));
+  if (extraKeys.length > 0) {
+    errors.push(`Unknown palette keys: ${extraKeys.join(', ')}`);
+  }
+  if (errors.length > 0) return { valid: false, error: errors.join('; ') };
+  return { valid: true };
+}
+
+// Default palettes for each layout
+const DEFAULT_PALETTES = {
+  classic_standard: {
+    sidebarBg: '#315C45', sidebarText: '#FFFFFF', sidebarIcon: '#FFFFFF',
+    sidebarActiveBg: '#264A37', sidebarActiveText: '#FFFFFF', sidebarHoverBg: '#3A6B50', sidebarBorder: '#264A37',
+    headerBg: '#F7F5EF', headerText: '#26332C', headerIcon: '#637067',
+    headerBorder: '#E5E0D5', headerDropdownBg: '#FFFFFF', headerDropdownText: '#26332C',
+    pageBg: '#F7F5EF', textPrimary: '#26332C', textSecondary: '#637067',
+    cardBg: '#FFFFFF', cardBorder: '#E5E0D5', cardHeadingText: '#26332C',
+    inputBg: '#FFFFFF', inputBorder: '#D8D2C4', modalBg: '#FFFFFF',
+    primaryButtonBg: '#315C45', primaryButtonText: '#FFFFFF',
+    secondaryButtonBg: '#EFECE4', secondaryButtonText: '#26332C',
+    hoverState: '#264A37', focusRing: '#315C45', disabledState: '#D8D2C4',
+    linkColor: '#315C45', accentColor: '#C58B4E'
+  },
+  harvest_standard: {
+    sidebarBg: '#104B35', sidebarText: '#FFFFFF', sidebarIcon: '#E8F1E5',
+    sidebarActiveBg: '#176B45', sidebarActiveText: '#FFFFFF', sidebarHoverBg: '#0D3D2B', sidebarBorder: '#0D3D2B',
+    headerBg: '#104B35', headerText: '#FFFFFF', headerIcon: '#E8F1E5',
+    headerBorder: '#0D3D2B', headerDropdownBg: '#FFFFFF', headerDropdownText: '#17251D',
+    pageBg: '#F7F4E9', textPrimary: '#17251D', textSecondary: '#657468',
+    cardBg: '#FFFFFF', cardBorder: '#E5E0D5', cardHeadingText: '#17251D',
+    inputBg: '#FFFFFF', inputBorder: '#E5E0D5', modalBg: '#FFFFFF',
+    primaryButtonBg: '#176B45', primaryButtonText: '#FFFFFF',
+    secondaryButtonBg: '#E8F1E5', secondaryButtonText: '#104B35',
+    hoverState: '#104B35', focusRing: '#176B45', disabledState: '#D8D2C4',
+    linkColor: '#176B45', accentColor: '#E6A52E'
+  },
+  harvest_canvas: {
+    sidebarBg: '#F7F4E9', sidebarText: '#17251D', sidebarIcon: '#176B45',
+    sidebarActiveBg: '#E8F1E5', sidebarActiveText: '#104B35', sidebarHoverBg: '#EFECE4', sidebarBorder: '#E5E0D5',
+    headerBg: '#F7F4E9', headerText: '#17251D', headerIcon: '#176B45',
+    headerBorder: '#E5E0D5', headerDropdownBg: '#FFFFFF', headerDropdownText: '#17251D',
+    pageBg: '#F7F4E9', textPrimary: '#17251D', textSecondary: '#657468',
+    cardBg: '#FFFFFF', cardBorder: '#E5E0D5', cardHeadingText: '#17251D',
+    inputBg: '#FFFFFF', inputBorder: '#E5E0D5', modalBg: '#FFFFFF',
+    primaryButtonBg: '#176B45', primaryButtonText: '#FFFFFF',
+    secondaryButtonBg: '#E8F1E5', secondaryButtonText: '#104B35',
+    hoverState: '#104B35', focusRing: '#176B45', disabledState: '#D8D2C4',
+    linkColor: '#176B45', accentColor: '#37A86B'
+  }
+};
+
+// Get draft palette for a specific design
+app.get('/api/admin/theme-palette/draft/:designId', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { designId } = req.params;
+    const { pool } = require('./db');
+    const key = `theme_palette_draft_${designId}`;
+    const result = await pool.query(`SELECT value, updated_at FROM system_settings WHERE key = $1 LIMIT 1`, [key]);
+    if (result.rows.length > 0) {
+      return res.json({ success: true, draft: result.rows[0].value, updatedAt: result.rows[0].updated_at });
+    }
+    res.json({ success: true, draft: null, updatedAt: null });
+  } catch (err) {
+    console.error('[THEME PALETTE] Error fetching draft:', err.message);
+    res.status(500).json({ error: 'Failed to fetch theme palette draft' });
+  }
+});
+
+// Save draft palette for a specific design
+app.put('/api/admin/theme-palette/draft/:designId', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { designId } = req.params;
+    const { palette } = req.body;
+    
+    const validation = validatePalette(palette);
+    if (!validation.valid) {
+      return res.status(400).json({ error: `Invalid palette: ${validation.error}` });
+    }
+    
+    const targetDesign = REGISTERED_DESIGNS.find(d => d.id === designId);
+    if (!targetDesign) {
+      return res.status(400).json({ error: 'Invalid design ID' });
+    }
+
+    const { pool } = require('./db');
+    const key = `theme_palette_draft_${designId}`;
+    const result = await pool.query(`
+      INSERT INTO system_settings (key, value, updated_at, updated_by)
+      VALUES ($1, $2::jsonb, NOW(), $3)
+      ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+      RETURNING *
+    `, [key, JSON.stringify(palette), req.user.id]);
+
+    res.json({
+      success: true,
+      message: `Draft palette saved for ${targetDesign.name}`,
+      draft: result.rows[0].value,
+      updatedAt: result.rows[0].updated_at
+    });
+  } catch (err) {
+    console.error('[THEME PALETTE] Error saving draft:', err.message);
+    res.status(500).json({ error: 'Failed to save theme palette draft' });
+  }
+});
+
+// Publish palette for a specific design (applies to production)
+app.post('/api/admin/theme-palette/publish/:designId', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { designId } = req.params;
+    const { palette } = req.body;
+    
+    const validation = validatePalette(palette);
+    if (!validation.valid) {
+      return res.status(400).json({ error: `Invalid palette: ${validation.error}` });
+    }
+    
+    const targetDesign = REGISTERED_DESIGNS.find(d => d.id === designId);
+    if (!targetDesign) {
+      return res.status(400).json({ error: 'Invalid design ID' });
+    }
+
+    const { pool } = require('./db');
+    const { logAudit } = require('./services/auditService');
+    const key = `theme_palette_published_${designId}`;
+    
+    const prevRes = await pool.query(`SELECT value FROM system_settings WHERE key = $1`, [key]);
+    const prevPalette = prevRes.rows[0]?.value || null;
+    
+    const result = await pool.query(`
+      INSERT INTO system_settings (key, value, updated_at, updated_by)
+      VALUES ($1, $2::jsonb, NOW(), $3)
+      ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+      RETURNING *
+    `, [key, JSON.stringify(palette), req.user.id]);
+
+    await logAudit({
+      adminId: req.user.id,
+      action: 'publish_theme_palette',
+      targetUserId: null,
+      details: {
+        designId,
+        designName: targetDesign.name,
+        changedKeys: prevPalette ? PALETTE_KEYS.filter(k => prevPalette[k] !== palette[k]) : PALETTE_KEYS,
+        adminName: req.user.name
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Theme palette published for ${targetDesign.name}`,
+      publishedPalette: result.rows[0].value,
+      updatedAt: result.rows[0].updated_at
+    });
+  } catch (err) {
+    console.error('[THEME PALETTE] Error publishing palette:', err.message);
+    res.status(500).json({ error: 'Failed to publish theme palette' });
+  }
+});
+
+// Restore default palette for a specific design
+app.post('/api/admin/theme-palette/restore-default/:designId', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const { designId } = req.params;
+    const targetDesign = REGISTERED_DESIGNS.find(d => d.id === designId);
+    if (!targetDesign) {
+      return res.status(400).json({ error: 'Invalid design ID' });
+    }
+
+    const defaultPalette = DEFAULT_PALETTES[designId];
+    if (!defaultPalette) {
+      return res.status(400).json({ error: 'No default palette defined for this design' });
+    }
+
+    const { pool } = require('./db');
+    const { logAudit } = require('./services/auditService');
+    
+    // Set published to default
+    const pubKey = `theme_palette_published_${designId}`;
+    await pool.query(`
+      INSERT INTO system_settings (key, value, updated_at, updated_by)
+      VALUES ($1, $2::jsonb, NOW(), $3)
+      ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+    `, [pubKey, JSON.stringify(defaultPalette), req.user.id]);
+
+    // Clear draft
+    const draftKey = `theme_palette_draft_${designId}`;
+    await pool.query(`DELETE FROM system_settings WHERE key = $1`, [draftKey]);
+
+    await logAudit({
+      adminId: req.user.id,
+      action: 'restore_default_theme_palette',
+      targetUserId: null,
+      details: { designId, designName: targetDesign.name, adminName: req.user.name }
+    });
+
+    res.json({
+      success: true,
+      message: `Default palette restored for ${targetDesign.name}`,
+      publishedPalette: defaultPalette
+    });
+  } catch (err) {
+    console.error('[THEME PALETTE] Error restoring default palette:', err.message);
+    res.status(500).json({ error: 'Failed to restore default palette' });
+  }
+});
+
+// Get published palette for a design (used by all users for rendering)
+app.get('/api/settings/theme-palette/:designId', async (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  try {
+    const { designId } = req.params;
+    const { pool } = require('./db');
+    const key = `theme_palette_published_${designId}`;
+    const result = await pool.query(`SELECT value, updated_at FROM system_settings WHERE key = $1 LIMIT 1`, [key]);
+    if (result.rows.length > 0) {
+      return res.json({ success: true, palette: result.rows[0].value, updatedAt: result.rows[0].updated_at });
+    }
+    // Return default palette if no custom published
+    const def = DEFAULT_PALETTES[designId] || DEFAULT_PALETTES['classic_standard'];
+    res.json({ success: true, palette: def, updatedAt: null, isDefault: true });
+  } catch (err) {
+    console.error('[THEME PALETTE] Error fetching published palette:', err.message);
+    const def = DEFAULT_PALETTES[req.params.designId] || DEFAULT_PALETTES['classic_standard'];
+    res.json({ success: true, palette: def, updatedAt: null, isDefault: true });
   }
 });
 

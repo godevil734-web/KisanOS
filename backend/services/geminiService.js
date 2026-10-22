@@ -11,16 +11,24 @@
 const { GoogleGenAI } = require('@google/genai');
 
 let aiClient = null;
+let lastApiKey = null;
 
 function getAiClient() {
-  if (aiClient) return aiClient;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || !apiKey.trim()) return null;
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) {
+    aiClient = null;
+    lastApiKey = null;
+    return null;
+  }
+  if (aiClient && lastApiKey === apiKey) return aiClient;
   try {
-    aiClient = new GoogleGenAI({ apiKey: apiKey.trim() });
+    aiClient = new GoogleGenAI({ apiKey });
+    lastApiKey = apiKey;
     return aiClient;
   } catch (err) {
     console.warn('[GEMINI AI] Client initialization error:', err.message);
+    aiClient = null;
+    lastApiKey = null;
     return null;
   }
 }
@@ -188,10 +196,12 @@ async function generateBuyerRecommendation(arg1, arg2, arg3) {
   const client = getAiClient();
   if (!client) {
     return {
-      available: true,
+      available: false,
       summary: deterministicData.summary,
       recommendations: deterministicData.recommendations,
-      fallbackMessage: null
+      fallbackMessage: isHi 
+        ? 'AI सेवा वर्तमान में अनुपलब्ध है। प्लेटफ़ॉर्म के सत्यापित नियमों के आधार पर सिफारिशें प्रदर्शित की गई हैं।'
+        : 'AI recommendation service is currently unconfigured or offline. Recommendations generated via verified platform rules.'
     };
   }
 
@@ -304,10 +314,12 @@ Provide top recommended options for this farmer. Output valid JSON only.`;
   } catch (err) {
     console.warn('[GEMINI AI] Buyer recommendation error (using deterministic engine):', err.message);
     return {
-      available: true,
+      available: false,
       summary: deterministicData.summary,
       recommendations: deterministicData.recommendations,
-      fallbackMessage: null
+      fallbackMessage: isHi 
+        ? 'AI सेवा से कनेक्ट नहीं हो सका। प्लेटफ़ॉर्म के सत्यापित नियमों के आधार पर सिफारिशें प्रदर्शित की गई हैं।'
+        : 'Could not connect to AI service. Recommendations generated via verified platform rules.'
     };
   }
 }

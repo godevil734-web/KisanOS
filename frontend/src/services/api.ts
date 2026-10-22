@@ -250,6 +250,27 @@ export const api = {
       method: 'POST'
     }),
 
+  // Theme Palette Customization
+  getThemePaletteDraft: (designId: string) =>
+    request<{ success: boolean; draft: any; updatedAt: string | null }>(`/admin/theme-palette/draft/${designId}`),
+  saveThemePaletteDraft: (designId: string, palette: any) =>
+    request<{ success: boolean; message: string; draft: any; updatedAt: string }>(`/admin/theme-palette/draft/${designId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ palette })
+    }),
+  publishThemePalette: (designId: string, palette: any) =>
+    request<{ success: boolean; message: string; publishedPalette: any; updatedAt: string }>(`/admin/theme-palette/publish/${designId}`, {
+      method: 'POST',
+      body: JSON.stringify({ palette })
+    }),
+  restoreDefaultPalette: (designId: string) =>
+    request<{ success: boolean; message: string; publishedPalette: any }>(`/admin/theme-palette/restore-default/${designId}`, {
+      method: 'POST'
+    }),
+  getPublishedThemePalette: (designId: string) =>
+    request<{ success: boolean; palette: any; updatedAt: string | null; isDefault?: boolean }>(`/settings/theme-palette/${designId}`),
+
+
   // Notifications
   getNotifications: () => request<any[]>('/notifications'),
   markNotificationRead: (id: string) => request<any>(`/notifications/${id}/read`, { method: 'PUT' }),

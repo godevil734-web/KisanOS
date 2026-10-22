@@ -601,15 +601,15 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
           </div>
         )}
 
-        {/* TOP HEADER - Rich Kisan Green Header */}
-        <header className="h-16 shrink-0 w-full bg-[#176B45] border-b border-[#104B35] px-4 sm:px-6 flex items-center z-20 shadow-sm">
+        {/* TOP HEADER - Exact Same Deep Green as Sidebar (#104B35) */}
+        <header className="h-16 shrink-0 w-full bg-[#104B35] border-b border-[#176B45]/40 px-4 sm:px-6 flex items-center z-20 shadow-xs">
           <div className="w-full max-w-[1920px] mx-auto flex items-center justify-between gap-3 sm:gap-4">
 
             {/* Left: Mobile Hamburger & Clean Dashboard Breadcrumb */}
             <div className="flex items-center gap-3 shrink-0">
               <button
                 onClick={() => setIsMobileDrawerOpen(true)}
-                className="md:hidden p-2 rounded-lg text-white hover:bg-white/15 transition-colors cursor-pointer"
+                className="md:hidden p-2 rounded-lg text-white hover:bg-[#176B45]/50 transition-colors cursor-pointer"
                 aria-label="Open Navigation Drawer"
               >
                 <Menu className="h-5 w-5" />
@@ -617,10 +617,10 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
 
               {/* Breadcrumb / Clean Section Title */}
               <div className="flex items-center gap-2 sm:gap-2.5 text-xs">
-                <span className="text-emerald-200 font-extrabold tracking-wider uppercase text-[11px]">
+                <span className="text-[#37A86B] font-extrabold tracking-wider uppercase text-[11px]">
                   {t.nav.overview}
                 </span>
-                <span className="text-emerald-300/70 font-bold">•</span>
+                <span className="text-white/40 font-bold">•</span>
                 <span className="text-white font-black text-sm tracking-tight">
                   {t.nav.dashboard}
                 </span>
@@ -634,7 +634,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {actualIsPreview && (
                 <button
                   onClick={() => onNavigate ? onNavigate(returnUrl || '/admin?tab=appearance') : (window.location.href = returnUrl || '/admin?tab=appearance')}
-                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs border border-white/25 transition-colors cursor-pointer shadow-2xs shrink-0 backdrop-blur-xs"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-[#176B45]/60 hover:bg-[#176B45] text-white font-bold text-xs border border-[#37A86B]/30 transition-colors cursor-pointer shadow-2xs shrink-0"
                   title="Return to Appearance Manager or Dashboard"
                 >
                   <span>{returnLabel || (returnUrl?.includes('admin') ? '← UI/UX Manager' : t.nav.returnToCurrent)}</span>
@@ -642,11 +642,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               )}
 
               {/* Language Selection: हिंदी | Hinglish | English */}
-              <div className="flex items-center h-9 bg-[#104B35]/70 p-0.5 rounded-lg border border-white/20 text-xs font-bold text-white shrink-0 backdrop-blur-xs">
+              <div className="flex items-center h-9 bg-[#0C3B29]/90 p-0.5 rounded-lg border border-[#176B45]/60 text-xs font-bold text-white shrink-0">
                 <button
                   onClick={() => handleLangChange('hi')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'hi' ? 'bg-white text-[#104B35] font-black shadow-xs' : 'text-emerald-100 hover:text-white hover:bg-white/10'
+                    lang === 'hi' ? 'bg-[#176B45] text-white font-black shadow-xs' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
                   }`}
                 >
                   हिंदी
@@ -654,7 +654,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 <button
                   onClick={() => handleLangChange('hinglish')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'hinglish' ? 'bg-white text-[#104B35] font-black shadow-xs' : 'text-emerald-100 hover:text-white hover:bg-white/10'
+                    lang === 'hinglish' ? 'bg-[#176B45] text-white font-black shadow-xs' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
                   }`}
                 >
                   Hinglish
@@ -662,7 +662,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 <button
                   onClick={() => handleLangChange('en')}
                   className={`h-7 px-2.5 rounded-md transition-all cursor-pointer flex items-center ${
-                    lang === 'en' ? 'bg-white text-[#104B35] font-black shadow-xs' : 'text-emerald-100 hover:text-white hover:bg-white/10'
+                    lang === 'en' ? 'bg-[#176B45] text-white font-black shadow-xs' : 'text-[#E8F1E5]/80 hover:text-white hover:bg-[#176B45]/40'
                   }`}
                 >
                   English
@@ -672,11 +672,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* Notification Bell */}
               <button
                 onClick={onOpenNotifications}
-                className="h-9 w-9 rounded-lg bg-white/15 hover:bg-white/25 border border-white/20 text-white flex items-center justify-center relative transition-colors cursor-pointer shadow-xs shrink-0"
+                className="h-9 w-9 rounded-lg bg-[#176B45]/50 hover:bg-[#176B45] border border-[#176B45]/80 text-white flex items-center justify-center relative transition-colors cursor-pointer shadow-xs shrink-0"
                 title={t.nav.notifications}
               >
                 <Bell className="h-4 w-4 text-white" />
-                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-[#176B45]">
+                <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-[#104B35]">
                   3
                 </span>
               </button>
@@ -684,11 +684,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* User Profile Avatar */}
               <div 
                 onClick={() => handleNavClick('profile')}
-                className="h-9 w-9 rounded-lg bg-white text-[#104B35] font-black text-xs flex items-center justify-center border border-white/30 cursor-pointer shadow-xs relative shrink-0 hover:bg-emerald-50 transition-colors"
+                className="h-9 w-9 rounded-lg bg-[#176B45] text-white font-black text-xs flex items-center justify-center border border-[#37A86B]/40 cursor-pointer shadow-xs relative shrink-0 ring-2 ring-[#104B35] hover:bg-[#1c7e52] transition-colors"
                 title={t.nav.profile}
               >
                 AS
-                <span className="h-2 w-2 rounded-full bg-emerald-400 absolute -bottom-0.5 -right-0.5 ring-2 ring-[#176B45]" />
+                <span className="h-2 w-2 rounded-full bg-[#37A86B] absolute -bottom-0.5 -right-0.5 ring-2 ring-[#104B35]" />
               </div>
 
             </div>

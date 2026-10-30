@@ -205,6 +205,13 @@ export const api = {
     return request<MandiPricesResponse>(`/mandi-prices?${q.toString()}`);
   },
 
+  getWeatherForecast: (params?: { lat?: number; lon?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.lat !== undefined) q.append('lat', String(params.lat));
+    if (params?.lon !== undefined) q.append('lon', String(params.lon));
+    return request<FarmWeatherResponse>(`/weather/forecast${q.toString() ? `?${q.toString()}` : ''}`);
+  },
+
   // Forecasts & AI
   getRegionalForecasts: () => request<any[]>('/forecasts/regional'),
   predictYield: (data: any) => request<any>('/forecasts/predict-yield', { method: 'POST', body: JSON.stringify(data) }),
@@ -375,4 +382,70 @@ export interface MandiPricesResponse {
   lastUpdated: string;
   error?: string;
   message?: string;
+}
+
+export interface HourlyWeatherPoint {
+  time: string;
+  hour: string;
+  temperature: number;
+  humidity: number;
+  rainProbability: number;
+  precipitationMm: number;
+  windSpeedKmh: number;
+  condition: string;
+  conditionEn: string;
+  icon: string;
+  weatherCode: number;
+}
+
+export interface DailyWeatherPoint {
+  date: string;
+  dayName: string;
+  dayNameEn: string;
+  maxTemp: number;
+  minTemp: number;
+  precipitationMm: number;
+  rainProbability: number;
+  windSpeedKmh: number;
+  condition: string;
+  conditionEn: string;
+  icon: string;
+  weatherCode: number;
+}
+
+export interface FarmWeatherAdvisory {
+  id: string;
+  category: string;
+  status: 'success' | 'warning' | 'danger' | 'info';
+  badge: string;
+  title: string;
+  recommendation: string;
+  recommendationEn: string;
+}
+
+export interface FarmWeatherResponse {
+  success: boolean;
+  source: string;
+  isStale: boolean;
+  staleReason?: string;
+  coordinates: { lat: number; lon: number };
+  fetchedAt: string;
+  current: {
+    temperature: number;
+    apparentTemperature: number;
+    humidity: number;
+    windSpeedKmh: number;
+    precipitationMm: number;
+    pressureHpa: number;
+    soilMoisture: number;
+    condition: string;
+    conditionEn: string;
+    icon: string;
+    weatherCode: number;
+    time: string;
+  };
+  hourly24: HourlyWeatherPoint[];
+  daily7: DailyWeatherPoint[];
+  advisories: FarmWeatherAdvisory[];
+  disclaimer: string;
 }

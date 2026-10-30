@@ -51,6 +51,13 @@ import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
 import { MandiPricesView } from './MandiPricesView';
 import { FarmerProfileView } from './FarmerProfileView';
+import { CropSelectorPortal } from './CropSelectorPortal';
+import { FarmWeatherCard } from './FarmWeatherCard';
+import { RotatingMandiPriceCard } from './RotatingMandiPriceCard';
+import { useFarmLocation } from '../hooks/useFarmLocation';
+import { useFarmWeather } from '../hooks/useFarmWeather';
+import { useFarmerRegisteredCrops } from '../hooks/useFarmerRegisteredCrops';
+import { useRotatingMandiPrices } from '../hooks/useRotatingMandiPrices';
 
 type Lang = 'hi' | 'hinglish' | 'en';
 
@@ -99,6 +106,52 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
   const [loading, setLoading] = useState(true);
   const [listingSearchQuery, setListingSearchQuery] = useState('');
   const [cropSubTab, setCropSubTab] = useState<'active' | 'dealed'>('active');
+
+  // Search input & selected crop filter in hero banner
+  const [classicSearchQuery, setClassicSearchQuery] = useState('');
+  const [classicSelectedCrop, setClassicSelectedCrop] = useState('');
+
+  // -------------------------------------------------------------
+  // SHARED GLOBAL HOOKS: LOCATION, WEATHER, REGISTERED CROPS & MANDI
+  // -------------------------------------------------------------
+  const {
+    location: farmLocation,
+    isLoading: isLocationLoading,
+    errorMessage: locationError,
+    requestGpsLocation,
+    setManualLocation
+  } = useFarmLocation(user);
+
+  const {
+    weather: farmWeather,
+    loading: isWeatherLoading,
+    isStale: isWeatherStale,
+    staleReason: weatherStaleReason,
+    refreshWeather
+  } = useFarmWeather(
+    farmLocation.coords?.lat ?? 27.1767,
+    farmLocation.coords?.lon ?? 78.0081,
+    farmLocation.displayName
+  );
+
+  const { registeredCrops } = useFarmerRegisteredCrops(user, listings);
+
+  const {
+    currentIndex: mandiCropIndex,
+    totalCrops: mandiTotalCrops,
+    currentCrop: mandiCurrentCrop,
+    currentPriceData: mandiCurrentPriceData,
+    isRefreshing: isMandiRefreshing,
+    lastFetchTime: lastMandiFetchTime,
+    nextCrop: nextMandiCrop,
+    prevCrop: prevMandiCrop,
+    selectCrop: selectMandiCrop,
+    refreshPrices: refreshMandiPrices
+  } = useRotatingMandiPrices(
+    registeredCrops,
+    farmLocation.state || 'Uttar Pradesh',
+    farmLocation.district || 'Agra'
+  );
 
   // Selected Listing for Buyer Matches
   const [selectedListingForMatches, setSelectedListingForMatches] = useState<FarmerListing | null>(null);
@@ -986,8 +1039,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
               </span>
             </div>
             <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-              <MapPin className="h-3 w-3 text-slate-400" />
-              <span>{user?.location || 'Khandauli, Agra, UP'}</span>
+              <MapPin className="h-3 w-3 text-emerald-600" />
+              <span className="font-semibold text-slate-700">{farmLocation.displayName || user?.location || 'Khandauli, Agra, UP'}</span>
               <span>•</span>
               <span>{user?.farmerProfile?.acres || 12} एकड़ खेती</span>
             </div>
@@ -1034,6 +1087,100 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
               English
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* 1.5 SMART HERO INTELLIGENCE BAR (Unclipped Crop Selector + Weather Card + Rotating Mandi Card) */}
+      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-emerald-700/50 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
+        {/* Left: Search Bar & Crop Selector */}
+        <div className="flex-1 space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-emerald-200">
+            <span className="flex items-center gap-1 font-bold">
+              <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+              {farmLocation.displayName || 'Khandauli, Agra, UP'}
+            </span>
+            <span>•</span>
+            <span>🌾 {user?.farmerProfile?.acres || 12} एकड़ खेती</span>
+            <span>•</span>
+            <span className="text-emerald-300 font-medium">कृषि इंटेलिजेंस डैशबोर्ड</span>
+          </div>
+
+          {/* Search & Crop Selector Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center bg-white rounded-xl p-1 shadow-sm gap-1.5 max-w-2xl">
+            <CropSelectorPortal
+              selectedCrop={classicSelectedCrop}
+              onSelect={(crop) => {
+                setClassicSelectedCrop(crop);
+                setClassicSearchQuery(crop);
+              }}
+              placeholder="फसल चुनें"
+              themeVariant="classic"
+            />
+
+            <div className="flex-1 px-2 relative flex items-center">
+              <input
+                type="text"
+                placeholder="फसल या खरीदार खोजें (उदा. आलू, गेहूं)..."
+                value={classicSearchQuery}
+                onChange={(e) => setClassicSearchQuery(e.target.value)}
+                className="w-full text-xs font-semibold text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none pr-6"
+              />
+              <button
+                type="button"
+                onClick={() => setShowVoiceModal(true)}
+                className="absolute right-1 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-0.5"
+                title="बोलकर बताएं"
+              >
+                <Mic className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                if (classicSearchQuery) {
+                  setBuyerFilterCrop(classicSearchQuery);
+                }
+                handleNavigateTab('buyers');
+              }}
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0"
+            >
+              <span>खरीदार खोजें →</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Right: Weather & Rotating Mandi Card Widgets */}
+        <div className="w-full xl:w-72 shrink-0 grid grid-cols-2 gap-2 text-slate-800">
+          <FarmWeatherCard
+            weather={farmWeather}
+            location={farmLocation}
+            isLoading={isWeatherLoading}
+            isStale={isWeatherStale}
+            staleReason={weatherStaleReason}
+            errorMessage={locationError}
+            onRefresh={refreshWeather}
+            onRequestGps={requestGpsLocation}
+            onSaveManualLocation={setManualLocation}
+            themeVariant="classic"
+          />
+          <RotatingMandiPriceCard
+            currentCrop={mandiCurrentCrop}
+            currentIndex={mandiCropIndex}
+            totalCrops={mandiTotalCrops}
+            priceData={mandiCurrentPriceData}
+            isRefreshing={isMandiRefreshing}
+            lastFetchTime={lastMandiFetchTime}
+            onNext={nextMandiCrop}
+            onPrev={prevMandiCrop}
+            onSelectIndex={selectMandiCrop}
+            onRefresh={refreshMandiPrices}
+            onAddCropClick={() => {
+              setWizardStep(1);
+              setShowAddWizard(true);
+            }}
+            onViewAllMandisClick={() => handleNavigateTab('mandi_prices')}
+            themeVariant="classic"
+          />
         </div>
       </div>
 

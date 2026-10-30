@@ -1127,15 +1127,28 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
           }
         }
 
-        // If commodity was requested, filter by commodity
+        // If commodity was requested, strictly filter by commodity or aliases
         if (cleanCommodity) {
-          const matchedByCmdt = snapRecords.filter(r => 
-            (r.commodity || '').toLowerCase().includes(cleanCommodity) ||
-            (r.variety || '').toLowerCase().includes(cleanCommodity)
-          );
-          if (matchedByCmdt.length > 0) {
-            snapRecords = matchedByCmdt;
+          const aliases = [cleanCommodity];
+          if (cleanCommodity.includes('rice') || cleanCommodity.includes('paddy') || cleanCommodity.includes('dhan')) {
+            aliases.push('paddy', 'rice');
+          } else if (cleanCommodity.includes('potato') || cleanCommodity.includes('aloo')) {
+            aliases.push('potato');
+          } else if (cleanCommodity.includes('wheat') || cleanCommodity.includes('gehu')) {
+            aliases.push('wheat');
+          } else if (cleanCommodity.includes('tomato') || cleanCommodity.includes('tamatar')) {
+            aliases.push('tomato');
+          } else if (cleanCommodity.includes('onion') || cleanCommodity.includes('pyaz')) {
+            aliases.push('onion');
+          } else if (cleanCommodity.includes('mustard') || cleanCommodity.includes('sarson')) {
+            aliases.push('mustard');
           }
+
+          snapRecords = snapRecords.filter(r => {
+            const cmdt = (r.commodity || '').toLowerCase();
+            const vrty = (r.variety || '').toLowerCase();
+            return aliases.some(a => cmdt.includes(a) || vrty.includes(a));
+          });
         }
 
         resultRecords = snapRecords;
@@ -1176,14 +1189,14 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
       }
     }
 
-    // Cache the retrieved records only if real records were returned
-    if (resultRecords && resultRecords.length > 0) {
+    // Cache the retrieved records (including empty list to prevent upstream hammering)
+    if (resultRecords !== null) {
       cache.set(cacheKey, {
         records: resultRecords,
         source,
         reportDate,
         cachedAt: now,
-        expiresAt: now + CACHE_TTL_MS,
+        expiresAt: now + (resultRecords.length > 0 ? CACHE_TTL_MS : 300000),
         apiDurationMs,
         isOfflineSnapshot,
         snapshotUpdatedAt

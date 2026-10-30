@@ -12,7 +12,7 @@ const { calculateMatch, evaluateEligibility } = require('./services/matchingServ
 const { calculateNetRealization, calculateStorageScenario } = require('./services/netRealizationService');
 const { predictYield, analyzeProduceQualityCV } = require('./services/forecastService');
 const { otpProvider } = require('./services/otpService');
-const { getHyperlocalWeather } = require('./services/weatherService');
+const { getHyperlocalWeather, getComprehensiveWeatherForecast } = require('./services/weatherService');
 const { calculateDistanceKm, resolveCoordinates, filterByDistance } = require('./services/locationService');
 const { generateBuyerRecommendation, generateKisanSaathiResponse } = require('./services/geminiService');
 const {
@@ -3416,6 +3416,35 @@ app.get('/api/mandi-diagnostics', async (req, res) => {
       region: process.env.VERCEL_REGION || process.env.NOW_REGION || 'local',
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+// ---------------------------------------------
+// HYPERLOCAL & 7-DAY AGRICULTURAL WEATHER FORECAST
+// ---------------------------------------------
+app.get('/api/weather/forecast', optionalAuth, async (req, res) => {
+  try {
+    let lat = req.query.lat ? Number(req.query.lat) : undefined;
+    let lon = req.query.lon ? Number(req.query.lon) : undefined;
+
+    // Fallback to authenticated user coordinates if available
+    if ((lat === undefined || isNaN(lat)) && req.user?.farmerProfile?.coordinates) {
+      lat = Number(req.user.farmerProfile.coordinates.lat);
+      lon = Number(req.user.farmerProfile.coordinates.lon);
+    }
+
+    // Default to Western UP / Agra (27.1767, 78.0081) if unavailable
+    if (lat === undefined || isNaN(lat) || lon === undefined || isNaN(lon)) {
+      lat = 27.1767;
+      lon = 78.0081;
+    }
+
+    const forecast = await getComprehensiveWeatherForecast(lat, lon);
+    res.setHeader('Cache-Control', 'public, max-age=300'); // 5 minutes client cache
+    res.json(forecast);
+  } catch (error) {
+    console.error('[API] /api/weather/forecast error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch weather forecast' });
   }
 });
 

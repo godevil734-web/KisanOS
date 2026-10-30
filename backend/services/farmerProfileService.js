@@ -107,6 +107,9 @@ async function getFarmerProfile(userId) {
     district: user.district || user.farmerProfile?.district || (user.location ? user.location.split(',')[0].trim() : ''),
     state: user.state || user.farmerProfile?.state || (user.location ? (user.location.split(',')[1] || '').trim() : ''),
     preferredLanguage: user.preferredLanguage || 'hi',
+    farmLocation: user.farmerProfile?.farmLocation || user.location || `${user.village ? user.village + ', ' : ''}${user.district || 'Agra'}, ${user.state || 'Uttar Pradesh'}`,
+    coordinates: user.farmerProfile?.coordinates || null,
+    mainCrops: user.farmerProfile?.mainCrops || user.mainCrops || [],
     status: user.status,
     verified: Boolean(user.verified),
     createdAt: user.createdAt,
@@ -140,23 +143,30 @@ async function getFarmerProfile(userId) {
 async function updateFarmerProfile(userId, updates = {}) {
   if (!userId) throw new Error('User ID is required.');
 
-  const { name, village, district, state, avatarUrl, preferredLanguage, bio } = updates;
+  const { name, village, district, state, avatarUrl, preferredLanguage, bio, farmLocation, latitude, longitude, coordinates, mainCrops } = updates;
 
   // Build clean location string if village/district/state provided
   const locationParts = [village, district, state].filter(Boolean);
-  const locationStr = locationParts.length > 0 ? locationParts.join(', ') : undefined;
+  const locationStr = locationParts.length > 0 ? locationParts.join(', ') : (farmLocation || undefined);
 
   const userRes = await pool.query(`SELECT * FROM users WHERE id = $1 LIMIT 1`, [userId]);
   if (userRes.rows.length === 0) throw new Error('User account not found.');
   const existingUser = mapRow(userRes.rows[0]);
 
   const existingProfile = existingUser.farmerProfile || {};
+  const resolvedCoordinates = (latitude !== undefined && longitude !== undefined)
+    ? { lat: Number(latitude), lon: Number(longitude) }
+    : (coordinates !== undefined ? coordinates : existingProfile.coordinates);
+
   const updatedFarmerProfile = {
     ...existingProfile,
     village: village !== undefined ? village : existingProfile.village,
     district: district !== undefined ? district : existingProfile.district,
     state: state !== undefined ? state : existingProfile.state,
-    bio: bio !== undefined ? bio : existingProfile.bio
+    bio: bio !== undefined ? bio : existingProfile.bio,
+    farmLocation: farmLocation !== undefined ? farmLocation : (locationStr || existingProfile.farmLocation),
+    coordinates: resolvedCoordinates,
+    mainCrops: Array.isArray(mainCrops) ? mainCrops : existingProfile.mainCrops
   };
 
   const updateFields = [];

@@ -61,6 +61,13 @@ import { FarmerProfileView } from './FarmerProfileView';
 import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
 import { farmerDashboardTranslations, DashboardLang } from '../i18n/farmerDashboardTranslations';
+import { CropSelectorPortal } from './CropSelectorPortal';
+import { FarmWeatherCard } from './FarmWeatherCard';
+import { RotatingMandiPriceCard } from './RotatingMandiPriceCard';
+import { useFarmLocation } from '../hooks/useFarmLocation';
+import { useFarmWeather } from '../hooks/useFarmWeather';
+import { useFarmerRegisteredCrops } from '../hooks/useFarmerRegisteredCrops';
+import { useRotatingMandiPrices } from '../hooks/useRotatingMandiPrices';
 
 interface FarmerDashboardPreviewProps {
   onNavigate?: (path: string) => void;
@@ -149,6 +156,48 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
   const [storageFacilities, setStorageFacilities] = useState<any[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // -------------------------------------------------------------
+  // SHARED GLOBAL HOOKS: LOCATION, WEATHER, REGISTERED CROPS & MANDI
+  // -------------------------------------------------------------
+  const {
+    location: farmLocation,
+    isLoading: isLocationLoading,
+    errorMessage: locationError,
+    requestGpsLocation,
+    setManualLocation
+  } = useFarmLocation(user);
+
+  const {
+    weather: farmWeather,
+    loading: isWeatherLoading,
+    isStale: isWeatherStale,
+    staleReason: weatherStaleReason,
+    refreshWeather
+  } = useFarmWeather(
+    farmLocation.coords?.lat ?? 27.1767,
+    farmLocation.coords?.lon ?? 78.0081,
+    farmLocation.displayName
+  );
+
+  const { registeredCrops } = useFarmerRegisteredCrops(user, listings);
+
+  const {
+    currentIndex: mandiCropIndex,
+    totalCrops: mandiTotalCrops,
+    currentCrop: mandiCurrentCrop,
+    currentPriceData: mandiCurrentPriceData,
+    isRefreshing: isMandiRefreshing,
+    lastFetchTime: lastMandiFetchTime,
+    nextCrop: nextMandiCrop,
+    prevCrop: prevMandiCrop,
+    selectCrop: selectMandiCrop,
+    refreshPrices: refreshMandiPrices
+  } = useRotatingMandiPrices(
+    registeredCrops,
+    farmLocation.state || 'Uttar Pradesh',
+    farmLocation.district || 'Agra'
+  );
 
   // Listing matching & AI guide state
   const [selectedListingForMatches, setSelectedListingForMatches] = useState<FarmerListing | null>(null);
@@ -1269,9 +1318,9 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-0.5 text-xs text-[#657468] font-medium">
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1 font-bold">
                           <MapPin className="h-3 w-3 text-[#176B45]" />
-                          {user?.village || 'Khandauli'}, {user?.district || 'Agra'}, Uttar Pradesh
+                          {farmLocation.displayName || `${user?.village || 'Khandauli'}, ${user?.district || 'Agra'}, Uttar Pradesh`}
                         </span>
                         <span className="hidden sm:inline text-[#E5E0D5]">|</span>
                         <span>🌾 {user?.farmerProfile?.acres || 12} {t.banner.acresFarming}</span>
@@ -1285,35 +1334,16 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                       <div className="pt-1 w-full max-w-xl">
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center bg-white rounded-lg border border-[#A3D1A5] p-1 shadow-2xs gap-1.5">
                           
-                          {/* Dropdown: फसल चुनें ⌄ */}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => setIsCropDropdownOpen(!isCropDropdownOpen)}
-                              className="w-full sm:w-auto flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-md bg-[#E8F1E5] hover:bg-[#d8e7d4] text-xs font-bold text-[#176B45] transition-colors cursor-pointer"
-                            >
-                              <span>🌾 {bannerSelectedCrop || t.banner.selectCrop}</span>
-                              <ChevronDown className="h-3 w-3 text-[#176B45]" />
-                            </button>
-
-                            {isCropDropdownOpen && (
-                              <div className="absolute top-full left-0 mt-1 w-44 bg-white border border-[#E5E0D5] rounded-xl shadow-xl z-50 p-1 text-xs font-bold">
-                                {cropDropdownOptions.map((c) => (
-                                  <div
-                                    key={c.id}
-                                    onClick={() => {
-                                      setBannerSelectedCrop(c.name);
-                                      setBannerSearchQuery(c.name);
-                                      setIsCropDropdownOpen(false);
-                                    }}
-                                    className="px-3 py-1.5 hover:bg-[#E8F1E5] rounded-lg cursor-pointer text-[#17251D]"
-                                  >
-                                    {c.name}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                          {/* Dropdown: फसल चुनें ⌄ (Unclipped React Portal with search & keyboard nav) */}
+                          <CropSelectorPortal
+                            selectedCrop={bannerSelectedCrop === t.banner.selectCrop ? '' : bannerSelectedCrop}
+                            onSelect={(crop) => {
+                              setBannerSelectedCrop(crop);
+                              setBannerSearchQuery(crop);
+                            }}
+                            placeholder={t.banner.selectCrop}
+                            themeVariant="harvest"
+                          />
 
                           {/* Input field with integrated mic button */}
                           <div className="flex-1 px-2 relative flex items-center">
@@ -1389,39 +1419,38 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                       <ChevronRight className="h-4 w-4 text-[#657468] shrink-0" />
                     </div>
 
-                    {/* Bottom Weather & Mandi Rate Combined Card */}
-                    <div className="p-2.5 rounded-lg bg-white border border-[#E5E0D5] shadow-2xs grid grid-cols-2 gap-2 divide-x divide-[#E5E0D5]">
-                      
-                      {/* Weather Info */}
-                      <div className="space-y-0.5 pr-1">
-                        <div className="text-[10px] font-bold text-[#17251D] flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-[#176B45]" />
-                          <span>Agra, UP</span>
-                        </div>
-                        <div className="text-[9px] text-[#657468]">{t.banner.weatherLabel}</div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-base">☀️</span>
-                          <span className="text-sm font-black text-[#17251D]">28°C</span>
-                        </div>
-                        <div className="text-[9px] text-[#657468] font-medium">{t.banner.clearSky}</div>
-                      </div>
-
-                      {/* Mandi Rate Info */}
-                      <div 
-                        onClick={() => handleNavClick('mandi_prices')}
-                        className="space-y-0.5 pl-2 cursor-pointer hover:bg-[#F7F4E9]/80 rounded-lg transition-colors"
-                      >
-                        <div className="text-[9px] font-bold text-[#657468]">{t.banner.mandiLabel}</div>
-                        <div className="text-xs font-black text-[#E6A52E]">{t.crops.potato}</div>
-                        <div className="text-xs font-black text-[#17251D]">
-                          ₹2,000 <span className="text-[9px] text-[#657468] font-normal">{t.banner.perQuintal}</span>
-                        </div>
-                        <div className="text-[9px] font-bold text-[#37A86B] flex items-center gap-0.5">
-                          <span>↑ {t.banner.trendUp}</span>
-                          <ChevronRight className="h-2.5 w-2.5" />
-                        </div>
-                      </div>
-
+                    {/* Bottom Weather & Mandi Rate Combined Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <FarmWeatherCard
+                        weather={farmWeather}
+                        location={farmLocation}
+                        isLoading={isWeatherLoading}
+                        isStale={isWeatherStale}
+                        staleReason={weatherStaleReason}
+                        errorMessage={locationError}
+                        onRefresh={refreshWeather}
+                        onRequestGps={requestGpsLocation}
+                        onSaveManualLocation={setManualLocation}
+                        themeVariant="harvest"
+                      />
+                      <RotatingMandiPriceCard
+                        currentCrop={mandiCurrentCrop}
+                        currentIndex={mandiCropIndex}
+                        totalCrops={mandiTotalCrops}
+                        priceData={mandiCurrentPriceData}
+                        isRefreshing={isMandiRefreshing}
+                        lastFetchTime={lastMandiFetchTime}
+                        onNext={nextMandiCrop}
+                        onPrev={prevMandiCrop}
+                        onSelectIndex={selectMandiCrop}
+                        onRefresh={refreshMandiPrices}
+                        onAddCropClick={() => {
+                          setWizardStep(1);
+                          setShowAddWizard(true);
+                        }}
+                        onViewAllMandisClick={() => handleNavClick('mandi_prices')}
+                        themeVariant="harvest"
+                      />
                     </div>
 
                   </div>

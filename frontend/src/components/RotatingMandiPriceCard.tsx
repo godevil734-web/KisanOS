@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw, Plus, Landmark } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Plus, AlertCircle } from 'lucide-react';
 import { MandiCropPriceData } from '../hooks/useRotatingMandiPrices';
 
 interface RotatingMandiPriceCardProps {
@@ -8,6 +8,7 @@ interface RotatingMandiPriceCardProps {
   totalCrops: number;
   priceData: MandiCropPriceData | null;
   isRefreshing: boolean;
+  refreshError?: string | null;
   lastFetchTime: Date | null;
   onNext: () => void;
   onPrev: () => void;
@@ -24,6 +25,7 @@ export const RotatingMandiPriceCard: React.FC<RotatingMandiPriceCardProps> = ({
   totalCrops,
   priceData,
   isRefreshing,
+  refreshError,
   lastFetchTime,
   onNext,
   onPrev,
@@ -75,16 +77,21 @@ export const RotatingMandiPriceCard: React.FC<RotatingMandiPriceCardProps> = ({
   const isUnavailable = priceData?.priceStatus === 'UNAVAILABLE';
   const isFetching = priceData?.priceStatus === 'FETCHING';
 
+  // Format last fetched time
+  const formattedFetchTime = lastFetchTime
+    ? lastFetchTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : priceData?.marketDate || 'आज';
+
   return (
     <div
-      className={`p-2.5 rounded-lg border shadow-2xs flex flex-col justify-between transition-all group ${
+      className={`p-2.5 rounded-lg border shadow-2xs flex flex-col justify-between transition-all group relative ${
         isHarvest
           ? 'bg-white border-[#E5E0D5] hover:border-[#176B45]/50'
           : 'bg-white border-slate-200 hover:border-emerald-400'
       }`}
     >
       <div className="space-y-0.5">
-        {/* Top Header: Label, Live Pulse & Manual Refresh */}
+        {/* Top Header: Label, Last Updated & Manual Refresh Button */}
         <div className="flex items-center justify-between text-[9px] font-bold text-[#657468]">
           <span 
             onClick={onViewAllMandisClick} 
@@ -96,7 +103,12 @@ export const RotatingMandiPriceCard: React.FC<RotatingMandiPriceCardProps> = ({
           </span>
 
           <div className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" title="Live 30s feed" />
+            <span 
+              className="text-[8px] text-slate-400" 
+              title={lastFetchTime ? `अंतिम अपडेट: ${lastFetchTime.toLocaleTimeString()}` : 'अपडेट समय'}
+            >
+              {formattedFetchTime}
+            </span>
             <button
               type="button"
               onClick={(e) => {
@@ -104,13 +116,25 @@ export const RotatingMandiPriceCard: React.FC<RotatingMandiPriceCardProps> = ({
                 onRefresh();
               }}
               disabled={isRefreshing}
-              className="text-[#657468] hover:text-[#176B45] p-0.5 rounded cursor-pointer transition-colors"
-              title="30s लाइव भाव रीफ्रेश करें"
+              className={`p-1 rounded transition-colors cursor-pointer ${
+                isRefreshing 
+                  ? 'text-[#176B45] cursor-not-allowed opacity-80' 
+                  : 'text-[#657468] hover:text-[#176B45] hover:bg-slate-100'
+              }`}
+              title="ताज़ा सरकारी मंडी भाव लोड करें (Click to refresh latest prices)"
             >
               <RefreshCw className={`h-2.5 w-2.5 ${isRefreshing ? 'animate-spin text-[#176B45]' : ''}`} />
             </button>
           </div>
         </div>
+
+        {/* Error notification banner if manual refresh fails */}
+        {refreshError && (
+          <div className="text-[8px] text-rose-600 bg-rose-50 px-1 py-0.5 rounded flex items-center gap-1">
+            <AlertCircle className="h-2 w-2 shrink-0" />
+            <span className="truncate">{refreshError}</span>
+          </div>
+        )}
 
         {/* Crop Name prominently displayed */}
         <div className="flex items-center justify-between gap-1 pt-0.5">

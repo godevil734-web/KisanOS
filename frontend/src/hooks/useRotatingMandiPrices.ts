@@ -18,7 +18,6 @@ export interface MandiCropPriceData {
 }
 
 const ROTATION_INTERVAL_MS = 5000;
-const REFRESH_INTERVAL_MS = 30000;
 
 export function useRotatingMandiPrices(
   registeredCrops: string[] = [],
@@ -28,10 +27,12 @@ export function useRotatingMandiPrices(
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [priceMap, setPriceMap] = useState<Record<string, MandiCropPriceData>>({});
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
 
   const inFlightRef = useRef<boolean>(false);
   const isMounted = useRef<boolean>(true);
+  const hasInitializedRef = useRef<boolean>(false);
 
   // Keep index within bounds if registered crops array changes
   useEffect(() => {
@@ -58,13 +59,17 @@ export function useRotatingMandiPrices(
     if (inFlightRef.current) return;
 
     inFlightRef.current = true;
-    if (isManual) setIsRefreshing(true);
+    if (isManual) {
+      setIsRefreshing(true);
+      setRefreshError(null);
+    }
 
     try {
       const stateToQuery = locationState || 'Uttar Pradesh';
       const districtToQuery = locationDistrict || 'Agra';
 
       const results: Record<string, MandiCropPriceData> = {};
+      let anyErrorOccurred = false;
 
       // Fetch prices in parallel for all registered crops of this farmer
       await Promise.all(
@@ -118,6 +123,7 @@ export function useRotatingMandiPrices(
             }
           } catch (err: any) {
             console.debug(`[useRotatingMandiPrices] Price check error for ${crop}:`, err.message);
+            anyErrorOccurred = true;
             // If already cached from earlier fetch, retain previous valid price
             results[crop] = priceMap[crop] || {
               cropName: crop,
@@ -138,6 +144,15 @@ export function useRotatingMandiPrices(
       if (isMounted.current) {
         setPriceMap(prev => ({ ...prev, ...results }));
         setLastFetchTime(new Date());
+        if (anyErrorOccurred && isManual) {
+          setRefreshError('कुछ फसलों के ताज़ा भाव लोड नहीं हो सके, पिछले भाव सुरक्षित हैं।');
+        } else if (isManual) {
+          setRefreshError(null);
+        }
+      }
+    } catch (err: any) {
+      if (isMounted.current && isManual) {
+        setRefreshError('मंडी भाव रीफ्रेश करने में असमर्थ। पूर्व भाव सुरक्षित हैं।');
       }
     } finally {
       inFlightRef.current = false;
@@ -147,33 +162,23 @@ export function useRotatingMandiPrices(
     }
   }, [registeredCrops, locationState, locationDistrict, priceMap]);
 
-  // Initial fetch and 30-second polling interval
+  // Fetch ONCE on farmer login / dashboard initialization (NO 30s background polling)
   useEffect(() => {
     if (registeredCrops.length === 0) return;
+    if (hasInitializedRef.current) return;
 
-    // Fetch immediately on mount / crop list change
+    hasInitializedRef.current = true;
     fetchAllCropPrices(false);
+  }, [registeredCrops, fetchAllCropPrices]);
 
-    // Refresh every 30 seconds while dashboard is open and visible
-    const timer30s = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) {
-        return; // Pause refresh when browser tab is inactive
-      }
-      fetchAllCropPrices(false);
-    }, REFRESH_INTERVAL_MS);
-
-    return () => {
-      clearInterval(timer30s);
-    };
-  }, [registeredCrops, locationState, locationDistrict, fetchAllCropPrices]);
-
-  // 5-second rotation timer (Separated strictly from network fetching!)
+  // 5-second rotation timer (Cycles through existing in-memory price map with ZERO API requests)
   useEffect(() => {
     if (registeredCrops.length <= 1) return;
 
     const timer5s = setInterval(() => {
+      // Pause rotation when browser tab is inactive or hidden
       if (typeof document !== 'undefined' && document.hidden) {
-        return; // Pause rotation when browser tab is inactive
+        return;
       }
       setCurrentIndex(prev => (prev + 1) % registeredCrops.length);
     }, ROTATION_INTERVAL_MS);
@@ -183,7 +188,7 @@ export function useRotatingMandiPrices(
     };
   }, [registeredCrops.length]);
 
-  // Current crop and its mandi data
+  // Current crop and its mandi data (read purely from in-memory priceMap)
   const currentCrop = registeredCrops[currentIndex] || '';
   const currentPriceData: MandiCropPriceData | null = useMemo(() => {
     if (!currentCrop) return null;
@@ -225,6 +230,7 @@ export function useRotatingMandiPrices(
     currentPriceData,
     priceMap,
     isRefreshing,
+    refreshError,
     lastFetchTime,
     nextCrop,
     prevCrop,

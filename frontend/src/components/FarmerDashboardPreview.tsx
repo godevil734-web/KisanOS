@@ -188,6 +188,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
     currentCrop: mandiCurrentCrop,
     currentPriceData: mandiCurrentPriceData,
     isRefreshing: isMandiRefreshing,
+    refreshError: mandiRefreshError,
     lastFetchTime: lastMandiFetchTime,
     nextCrop: nextMandiCrop,
     prevCrop: prevMandiCrop,
@@ -1439,6 +1440,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                         totalCrops={mandiTotalCrops}
                         priceData={mandiCurrentPriceData}
                         isRefreshing={isMandiRefreshing}
+                        refreshError={mandiRefreshError}
                         lastFetchTime={lastMandiFetchTime}
                         onNext={nextMandiCrop}
                         onPrev={prevMandiCrop}

@@ -1301,6 +1301,55 @@ app.all('/api/cleanup', async (req, res) => {
   }
 });
 
+// Cron / Admin callable government mandi prices synchronization endpoint
+app.all(['/api/cron/sync-mandi-prices', '/api/mandi-sync'], async (req, res) => {
+  const expectedSecret = process.env.CRON_SECRET;
+  const rawSecret = req.headers['x-cron-secret'] || 
+                    (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '') ||
+                    req.query.secret;
+
+  let isAuthorized = false;
+
+  // Check constant-time CRON_SECRET if configured
+  if (expectedSecret && rawSecret) {
+    const suppliedBuf = Buffer.from(String(rawSecret));
+    const expectedBuf = Buffer.from(String(expectedSecret));
+    if (suppliedBuf.length === expectedBuf.length && crypto.timingSafeEqual(suppliedBuf, expectedBuf)) {
+      isAuthorized = true;
+    }
+  }
+
+  // Also check if caller has a valid admin JWT
+  if (!isAuthorized && req.headers.authorization) {
+    try {
+      const token = req.headers.authorization.replace('Bearer ', '');
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded && decoded.role === 'admin') {
+        isAuthorized = true;
+      }
+    } catch (e) {
+      // not valid admin jwt
+    }
+  }
+
+  if (!isAuthorized) {
+    return res.status(403).json({ error: 'Unauthorized. Requires valid CRON_SECRET or Admin authorization.' });
+  }
+
+  try {
+    const { syncMandiSnapshots } = require('./scripts/sync_mandi_snapshots');
+    const result = await syncMandiSnapshots();
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      ...result
+    });
+  } catch (err) {
+    console.error('[MANDI SYNC] Error syncing mandi snapshots:', err.message);
+    res.status(500).json({ error: 'Failed to synchronize mandi prices', message: err.message });
+  }
+});
+
 // ---------------------------------------------
 // 2. CROPS CATALOGUE (CROP-AGNOSTIC)
 // ---------------------------------------------

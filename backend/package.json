@@ -9,7 +9,8 @@
     "dev": "node --watch server.js",
     "db:migrate": "node migrate.js",
     "db:seed": "node seed.js",
-    "db:reset": "node scripts/db-reset.js"
+    "db:reset": "node scripts/db-reset.js",
+    "sync:mandi": "node scripts/sync_mandi_snapshots.js"
   },
   "dependencies": {
     "@google/genai": "^2.27.0",

@@ -138,13 +138,23 @@ let marketDistrictMappingExpiresAt = 0;
 let statesDistrictsCache = null;
 let statesDistrictsExpiresAt = 0;
 
+function resolveGovApiUrl(targetUrl) {
+  const proxyBase = process.env.MANDI_API_PROXY_URL || process.env.DATA_GOV_PROXY_URL || process.env.DATA_GOV_BASE_URL;
+  if (proxyBase && typeof proxyBase === 'string' && proxyBase.trim().length > 0) {
+    const cleanBase = proxyBase.trim().replace(/\/$/, '');
+    return targetUrl.replace('https://api.data.gov.in', cleanBase);
+  }
+  return targetUrl;
+}
+
 /**
  * Official Government Data Fetcher (data.gov.in)
  * Uses standard Node.js fetch with normal HTTPS hostname resolution.
  * TLS certificate verification is strictly maintained (never disabled).
  * Captures exact HTTP status and sanitized response body for diagnostics.
  */
-async function fetchGovtData(url, options = {}) {
+async function fetchGovtData(rawUrl, options = {}) {
+  const url = resolveGovApiUrl(rawUrl);
   const timeoutMs = options.timeout || 12000;
   const maxRetries = options.retries !== undefined ? options.retries : 2;
 
@@ -554,28 +564,46 @@ async function fetchFromDataGovIn(state, district, commodity, limit = 200) {
   }
 
   const resourceId = getDataGovResourceId();
-  const params = new URLSearchParams({
-    'api-key': apiKey,
-    'format': 'json',
-    'limit': String(limit)
-  });
+  const cleanState = (state || '').trim();
+  const cleanDistrict = district && district.toLowerCase() !== 'all' ? district.trim() : null;
+  const cleanCommodity = commodity && commodity.toLowerCase() !== 'all' ? commodity.trim() : null;
 
-  if (state) params.append('filters[state]', state.trim());
-  if (district && district.toLowerCase() !== 'all') params.append('filters[district]', district.trim());
-  if (commodity && commodity.toLowerCase() !== 'all') params.append('filters[commodity]', commodity.trim());
+  const buildUrl = (useKeyword = true, includeDistrict = true, includeCommodity = true, customLimit = limit) => {
+    const params = new URLSearchParams({
+      'api-key': apiKey,
+      'format': 'json',
+      'limit': String(customLimit)
+    });
+    if (cleanState) {
+      params.append(useKeyword ? 'filters[state.keyword]' : 'filters[state]', cleanState);
+    }
+    if (includeDistrict && cleanDistrict) {
+      params.append(useKeyword ? 'filters[district.keyword]' : 'filters[district]', cleanDistrict);
+    }
+    if (includeCommodity && cleanCommodity) {
+      params.append(useKeyword ? 'filters[commodity.keyword]' : 'filters[commodity]', cleanCommodity);
+    }
+    return `https://api.data.gov.in/resource/${resourceId}?${params.toString()}`;
+  };
 
-  const url = `https://api.data.gov.in/resource/${resourceId}?${params.toString()}`;
   const fetchStart = Date.now();
 
   const mapRecords = (rawRecords) => {
-    return rawRecords.map((r, index) => {
+    const validRecords = rawRecords.filter(r => {
+      if (cleanState && r.state && r.state.toLowerCase() !== cleanState.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+
+    return validRecords.map((r, index) => {
       const modal = Number(r.modal_price) || 0;
       const min = Number(r.min_price) || modal;
       const max = Number(r.max_price) || modal;
       return {
-        id: `dgov-${r.state || state}-${r.district || district}-${r.market || 'mandi'}-${r.commodity || 'crop'}-${index}`,
-        state: r.state || state,
-        district: r.district || district,
+        id: `dgov-${r.state || cleanState}-${r.district || cleanDistrict || 'district'}-${r.market || 'mandi'}-${r.commodity || 'crop'}-${index}`,
+        state: r.state || cleanState,
+        district: r.district || cleanDistrict || 'District Mandi',
         market: r.market || 'Regional Mandi',
         commodity: r.commodity || 'Agricultural Produce',
         variety: r.variety || 'Standard',
@@ -596,43 +624,42 @@ async function fetchFromDataGovIn(state, district, commodity, limit = 200) {
   };
 
   try {
+    // 1. Try exact query using state.keyword
+    const url = buildUrl(true, true, true, limit);
     const { data: json, status, transport } = await fetchGovtData(url, { timeout: 12000 });
     const durationMs = Date.now() - fetchStart;
 
     if (json && Array.isArray(json.records) && json.records.length > 0) {
-      return {
-        records: mapRecords(json.records),
-        durationMs,
-        total: json.total || json.records.length,
-        status: 200,
-        transport,
-        keyDiag
-      };
+      const mapped = mapRecords(json.records);
+      if (mapped.length > 0) {
+        return {
+          records: mapped,
+          durationMs,
+          total: json.total || mapped.length,
+          status: 200,
+          transport,
+          keyDiag
+        };
+      }
     }
 
-    // If exact commodity filter returned 0 records, fallback to state/district broad query to allow partial match
-    if (commodity && commodity.toLowerCase() !== 'all') {
+    // 2. If commodity was specified but returned 0, try without commodity filter & match client-side
+    if (cleanCommodity) {
       try {
-        const fallbackParams = new URLSearchParams({
-          'api-key': apiKey,
-          'format': 'json',
-          'limit': String(limit)
-        });
-        if (state) fallbackParams.append('filters[state]', state.trim());
-        if (district && district.toLowerCase() !== 'all') fallbackParams.append('filters[district]', district.trim());
-        const fallbackUrl = `https://api.data.gov.in/resource/${resourceId}?${fallbackParams.toString()}`;
-        const { data: fbJson } = await fetchGovtData(fallbackUrl, { timeout: 10000 });
+        const fbUrl = buildUrl(true, true, false, Math.max(limit, 300));
+        const { data: fbJson } = await fetchGovtData(fbUrl, { timeout: 10000 });
         if (fbJson && Array.isArray(fbJson.records) && fbJson.records.length > 0) {
-          const target = commodity.toLowerCase().trim();
+          const target = cleanCommodity.toLowerCase();
           const matched = fbJson.records.filter(r => 
             (r.commodity || '').toLowerCase().includes(target) || 
             (r.variety || '').toLowerCase().includes(target)
           );
           if (matched.length > 0) {
+            const mapped = mapRecords(matched);
             return {
-              records: mapRecords(matched),
+              records: mapped,
               durationMs: Date.now() - fetchStart,
-              total: matched.length,
+              total: mapped.length,
               status: 200,
               transport,
               keyDiag
@@ -640,11 +667,87 @@ async function fetchFromDataGovIn(state, district, commodity, limit = 200) {
           }
         }
       } catch (fbErr) {
-        console.warn(`[MandiService] data.gov.in fallback query failed: ${fbErr.message}`);
+        console.warn(`[MandiService] data.gov.in commodity fallback query failed: ${fbErr.message}`);
       }
     }
 
-    // Genuinely 0 records found for this selection
+    // 3. If district was specified but returned 0 records, try state-wide query to see if district exists under varied spelling
+    if (cleanDistrict) {
+      try {
+        const stateUrl = buildUrl(true, false, false, 500);
+        const { data: stateJson } = await fetchGovtData(stateUrl, { timeout: 10000 });
+        if (stateJson && Array.isArray(stateJson.records) && stateJson.records.length > 0) {
+          const targetDist = cleanDistrict.toLowerCase();
+          const distMatches = stateJson.records.filter(r => 
+            (r.district || '').toLowerCase().includes(targetDist) ||
+            targetDist.includes((r.district || '').toLowerCase()) ||
+            (r.market || '').toLowerCase().includes(targetDist)
+          );
+          if (distMatches.length > 0) {
+            let finalMatches = distMatches;
+            if (cleanCommodity) {
+              const targetCmdt = cleanCommodity.toLowerCase();
+              finalMatches = distMatches.filter(r => 
+                (r.commodity || '').toLowerCase().includes(targetCmdt) || 
+                (r.variety || '').toLowerCase().includes(targetCmdt)
+              );
+            }
+            if (finalMatches.length > 0) {
+              const mapped = mapRecords(finalMatches);
+              return {
+                records: mapped,
+                durationMs: Date.now() - fetchStart,
+                total: mapped.length,
+                status: 200,
+                transport,
+                keyDiag
+              };
+            }
+          }
+        }
+      } catch (stateErr) {
+        console.warn(`[MandiService] data.gov.in state-wide district fallback failed: ${stateErr.message}`);
+      }
+    }
+
+    // 4. Try standard filters[state] without .keyword if state.keyword returned 0
+    try {
+      const fallbackUrl = buildUrl(false, false, false, limit);
+      const { data: stdJson } = await fetchGovtData(fallbackUrl, { timeout: 10000 });
+      if (stdJson && Array.isArray(stdJson.records) && stdJson.records.length > 0) {
+        let matched = stdJson.records.filter(r => (r.state || '').toLowerCase() === cleanState.toLowerCase());
+        if (cleanDistrict && matched.length > 0) {
+          const targetDist = cleanDistrict.toLowerCase();
+          const distMatched = matched.filter(r => 
+            (r.district || '').toLowerCase().includes(targetDist) ||
+            (r.market || '').toLowerCase().includes(targetDist)
+          );
+          if (distMatched.length > 0) matched = distMatched;
+        }
+        if (cleanCommodity && matched.length > 0) {
+          const targetCmdt = cleanCommodity.toLowerCase();
+          matched = matched.filter(r => 
+            (r.commodity || '').toLowerCase().includes(targetCmdt) ||
+            (r.variety || '').toLowerCase().includes(targetCmdt)
+          );
+        }
+        if (matched.length > 0) {
+          const mapped = mapRecords(matched);
+          return {
+            records: mapped,
+            durationMs: Date.now() - fetchStart,
+            total: mapped.length,
+            status: 200,
+            transport,
+            keyDiag
+          };
+        }
+      }
+    } catch (stdErr) {
+      // ignore
+    }
+
+    // Genuinely 0 records found for this selection in current day's live feed
     return {
       records: [],
       durationMs,
@@ -998,7 +1101,7 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
     const fetchLimit = cleanDistrict === 'all' && !cleanCommodity ? Math.max(limit, 300) : Math.max(limit, 200);
     const dataGovResult = await fetchFromDataGovIn(cleanState, cleanDistrict, cleanCommodity, fetchLimit);
 
-    if (dataGovResult && dataGovResult.records !== null) {
+    if (dataGovResult && Array.isArray(dataGovResult.records) && dataGovResult.records.length > 0) {
       resultRecords = dataGovResult.records;
       apiDurationMs = dataGovResult.durationMs;
       source = 'data.gov.in (OGD Platform, Ministry of Agriculture)';
@@ -1007,7 +1110,8 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
         reportDate = latestFromRecords;
       }
     } else {
-      // Primary upstream connection failed (e.g. NIC firewall ECONNREFUSED or timeout).
+      // Primary upstream connection failed (e.g. NIC firewall ECONNREFUSED or timeout),
+      // OR current day's live feed has 0 records reported yet for this specific district/commodity.
       // Check for persistent authentic government snapshot in PostgreSQL before failing.
       const snapshotResult = await getMandiSnapshotFromDb(cleanState, cleanDistrict, cleanCommodity);
       if (snapshotResult && snapshotResult.row && snapshotResult.row.data) {
@@ -1037,10 +1141,15 @@ async function getMandiPrices({ state, district, commodity, date, limit = 200, r
         resultRecords = snapRecords;
         source = snapshotRow.source || 'data.gov.in (OGD Platform, Ministry of Agriculture)';
         reportDate = snapshotRow.report_date || snapData.reportDate || formatDate(new Date());
-        cacheStatus = 'CACHED_SNAPSHOT';
+        cacheStatus = refresh ? 'BYPASS' : 'CACHED_SNAPSHOT';
         isOfflineSnapshot = true;
         snapshotUpdatedAt = snapshotRow.updated_at;
-        console.log(`[MandiPrices] Live upstream failed, served authentic snapshot (${resultRecords.length} records, ${reportDate}) from PostgreSQL`);
+        console.log(`[MandiPrices] Live upstream ${dataGovResult?.records === null ? 'failed' : 'had 0 live records for current query'}, served authentic snapshot (${resultRecords.length} records, ${reportDate}) from PostgreSQL`);
+      } else if (dataGovResult && Array.isArray(dataGovResult.records)) {
+        // Live feed returned 0 records and no database snapshot exists
+        resultRecords = [];
+        apiDurationMs = dataGovResult.durationMs;
+        source = 'data.gov.in (OGD Platform, Ministry of Agriculture)';
       } else {
         // No cached snapshot exists in database either. Report transparent upstream status.
         const errorCat = dataGovResult?.errorCategory || 'UPSTREAM_ERROR';

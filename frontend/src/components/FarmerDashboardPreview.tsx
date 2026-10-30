@@ -54,10 +54,12 @@ import {
   Droplets, 
   CloudRain, 
   User,
-  Filter
+  Filter,
+  LogOut
 } from 'lucide-react';
 import { MandiPricesView } from './MandiPricesView';
 import { FarmerProfileView } from './FarmerProfileView';
+import { KisanSaathiNavIcon } from './KisanSaathiNavIcon';
 import { FarmTraceabilityModal } from './FarmTraceabilityModal';
 import { FieldActivityLoggerModal } from './FieldActivityLoggerModal';
 import { farmerDashboardTranslations, DashboardLang } from '../i18n/farmerDashboardTranslations';
@@ -88,9 +90,30 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
   returnUrl,
   returnLabel
 }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const actualIsPreview = isPreviewMode !== undefined ? isPreviewMode : !isProductionMode;
   const { language, setLanguage: setGlobalLang } = useLanguage();
+
+  // Logout Confirmation State
+  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch (err) {
+      console.warn('Farmer logout error (handled):', err);
+    } finally {
+      sessionStorage.clear();
+      window.history.replaceState(null, '', '/');
+      if (onNavigate) {
+        onNavigate('/');
+      } else {
+        window.location.replace('/');
+      }
+    }
+  };
 
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const activeDesignParam = designVariant || searchParams.get('design') || 'harvest_standard';
@@ -840,7 +863,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
   };
 
   interface NavItem {
-    id: 'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'pool' | 'profile' | 'kisan_saathi' | 'whatsapp';
+    id: 'home' | 'listings' | 'mandi_prices' | 'buyers' | 'offers' | 'orders' | 'storage' | 'pool' | 'profile' | 'kisan_saathi' | 'whatsapp' | 'logout';
     label: string;
     icon: any;
     badge: string | null;
@@ -899,9 +922,10 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
     {
       title: t.nav.support,
       items: [
-        { id: 'kisan_saathi', label: t.nav.kisanSaathi, icon: Headphones, badge: 'AI', badgeColor: 'bg-teal-400 text-slate-950 font-black' },
+        { id: 'kisan_saathi', label: t.nav.kisanSaathi, icon: KisanSaathiNavIcon, badge: 'AI', badgeColor: 'bg-teal-400 text-slate-950 font-black' },
         { id: 'profile', label: t.nav.profile, icon: User, badge: null, badgeColor: '' },
         { id: 'whatsapp', label: t.nav.whatsapp, icon: MessageCircle, badge: null, badgeColor: '' },
+        { id: 'logout', label: t.nav.logout, icon: LogOut, badge: null, badgeColor: '' },
       ]
     }
   ], [t, activeListings.length, matchedBuyers.length, pendingOffersCount, activeOrdersCount]);
@@ -1015,9 +1039,11 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                     key={item.id}
                     onClick={() => {
                       if (item.id === 'kisan_saathi') {
-                        alert(lang === 'hi' ? 'किसान साथी AI सहायक सक्रिय है।' : lang === 'hinglish' ? 'Kisan Saathi AI active hai.' : 'Kisan Saathi AI Assistant is active.');
+                        window.dispatchEvent(new CustomEvent('open-kisan-saathi'));
                       } else if (item.id === 'whatsapp') {
                         window.open('https://wa.me/919876543210?text=Namaste%20KisanConnect', '_blank');
+                      } else if (item.id === 'logout') {
+                        setShowLogoutModal(true);
                       } else {
                         handleNavClick(item.id as any);
                       }
@@ -1027,14 +1053,24 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                     } ${
                       isActive
                         ? 'bg-[#176B45] text-white shadow-xs font-black'
-                        : isCanvasTheme
-                          ? 'text-[#17251D]/80 hover:bg-[#E8F1E5] hover:text-[#17251D]'
-                          : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/35 hover:text-white'
+                        : item.id === 'logout'
+                          ? isCanvasTheme
+                            ? 'text-rose-700/80 hover:bg-rose-100/50 hover:text-rose-800'
+                            : 'text-rose-300/80 hover:bg-rose-900/30 hover:text-rose-200'
+                          : isCanvasTheme
+                            ? 'text-[#17251D]/80 hover:bg-[#E8F1E5] hover:text-[#17251D]'
+                            : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/35 hover:text-white'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <Icon className={`h-4 w-4 shrink-0 transition-transform ${
-                        isActive ? 'text-white scale-105' : isCanvasTheme ? 'text-[#176B45]' : 'text-[#37A86B] group-hover:text-white'
+                        isActive 
+                          ? 'text-white scale-105' 
+                          : item.id === 'logout'
+                            ? 'text-rose-400 group-hover:text-rose-300'
+                            : isCanvasTheme 
+                              ? 'text-[#176B45]' 
+                              : 'text-[#37A86B] group-hover:text-white'
                       }`} />
                       {!isSidebarCollapsed && (
                         <span className="tracking-wide truncate">
@@ -1099,15 +1135,25 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                     onClick={() => {
                       setIsMobileDrawerOpen(false);
                       if (item.id === 'kisan_saathi') {
-                        alert(lang === 'hi' ? 'किसान साथी AI सहायक सक्रिय है।' : lang === 'hinglish' ? 'Kisan Saathi AI active hai.' : 'Kisan Saathi AI Assistant is active.');
+                        window.dispatchEvent(new CustomEvent('open-kisan-saathi'));
                       } else if (item.id === 'whatsapp') {
                         window.open('https://wa.me/919876543210?text=Namaste%20KisanConnect', '_blank');
+                      } else if (item.id === 'logout') {
+                        setShowLogoutModal(true);
                       } else {
                         handleNavClick(item.id as any);
                       }
                     }}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
-                      isActive ? 'bg-[#176B45] text-white shadow-xs' : isCanvasTheme ? 'text-[#17251D]/80 hover:bg-[#E8F1E5]' : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/40'
+                      isActive 
+                        ? 'bg-[#176B45] text-white shadow-xs' 
+                        : item.id === 'logout'
+                          ? isCanvasTheme
+                            ? 'text-rose-700 hover:bg-rose-100/50'
+                            : 'text-rose-300 hover:bg-rose-900/30'
+                          : isCanvasTheme 
+                            ? 'text-[#17251D]/80 hover:bg-[#E8F1E5]' 
+                            : 'text-[#E8F1E5]/80 hover:bg-[#176B45]/40'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
@@ -4288,6 +4334,64 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
             >
               {lang === 'hi' ? 'बंद करें' : 'Close'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🚪 LOGOUT CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div 
+            className={`w-full max-w-sm rounded-3xl p-6 shadow-2xl border transition-all ${
+              isCanvasTheme 
+                ? 'bg-[#F7F4E9] border-[#E5E0D5] text-[#17251D]' 
+                : 'bg-white border-slate-200 text-slate-900'
+            }`}
+          >
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="h-12 w-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0 shadow-2xs">
+                <LogOut className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black leading-snug">
+                  {lang === 'hi' ? 'क्या आप लॉग आउट करना चाहते हैं?' : 'Are you sure you want to log out?'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {lang === 'hi' ? 'आपकी फसल लिस्टिंग और डेटा सुरक्षित रहेंगे।' : 'Your crops, profile, and listings remain safe.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                {lang === 'hi' ? 'रद्द करें' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLogout}
+                disabled={isLoggingOut}
+                className="px-4 py-2.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {isLoggingOut ? (
+                  <>
+                    <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>{lang === 'hi' ? 'लॉग आउट हो रहा है...' : 'Logging out...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>{lang === 'hi' ? 'लॉग आउट करें' : 'Log Out'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

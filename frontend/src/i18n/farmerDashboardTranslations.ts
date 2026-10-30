@@ -18,6 +18,7 @@ export interface DashboardTranslations {
     farmerPool: string;
     kisanSaathi: string;
     whatsapp: string;
+    logout: string;
     profile: string;
     collapseSidebar: string;
     expandSidebar: string;
@@ -264,6 +265,7 @@ export const farmerDashboardTranslations: Record<DashboardLang, DashboardTransla
       farmerPool: 'Farmer Pooling',
       kisanSaathi: 'Kisan Saathi AI',
       whatsapp: 'WhatsApp Support',
+      logout: 'Logout',
       profile: 'Farmer Profile & KYC',
       collapseSidebar: 'Collapse Sidebar',
       expandSidebar: 'Expand Sidebar',
@@ -509,6 +511,7 @@ export const farmerDashboardTranslations: Record<DashboardLang, DashboardTransla
       farmerPool: 'किसान समूह',
       kisanSaathi: 'किसान साथी AI',
       whatsapp: 'व्हाट्सएप सहायता',
+      logout: 'लॉग आउट',
       profile: 'किसान प्रोफाइल व केवाईसी',
       collapseSidebar: 'साइडबार समेटें',
       expandSidebar: 'साइडबार खोलें',
@@ -754,6 +757,7 @@ export const farmerDashboardTranslations: Record<DashboardLang, DashboardTransla
       farmerPool: 'Kisan Pool',
       kisanSaathi: 'Kisan Saathi AI',
       whatsapp: 'WhatsApp Support',
+      logout: 'Log Out',
       profile: 'Kisan Profile & KYC',
       collapseSidebar: 'Sidebar Sametein',
       expandSidebar: 'Sidebar Kholein',

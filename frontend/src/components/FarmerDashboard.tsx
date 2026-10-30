@@ -43,7 +43,8 @@ import {
   FlaskConical,
   ShieldAlert,
   Handshake,
-  Landmark
+  Landmark,
+  LogOut
 } from 'lucide-react';
 import { VoiceListenButton } from './VoiceListenButton';
 import { VoiceSearchInput } from './VoiceSearchInput';
@@ -68,8 +69,29 @@ interface FarmerDashboardProps {
 }
 
 export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, onNavigate, onOpenNotifications }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { language, setLanguage: setGlobalLang } = useLanguage();
+
+  // Logout Confirmation State
+  const [showLogoutModal, setShowLogoutModal] = useState<boolean>(false);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+    } catch (err) {
+      console.warn('Farmer logout error (handled):', err);
+    } finally {
+      sessionStorage.clear();
+      window.history.replaceState(null, '', '/');
+      if (onNavigate) {
+        onNavigate('/');
+      } else {
+        window.location.replace('/');
+      }
+    }
+  };
 
   // Language System: synchronized with global language, allows 'hinglish' locally
   const [lang, setLang] = useState<Lang>(() => {
@@ -1222,6 +1244,15 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
             </button>
           );
         })}
+
+        <button
+          onClick={() => setShowLogoutModal(true)}
+          className="ml-auto flex items-center gap-1.5 py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-all relative shrink-0 whitespace-nowrap cursor-pointer border border-rose-200/60 shadow-2xs"
+          title={lang === 'hi' ? 'लॉग आउट' : 'Logout'}
+        >
+          <LogOut className="h-4 w-4 text-rose-500" />
+          <span>{lang === 'hi' ? 'लॉग आउट' : 'Logout'}</span>
+        </button>
       </div>
 
       {/* 3. MAIN CONTENT VIEWS */}
@@ -4327,6 +4358,58 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 🚪 LOGOUT CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-sm rounded-3xl p-6 shadow-2xl border bg-white border-slate-200 text-slate-900 transition-all">
+            <div className="flex items-center gap-3.5 mb-4">
+              <div className="h-12 w-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center shrink-0 shadow-2xs">
+                <LogOut className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black leading-snug">
+                  {lang === 'hi' ? 'क्या आप लॉग आउट करना चाहते हैं?' : 'Are you sure you want to log out?'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {lang === 'hi' ? 'आपकी फसल लिस्टिंग और डेटा सुरक्षित रहेंगे।' : 'Your crops, profile, and listings remain safe.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowLogoutModal(false)}
+                disabled={isLoggingOut}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                {lang === 'hi' ? 'रद्द करें' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLogout}
+                disabled={isLoggingOut}
+                className="px-4 py-2.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {isLoggingOut ? (
+                  <>
+                    <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>{lang === 'hi' ? 'लॉग आउट हो रहा है...' : 'Logging out...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>{lang === 'hi' ? 'लॉग आउट करें' : 'Log Out'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

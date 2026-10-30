@@ -26,9 +26,14 @@ import { useAuth } from '../context/AuthContext';
 interface KisanSaathiWidgetProps {
   onNavigateTab?: (tab: string, payload?: any) => void;
   onNavigate?: (path: string, tab?: string, payload?: any) => void;
+  hideFloatingButton?: boolean;
 }
 
-export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigateTab, onNavigate }) => {
+export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ 
+  onNavigateTab, 
+  onNavigate,
+  hideFloatingButton = false 
+}) => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isHi = language === 'hi';
@@ -40,6 +45,16 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [apiNotice, setApiNotice] = useState<string | null>(null);
+
+  // Listen for programmatic open trigger from Farmer Dashboard sidebar
+  useEffect(() => {
+    const handleProgrammaticOpen = () => {
+      setIsOpen(true);
+      setIsMinimized(false);
+    };
+    window.addEventListener('open-kisan-saathi', handleProgrammaticOpen);
+    return () => window.removeEventListener('open-kisan-saathi', handleProgrammaticOpen);
+  }, []);
 
   // Generate role-specific initial actions
   const getInitialActions = (userRole: string): KisanSaathiAction[] => {
@@ -269,7 +284,7 @@ export const KisanSaathiWidget: React.FC<KisanSaathiWidgetProps> = ({ onNavigate
   return (
     <>
       {/* Floating Trigger Button: Role-Aware Kisan Saathi */}
-      {!isOpen && (
+      {!isOpen && !hideFloatingButton && (
         <button
           id="kisan-saathi-fab"
           type="button"

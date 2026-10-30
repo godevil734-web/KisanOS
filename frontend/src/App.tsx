@@ -68,7 +68,7 @@ const MainApp: React.FC = () => {
     if (!loading && !user) {
       if (pathname === '/list-crop') {
         navigate('/login?next=/list-crop');
-      } else if (pathname === '/dashboard' || pathname === '/profile' || pathname === '/passport' || pathname === '/fields' || pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points') {
+      } else if (pathname === '/dashboard' || pathname === '/farmer' || pathname === '/profile' || pathname === '/passport' || pathname === '/fields' || pathname === '/crops' || pathname === '/sales' || pathname === '/kisan-points') {
         navigate(`/login?next=${pathname}`);
       } else if (pathname === '/aggregator') {
         navigate('/login?next=/aggregator');
@@ -515,9 +515,10 @@ const MainApp: React.FC = () => {
       {/* First-Visit Full-Screen Language Gate Picker */}
       <LanguageGateModal />
 
-      {/* Floating On-Demand Role-Aware Kisan Saathi AI Assistant (Only on non-farmer routes, farmer dashboard has it built into sidebar) */}
-      {!isFarmerRoute && !isPreviewRoute && (
+      {/* On-Demand Role-Aware Kisan Saathi AI Assistant (floating FAB hidden on farmer route, opened via sidebar) */}
+      {!isPreviewRoute && (
         <KisanSaathiWidget 
+          hideFloatingButton={isFarmerRoute}
           onNavigateTab={(tab, payload) => {
             const uRole = user?.role || 'farmer';
             if (uRole === 'farmer') {

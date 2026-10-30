@@ -195,16 +195,16 @@ export const CropSelectorPortal: React.FC<CropSelectorPortalProps> = ({
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
-        className={`w-full sm:w-auto flex items-center justify-between gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+        className={`w-full sm:w-auto flex items-center justify-between gap-2 px-3.5 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-bold min-h-[40px] sm:min-h-[42px] transition-all cursor-pointer ${
           isHarvest
-            ? 'bg-[#E8F1E5] hover:bg-[#d8e7d4] text-[#176B45] border border-[#37A86B]/20'
+            ? 'bg-[#E8F1E5] hover:bg-[#d8e7d4] text-[#176B45] border border-[#37A86B]/25'
             : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
         } ${customClass}`}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="truncate max-w-[140px]">🌾 {selectedCrop || placeholder}</span>
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${
+        <span className="truncate max-w-[150px]">🌾 {selectedCrop || placeholder}</span>
+        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''} ${
           isHarvest ? 'text-[#176B45]' : 'text-emerald-700'
         }`} />
       </button>

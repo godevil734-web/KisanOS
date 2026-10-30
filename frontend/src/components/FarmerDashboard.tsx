@@ -1070,7 +1070,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
           </div>
         </div>
 
-        {/* Top Controls: Language Switcher & Voice Demo */}
+        {/* Top Controls: Language Switcher, Voice Demo & Logout */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {/* Voice Input Demo Button */}
           <button
@@ -1110,16 +1110,26 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
               English
             </button>
           </div>
+
+          {/* Logout Button */}
+          <button
+            onClick={() => setShowLogoutModal(true)}
+            className="p-1.5 sm:px-2.5 sm:py-1 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+            title={lang === 'hi' ? 'लॉग आउट' : 'Logout'}
+          >
+            <LogOut className="h-4 w-4 text-rose-500" />
+            <span className="hidden sm:inline">{lang === 'hi' ? 'लॉग आउट' : 'Logout'}</span>
+          </button>
         </div>
       </div>
 
       {/* 1.5 SMART HERO INTELLIGENCE BAR (Unclipped Crop Selector + Weather Card + Rotating Mandi Card) */}
-      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-emerald-700/50 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
+      <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 rounded-2xl p-5 sm:p-6 lg:p-7 text-white shadow-md border border-emerald-700/50 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-5 sm:gap-6 min-h-[180px] sm:min-h-[200px]">
         {/* Left: Search Bar & Crop Selector */}
-        <div className="flex-1 space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-emerald-200">
+        <div className="flex-1 space-y-2.5">
+          <div className="flex flex-wrap items-center gap-2 text-xs sm:text-[13px] text-emerald-200">
             <span className="flex items-center gap-1 font-bold">
-              <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+              <MapPin className="h-4 w-4 text-emerald-400" />
               {farmLocation.displayName || 'Khandauli, Agra, UP'}
             </span>
             <span>•</span>
@@ -1129,7 +1139,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
           </div>
 
           {/* Search & Crop Selector Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center bg-white rounded-xl p-1 shadow-sm gap-1.5 max-w-2xl">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center bg-white rounded-xl p-1.5 sm:p-2 shadow-sm gap-2 max-w-2xl min-h-[46px] sm:min-h-[50px]">
             <CropSelectorPortal
               selectedCrop={classicSelectedCrop}
               onSelect={(crop) => {
@@ -1140,21 +1150,21 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
               themeVariant="classic"
             />
 
-            <div className="flex-1 px-2 relative flex items-center">
+            <div className="flex-1 px-2.5 relative flex items-center">
               <input
                 type="text"
                 placeholder="फसल या खरीदार खोजें (उदा. आलू, गेहूं)..."
                 value={classicSearchQuery}
                 onChange={(e) => setClassicSearchQuery(e.target.value)}
-                className="w-full text-xs font-semibold text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none pr-6"
+                className="w-full text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 bg-transparent focus:outline-none pr-7 py-1"
               />
               <button
                 type="button"
                 onClick={() => setShowVoiceModal(true)}
-                className="absolute right-1 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-0.5"
+                className="absolute right-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer p-1"
                 title="बोलकर बताएं"
               >
-                <Mic className="h-3.5 w-3.5" />
+                <Mic className="h-4 w-4" />
               </button>
             </div>
 
@@ -1165,7 +1175,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
                 }
                 handleNavigateTab('buyers');
               }}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0"
+              className="px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 min-h-[40px] sm:min-h-[42px]"
             >
               <span>खरीदार खोजें →</span>
             </button>
@@ -1173,7 +1183,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
         </div>
 
         {/* Right: Weather & Rotating Mandi Card Widgets */}
-        <div className="w-full xl:w-72 shrink-0 grid grid-cols-2 gap-2 text-slate-800">
+        <div className="w-full xl:w-[350px] 2xl:w-[380px] shrink-0 grid grid-cols-2 gap-2.5 text-slate-800 items-start">
           <FarmWeatherCard
             weather={farmWeather}
             location={farmLocation}
@@ -1244,15 +1254,6 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
             </button>
           );
         })}
-
-        <button
-          onClick={() => setShowLogoutModal(true)}
-          className="ml-auto flex items-center gap-1.5 py-2 sm:py-2.5 px-3 sm:px-3.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-all relative shrink-0 whitespace-nowrap cursor-pointer border border-rose-200/60 shadow-2xs"
-          title={lang === 'hi' ? 'लॉग आउट' : 'Logout'}
-        >
-          <LogOut className="h-4 w-4 text-rose-500" />
-          <span>{lang === 'hi' ? 'लॉग आउट' : 'Logout'}</span>
-        </button>
       </div>
 
       {/* 3. MAIN CONTENT VIEWS */}
@@ -1278,133 +1279,133 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
                   setWizardStep(1);
                   setShowAddWizard(true);
                 }}
-                className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-left shadow-md hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
+                className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-left shadow-md hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[175px] sm:min-h-[185px]"
               >
                 <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-white/20 flex items-center justify-center text-2xl">
+                  <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center text-3xl">
                     🥔
                   </div>
-                  <span className="px-2.5 py-1 rounded-full bg-white/20 text-white text-[11px] font-extrabold flex items-center gap-1">
-                    <Plus className="h-3 w-3" />
+                  <span className="px-2.5 py-1 rounded-full bg-white/20 text-white text-xs font-extrabold flex items-center gap-1">
+                    <Plus className="h-3.5 w-3.5" />
                     <span>नया</span>
                   </span>
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black">{t.sellProduce}</div>
-                  <div className="text-xs text-emerald-100 mt-0.5">{t.sellProduceSub}</div>
+                <div className="mt-3.5">
+                  <div className="text-lg sm:text-xl font-black">{t.sellProduce}</div>
+                  <div className="text-xs sm:text-[13px] text-emerald-100 mt-1">{t.sellProduceSub}</div>
                 </div>
               </button>
 
               {/* ACTION 2: खरीदार देखें */}
               <button
                 onClick={() => handleNavigateTab('buyers')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-emerald-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
+                className="p-5 sm:p-6 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-emerald-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[175px] sm:min-h-[185px]"
               >
                 <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl">
+                  <div className="h-12 w-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-3xl">
                     🔎
                   </div>
                   <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600 transition-colors" />
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.findBuyers}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.findBuyersSub}</div>
+                <div className="mt-3.5">
+                  <div className="text-lg sm:text-xl font-black text-slate-900">{t.findBuyers}</div>
+                  <div className="text-xs sm:text-[13px] text-slate-500 mt-1">{t.findBuyersSub}</div>
                 </div>
               </button>
 
               {/* ACTION 3: मेरे ऑफर */}
               <button
                 onClick={() => handleNavigateTab('offers')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px] relative"
+                className="p-5 sm:p-6 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[175px] sm:min-h-[185px] relative"
               >
                 <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl">
+                  <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-3xl">
                     💰
                   </div>
                   {pendingOffersCount > 0 ? (
-                    <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
+                    <span className="px-2.5 py-1 rounded-full bg-rose-500 text-white text-xs font-black animate-pulse">
                       {pendingOffersCount} नए ऑफर
                     </span>
                   ) : (
                     <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-amber-600 transition-colors" />
                   )}
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.myOffers}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.myOffersSub}</div>
+                <div className="mt-3.5">
+                  <div className="text-lg sm:text-xl font-black text-slate-900">{t.myOffers}</div>
+                  <div className="text-xs sm:text-[13px] text-slate-500 mt-1">{t.myOffersSub}</div>
                 </div>
               </button>
 
               {/* ACTION 4: मेरे सौदे */}
               <button
                 onClick={() => handleNavigateTab('orders')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-purple-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
+                className="p-5 sm:p-6 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-purple-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[175px] sm:min-h-[185px]"
               >
                 <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-2xl">
+                  <div className="h-12 w-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-3xl">
                     📦
                   </div>
                   <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-purple-600 transition-colors" />
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.myDeals}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.myDealsSub}</div>
+                <div className="mt-3.5">
+                  <div className="text-lg sm:text-xl font-black text-slate-900">{t.myDeals}</div>
+                  <div className="text-xs sm:text-[13px] text-slate-500 mt-1">{t.myDealsSub}</div>
                 </div>
               </button>
 
               {/* ACTION 5: भंडारण / कोल्ड स्टोर */}
               <button
                 onClick={() => handleNavigateTab('storage')}
-                className="p-5 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-cyan-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
+                className="p-5 sm:p-6 rounded-2xl bg-white border-2 border-slate-200 text-left shadow-xs hover:border-cyan-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[175px] sm:min-h-[185px]"
               >
                 <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-2xl">
+                  <div className="h-12 w-12 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center text-3xl">
                     🏠
                   </div>
                   <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-cyan-600 transition-colors" />
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.storage}</div>
-                  <div className="text-xs text-slate-500 mt-0.5">{t.storageSub}</div>
+                <div className="mt-3.5">
+                  <div className="text-lg sm:text-xl font-black text-slate-900">{t.storage}</div>
+                  <div className="text-xs sm:text-[13px] text-slate-500 mt-1">{t.storageSub}</div>
                 </div>
               </button>
 
               {/* ACTION 6: कई किसान मिलकर बेचें (Aggregator pooling) */}
               <button
                 onClick={() => handleNavigateTab('aggregator_info')}
-                className="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px]"
+                className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 text-left shadow-xs hover:border-amber-400 hover:shadow-md hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[175px] sm:min-h-[185px]"
               >
                 <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-2xl">
+                  <div className="h-12 w-12 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl">
                     🤝
                   </div>
-                  <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-bold">
+                  <span className="px-2.5 py-1 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">
                     बड़ा फायदा
                   </span>
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-slate-900">{t.poolWithFarmers}</div>
-                  <div className="text-xs text-slate-600 mt-0.5">{t.poolWithFarmersSub}</div>
+                <div className="mt-3.5">
+                  <div className="text-lg sm:text-xl font-black text-slate-900">{t.poolWithFarmers}</div>
+                  <div className="text-xs sm:text-[13px] text-slate-600 mt-1">{t.poolWithFarmersSub}</div>
                 </div>
               </button>
 
               {/* ACTION 7: सरकारी मंडी भाव (Live Government Mandi Prices) */}
               <button
                 onClick={() => handleNavigateTab('mandi_prices')}
-                className="p-5 rounded-2xl bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white text-left shadow-sm hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[140px] border border-emerald-700/50"
+                className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white text-left shadow-sm hover:shadow-lg hover:scale-[1.01] transition-all flex flex-col justify-between group min-h-[175px] sm:min-h-[185px] border border-emerald-700/50"
               >
                 <div className="flex items-start justify-between">
-                  <div className="h-11 w-11 rounded-xl bg-white/10 flex items-center justify-center text-2xl">
+                  <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center text-3xl">
                     🏛️
                   </div>
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 text-emerald-300 text-[10px] font-black flex items-center gap-1 border border-emerald-500/30">
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/25 text-emerald-300 text-xs font-black flex items-center gap-1 border border-emerald-500/30">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     <span>{lang === 'hi' ? 'लाइव भाव' : 'Live Feed'}</span>
                   </span>
                 </div>
-                <div className="mt-3">
-                  <div className="text-lg font-black text-white">{lang === 'hi' ? 'सरकारी मंडी भाव' : 'Govt Mandi Prices'}</div>
-                  <div className="text-xs text-slate-300 mt-0.5">{lang === 'hi' ? 'Agmarknet व data.gov.in से लाइव थोक भाव' : 'Live wholesale rates from Agmarknet & data.gov.in'}</div>
+                <div className="mt-3.5">
+                  <div className="text-lg sm:text-xl font-black text-white">{lang === 'hi' ? 'सरकारी मंडी भाव' : 'Govt Mandi Prices'}</div>
+                  <div className="text-xs sm:text-[13px] text-slate-300 mt-1">{lang === 'hi' ? 'Agmarknet व data.gov.in से लाइव थोक भाव' : 'Live wholesale rates from Agmarknet & data.gov.in'}</div>
                 </div>
               </button>
 

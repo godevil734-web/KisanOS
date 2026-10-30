@@ -1326,7 +1326,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* ------------------------------------------------------------- */}
               {/* 1. HERO BANNER - SLENDER, ATTRACTIVE AGRICULTURAL BANNER */}
               {/* ------------------------------------------------------------- */}
-              <div className="relative rounded-xl overflow-hidden shadow-xs border border-[#E8DFC9] bg-gradient-to-r from-[#FFFDF9] via-[#FAF6ED] to-[#F2EFE4] text-[#17251D] p-4 sm:p-5">
+              <div className="relative rounded-2xl overflow-hidden shadow-xs border border-[#E8DFC9] bg-gradient-to-r from-[#FFFDF9] via-[#FAF6ED] to-[#F2EFE4] text-[#17251D] p-5 sm:p-6 lg:p-7 min-h-[250px] sm:min-h-[270px]">
                 
                 {/* Subtle Farm Landscape Background Illustration */}
                 <div 
@@ -1334,52 +1334,52 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                   style={{ backgroundImage: "url('/dashboard/farm_landscape_banner.jpg')" }}
                 />
 
-                <div className="relative z-10 flex flex-col xl:flex-row items-center xl:items-start justify-between gap-4">
+                <div className="relative z-10 flex flex-col xl:flex-row items-center xl:items-start justify-between gap-5 sm:gap-6">
 
                   {/* Left: Farmer Holding Smartphone + Greeting & Crop Search Bar */}
-                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 flex-1 w-full">
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 flex-1 w-full">
                     
                     {/* FARMER HOLDING PHONE THUMBNAIL */}
                     <div className="relative shrink-0">
-                      <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl border-2 sm:border-3 border-white shadow-sm overflow-hidden bg-amber-100 ring-2 ring-[#37A86B]/30">
+                      <div className="h-20 w-20 sm:h-24 sm:w-24 lg:h-26 lg:w-26 rounded-2xl border-2 sm:border-3 border-white shadow-sm overflow-hidden bg-amber-100 ring-2 ring-[#37A86B]/30">
                         <img 
                           src="/dashboard/farmer_holding_phone.jpg" 
                           alt="Farmer" 
                           className="h-full w-full object-cover object-top scale-105"
                         />
                       </div>
-                      <div className="absolute -bottom-1 -right-1 bg-[#176B45] text-white p-0.5 rounded-full shadow-sm" title={t.banner.verifiedFarmer}>
-                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      <div className="absolute -bottom-1 -right-1 bg-[#176B45] text-white p-1 rounded-full shadow-sm" title={t.banner.verifiedFarmer}>
+                        <CheckCircle2 className="h-4 w-4" />
                       </div>
                     </div>
 
                     {/* Greeting, Land details, and Banner Search Bar */}
-                    <div className="flex-1 text-center sm:text-left space-y-1.5 w-full">
-                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                        <h1 className="text-lg sm:text-xl lg:text-2xl font-black tracking-tight text-[#17251D] leading-tight">
+                    <div className="flex-1 text-center sm:text-left space-y-2 sm:space-y-2.5 w-full">
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-[#17251D] leading-tight">
                           {t.banner.greetingPrefix} {user?.name || 'Aryan Singh'}{t.banner.ji}
                         </h1>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E8F1E5] border border-[#37A86B]/40 text-[#176B45] text-[10px] font-black uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E8F1E5] border border-[#37A86B]/40 text-[#176B45] text-xs font-black uppercase tracking-wider">
                           {t.banner.verifiedFarmer}
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-0.5 text-xs text-[#657468] font-medium">
-                        <span className="flex items-center gap-1 font-bold">
-                          <MapPin className="h-3 w-3 text-[#176B45]" />
+                      <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2.5 gap-y-1 text-xs sm:text-[13px] text-[#4d5b50] font-medium">
+                        <span className="flex items-center gap-1.5 font-bold">
+                          <MapPin className="h-3.5 w-3.5 text-[#176B45]" />
                           {farmLocation.displayName || `${user?.village || 'Khandauli'}, ${user?.district || 'Agra'}, Uttar Pradesh`}
                         </span>
                         <span className="hidden sm:inline text-[#E5E0D5]">|</span>
                         <span>🌾 {user?.farmerProfile?.acres || 12} {t.banner.acresFarming}</span>
                       </div>
 
-                      <p className="text-xs text-[#657468] leading-snug max-w-xl hidden sm:block">
+                      <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed max-w-xl hidden sm:block">
                         {t.banner.tagline}
                       </p>
 
                       {/* Search & Filter Bar Inside Banner */}
-                      <div className="pt-1 w-full max-w-xl">
-                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center bg-white rounded-lg border border-[#A3D1A5] p-1 shadow-2xs gap-1.5">
+                      <div className="pt-1.5 w-full max-w-xl">
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center bg-white rounded-xl border-2 border-[#A3D1A5] p-1.5 sm:p-2 shadow-2xs gap-2 min-h-[46px] sm:min-h-[50px]">
                           
                           {/* Dropdown: फसल चुनें ⌄ (Unclipped React Portal with search & keyboard nav) */}
                           <CropSelectorPortal
@@ -1393,37 +1393,37 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                           />
 
                           {/* Input field with integrated mic button */}
-                          <div className="flex-1 px-2 relative flex items-center">
+                          <div className="flex-1 px-2.5 relative flex items-center">
                             <input
                               type="text"
                               placeholder={t.banner.searchProducePlaceholder}
                               value={bannerSearchQuery}
                               onChange={(e) => setBannerSearchQuery(e.target.value)}
-                              className="w-full text-xs font-medium text-[#17251D] placeholder:text-[#657468] bg-transparent focus:outline-none pr-6"
+                              className="w-full text-xs sm:text-sm font-medium text-[#17251D] placeholder:text-[#657468] bg-transparent focus:outline-none pr-7 py-1"
                             />
                             <button
                               type="button"
                               onClick={() => setShowVoiceModal(true)}
-                              className="absolute right-1.5 text-[#657468] hover:text-[#176B45] transition-colors cursor-pointer p-0.5"
+                              className="absolute right-1.5 text-[#657468] hover:text-[#176B45] transition-colors cursor-pointer p-1"
                               title={t.nav.voiceSearch}
                             >
-                              <Mic className="h-3.5 w-3.5" />
+                              <Mic className="h-4 w-4" />
                             </button>
                           </div>
 
                           {/* Green Action Button: Find Buyers → */}
                           <button
                             onClick={() => handleNavClick('buyers')}
-                            className="px-4 py-1.5 rounded-md bg-[#176B45] hover:bg-[#104B35] text-white font-black text-xs shadow-xs flex items-center justify-center gap-1 transition-all cursor-pointer shrink-0"
+                            className="px-4.5 sm:px-5 py-2 sm:py-2.5 rounded-lg bg-[#176B45] hover:bg-[#104B35] text-white font-black text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 min-h-[40px] sm:min-h-[42px]"
                           >
                             <span>{t.banner.findBuyersBtn}</span>
-                            <ArrowRight className="h-3.5 w-3.5" />
+                            <ArrowRight className="h-4 w-4" />
                           </button>
                         </div>
 
                         {/* Shortcuts row below search bar */}
-                        <div className="pt-1.5 flex flex-wrap items-center justify-center sm:justify-start gap-1 text-xs">
-                          <span className="font-bold text-[#17251D] mr-0.5 text-[11px]">{t.banner.popularCropsLabel}</span>
+                        <div className="pt-2 flex flex-wrap items-center justify-center sm:justify-start gap-1.5 text-xs">
+                          <span className="font-black text-[#17251D] mr-1 text-xs">{t.banner.popularCropsLabel}</span>
                           {popularCropsList.map((crop) => (
                             <button
                               key={crop}
@@ -1431,7 +1431,7 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                                 setBannerSelectedCrop(crop);
                                 setBannerSearchQuery(crop);
                               }}
-                              className="px-2.5 py-0.5 rounded-full bg-[#E8F1E5] hover:bg-[#d8e7d4] text-[#176B45] border border-[#37A86B]/30 text-[11px] font-bold shadow-2xs cursor-pointer transition-all"
+                              className="px-3 py-1 rounded-full bg-[#E8F1E5] hover:bg-[#d8e7d4] text-[#176B45] border border-[#37A86B]/30 text-xs font-bold shadow-2xs cursor-pointer transition-all"
                             >
                               {crop}
                             </button>
@@ -1443,31 +1443,31 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                   </div>
 
                   {/* Right: Tagline card & Weather / Mandi rate widget */}
-                  <div className="w-full xl:w-72 shrink-0 space-y-2">
+                  <div className="w-full xl:w-[350px] 2xl:w-[380px] shrink-0 space-y-3">
                     
                     {/* Top Callout Box */}
                     <div 
                       onClick={() => handleNavClick('buyers')}
-                      className="p-2.5 rounded-lg bg-white border border-[#E5E0D5] shadow-2xs hover:border-[#176B45]/50 transition-all cursor-pointer flex items-center justify-between gap-2.5"
+                      className="p-3 sm:p-3.5 rounded-xl bg-white border border-[#E5E0D5] shadow-2xs hover:border-[#176B45]/50 transition-all cursor-pointer flex items-center justify-between gap-3 min-h-[60px]"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-lg bg-[#E8F1E5] text-[#176B45] flex items-center justify-center shrink-0">
-                          <Sprout className="h-4 w-4" />
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-[#E8F1E5] text-[#176B45] flex items-center justify-center shrink-0">
+                          <Sprout className="h-5 w-5" />
                         </div>
                         <div>
-                          <div className="text-xs font-black text-[#17251D] leading-tight">
+                          <div className="text-sm font-black text-[#17251D] leading-tight">
                             {t.banner.calloutTitle}
                           </div>
-                          <div className="text-[10px] text-[#657468] font-medium">
+                          <div className="text-xs text-[#657468] font-medium">
                             {t.banner.calloutSub}
                           </div>
                         </div>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-[#657468] shrink-0" />
+                      <ChevronRight className="h-4.5 w-4.5 text-[#657468] shrink-0" />
                     </div>
 
                     {/* Bottom Weather & Mandi Rate Combined Grid */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2.5 items-start">
                       <FarmWeatherCard
                         weather={farmWeather}
                         location={farmLocation}
@@ -1511,10 +1511,10 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
               {/* Row 1: 4 Main Action Cards */}
               {/* Row 2: 3 Secondary Action Cards */}
               {/* ------------------------------------------------------------- */}
-              <div className="rounded-xl bg-white border border-[#E5E0D5] p-4 sm:p-5 shadow-xs space-y-3 sm:space-y-3.5">
+              <div className="rounded-2xl bg-white border border-[#E5E0D5] p-5 sm:p-6 lg:p-7 shadow-xs space-y-4 sm:space-y-5">
                 
                 {/* ROW 1: 4 MAIN ACTION CARDS (Sell Produce, Find Buyers, My Offers, My Deals) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
 
                   {/* CARD 1: SELL MY PRODUCE */}
                   <div
@@ -1522,32 +1522,32 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                       setWizardStep(1);
                       setShowAddWizard(true);
                     }}
-                    className="group rounded-xl p-3.5 sm:p-4 bg-gradient-to-br from-[#E8F1E5]/70 via-[#E8F1E5]/30 to-white border border-[#A3D1A5] hover:border-[#176B45] shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[136px] sm:min-h-[140px] xl:min-h-[144px]"
+                    className="group rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-[#E8F1E5]/70 via-[#E8F1E5]/30 to-white border border-[#A3D1A5] hover:border-[#176B45] shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[185px] xl:min-h-[195px]"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-9 w-9 rounded-lg bg-[#176B45] text-white flex items-center justify-center shadow-xs shrink-0">
-                          <Sprout className="h-4.5 w-4.5" />
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#176B45] text-white flex items-center justify-center shadow-xs shrink-0">
+                          <Sprout className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
                         </div>
                         {t.actions.sellProduce.badge && (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-[#37A86B]/15 text-[#104B35] border border-[#37A86B]/30 uppercase tracking-wide">
+                          <span className="text-xs font-black px-2.5 py-0.5 rounded-md bg-[#37A86B]/15 text-[#104B35] border border-[#37A86B]/30 uppercase tracking-wide">
                             {t.actions.sellProduce.badge}
                           </span>
                         )}
                       </div>
-                      <ChevronRight className="h-4 w-4 text-[#176B45]/70 group-hover:text-[#176B45] group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4.5 w-4.5 text-[#176B45]/70 group-hover:text-[#176B45] group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
                     </div>
 
-                    <div className="flex items-end justify-between gap-2.5 mt-2.5">
+                    <div className="flex items-end justify-between gap-3 mt-3.5 sm:mt-4">
                       <div className="min-w-0 flex-1 pr-1">
-                        <h3 className="text-sm sm:text-[15px] font-black text-[#17251D] tracking-tight leading-snug">
+                        <h3 className="text-base sm:text-lg font-black text-[#17251D] tracking-tight leading-snug">
                           {t.actions.sellProduce.title}
                         </h3>
-                        <p className="text-xs text-[#657468] leading-relaxed mt-1">
+                        <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed mt-1.5">
                           {t.actions.sellProduce.desc}
                         </p>
                       </div>
-                      <div className="h-11 w-14 sm:h-12 sm:w-16 rounded-lg overflow-hidden border border-[#A3D1A5] shadow-2xs bg-white shrink-0 mb-0.5">
+                      <div className="h-14 w-18 sm:h-16 sm:w-22 rounded-xl overflow-hidden border border-[#A3D1A5] shadow-2xs bg-white shrink-0 mb-0.5">
                         <img 
                           src="/dashboard/combined_crops.jpg" 
                           alt="Sell Produce" 
@@ -1560,25 +1560,25 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                   {/* CARD 2: FIND BUYERS */}
                   <div
                     onClick={() => handleNavClick('buyers')}
-                    className="group rounded-xl p-3.5 sm:p-4 bg-gradient-to-br from-blue-50/70 via-sky-50/30 to-white border border-blue-200 hover:border-blue-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[136px] sm:min-h-[140px] xl:min-h-[144px]"
+                    className="group rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-blue-50/70 via-sky-50/30 to-white border border-blue-200 hover:border-blue-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[185px] xl:min-h-[195px]"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="h-9 w-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                        <Users className="h-4.5 w-4.5" />
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                        <Users className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
                       </div>
-                      <ChevronRight className="h-4 w-4 text-blue-700/60 group-hover:text-blue-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4.5 w-4.5 text-blue-700/60 group-hover:text-blue-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
                     </div>
 
-                    <div className="flex items-end justify-between gap-2.5 mt-2.5">
+                    <div className="flex items-end justify-between gap-3 mt-3.5 sm:mt-4">
                       <div className="min-w-0 flex-1 pr-1">
-                        <h3 className="text-sm sm:text-[15px] font-black text-[#17251D] tracking-tight leading-snug">
+                        <h3 className="text-base sm:text-lg font-black text-[#17251D] tracking-tight leading-snug">
                           {t.actions.findBuyers.title}
                         </h3>
-                        <p className="text-xs text-[#657468] leading-relaxed mt-1">
+                        <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed mt-1.5">
                           {t.actions.findBuyers.desc}
                         </p>
                       </div>
-                      <div className="h-11 w-14 sm:h-12 sm:w-16 rounded-lg overflow-hidden border border-blue-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
+                      <div className="h-14 w-18 sm:h-16 sm:w-22 rounded-xl overflow-hidden border border-blue-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
                         <img 
                           src="/dashboard/tractor.jpg" 
                           alt="Find Buyers" 
@@ -1591,30 +1591,30 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                   {/* CARD 3: MY OFFERS */}
                   <div
                     onClick={() => handleNavClick('offers')}
-                    className="group rounded-xl p-3.5 sm:p-4 bg-gradient-to-br from-amber-50/80 via-yellow-50/30 to-white border border-amber-200 hover:border-[#E6A52E] shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[136px] sm:min-h-[140px] xl:min-h-[144px]"
+                    className="group rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-amber-50/80 via-yellow-50/30 to-white border border-amber-200 hover:border-[#E6A52E] shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[185px] xl:min-h-[195px]"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-9 w-9 rounded-lg bg-[#E6A52E] text-white flex items-center justify-center font-black text-base shadow-xs shrink-0">
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#E6A52E] text-white flex items-center justify-center font-black text-lg shadow-xs shrink-0">
                           ₹
                         </div>
-                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-rose-600 text-white uppercase tracking-wide">
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-md bg-rose-600 text-white uppercase tracking-wide">
                           {t.actions.myOffers.badge}
                         </span>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-amber-700/60 group-hover:text-amber-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4.5 w-4.5 text-amber-700/60 group-hover:text-amber-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
                     </div>
 
-                    <div className="flex items-end justify-between gap-2.5 mt-2.5">
+                    <div className="flex items-end justify-between gap-3 mt-3.5 sm:mt-4">
                       <div className="min-w-0 flex-1 pr-1">
-                        <h3 className="text-sm sm:text-[15px] font-black text-[#17251D] tracking-tight leading-snug">
+                        <h3 className="text-base sm:text-lg font-black text-[#17251D] tracking-tight leading-snug">
                           {t.actions.myOffers.title}
                         </h3>
-                        <p className="text-xs text-[#657468] leading-relaxed mt-1">
+                        <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed mt-1.5">
                           {t.actions.myOffers.desc}
                         </p>
                       </div>
-                      <div className="h-11 w-14 sm:h-12 sm:w-16 rounded-lg overflow-hidden border border-amber-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
+                      <div className="h-14 w-18 sm:h-16 sm:w-22 rounded-xl overflow-hidden border border-amber-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
                         <img 
                           src="/dashboard/grain_sack.jpg" 
                           alt="My Offers" 
@@ -1627,25 +1627,25 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                   {/* CARD 4: MY DEALS */}
                   <div
                     onClick={() => handleNavClick('orders')}
-                    className="group rounded-xl p-3.5 sm:p-4 bg-gradient-to-br from-purple-50/70 via-violet-50/30 to-white border border-purple-200 hover:border-purple-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[136px] sm:min-h-[140px] xl:min-h-[144px]"
+                    className="group rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-purple-50/70 via-violet-50/30 to-white border border-purple-200 hover:border-purple-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[185px] xl:min-h-[195px]"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="h-9 w-9 rounded-lg bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                        <Package className="h-4.5 w-4.5" />
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                        <Package className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
                       </div>
-                      <ChevronRight className="h-4 w-4 text-purple-700/60 group-hover:text-purple-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4.5 w-4.5 text-purple-700/60 group-hover:text-purple-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
                     </div>
 
-                    <div className="flex items-end justify-between gap-2.5 mt-2.5">
+                    <div className="flex items-end justify-between gap-3 mt-3.5 sm:mt-4">
                       <div className="min-w-0 flex-1 pr-1">
-                        <h3 className="text-sm sm:text-[15px] font-black text-[#17251D] tracking-tight leading-snug">
+                        <h3 className="text-base sm:text-lg font-black text-[#17251D] tracking-tight leading-snug">
                           {t.actions.myDeals.title}
                         </h3>
-                        <p className="text-xs text-[#657468] leading-relaxed mt-1">
+                        <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed mt-1.5">
                           {t.actions.myDeals.desc}
                         </p>
                       </div>
-                      <div className="h-11 w-14 sm:h-12 sm:w-16 rounded-lg overflow-hidden border border-purple-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
+                      <div className="h-14 w-18 sm:h-16 sm:w-22 rounded-xl overflow-hidden border border-purple-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
                         <img 
                           src="/dashboard/delivery_truck.jpg" 
                           alt="My Deals" 
@@ -1658,30 +1658,30 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                 </div>
 
                 {/* ROW 2: 3 SECONDARY ACTION CARDS (Cold Storage, Farmer Pooling, Govt Mandi Prices) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
 
                   {/* CARD 5: COLD STORAGE */}
                   <div
                     onClick={() => handleNavClick('storage')}
-                    className="group rounded-xl p-3.5 sm:p-4 bg-gradient-to-br from-teal-50/70 via-cyan-50/30 to-white border border-teal-200 hover:border-teal-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[136px] sm:min-h-[140px] xl:min-h-[144px]"
+                    className="group rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-teal-50/70 via-cyan-50/30 to-white border border-teal-200 hover:border-teal-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[185px] xl:min-h-[195px]"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="h-9 w-9 rounded-lg bg-teal-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                        <Warehouse className="h-4.5 w-4.5" />
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                        <Warehouse className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
                       </div>
-                      <ChevronRight className="h-4 w-4 text-teal-700/60 group-hover:text-teal-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4.5 w-4.5 text-teal-700/60 group-hover:text-teal-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
                     </div>
 
-                    <div className="flex items-end justify-between gap-2.5 mt-2.5">
+                    <div className="flex items-end justify-between gap-3 mt-3.5 sm:mt-4">
                       <div className="min-w-0 flex-1 pr-1">
-                        <h3 className="text-sm sm:text-[15px] font-black text-[#17251D] tracking-tight leading-snug">
+                        <h3 className="text-base sm:text-lg font-black text-[#17251D] tracking-tight leading-snug">
                           {t.actions.coldStorage.title}
                         </h3>
-                        <p className="text-xs text-[#657468] leading-relaxed mt-1">
+                        <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed mt-1.5">
                           {t.actions.coldStorage.desc}
                         </p>
                       </div>
-                      <div className="h-11 w-14 sm:h-12 sm:w-16 rounded-lg overflow-hidden border border-teal-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
+                      <div className="h-14 w-18 sm:h-16 sm:w-22 rounded-xl overflow-hidden border border-teal-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
                         <img 
                           src="/dashboard/cold_storage.jpg" 
                           alt="Cold Storage" 
@@ -1694,25 +1694,25 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                   {/* CARD 6: POOL WITH OTHER FARMERS */}
                   <div
                     onClick={() => handleNavClick('pool')}
-                    className="group rounded-xl p-3.5 sm:p-4 bg-gradient-to-br from-rose-50/70 via-pink-50/30 to-white border border-rose-200 hover:border-rose-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[136px] sm:min-h-[140px] xl:min-h-[144px]"
+                    className="group rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-rose-50/70 via-pink-50/30 to-white border border-rose-200 hover:border-rose-400 shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[185px] xl:min-h-[195px]"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="h-9 w-9 rounded-lg bg-rose-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                        <Users className="h-4.5 w-4.5" />
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                        <Users className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
                       </div>
-                      <ChevronRight className="h-4 w-4 text-rose-700/60 group-hover:text-rose-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4.5 w-4.5 text-rose-700/60 group-hover:text-rose-700 group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
                     </div>
 
-                    <div className="flex items-end justify-between gap-2.5 mt-2.5">
+                    <div className="flex items-end justify-between gap-3 mt-3.5 sm:mt-4">
                       <div className="min-w-0 flex-1 pr-1">
-                        <h3 className="text-sm sm:text-[15px] font-black text-[#17251D] tracking-tight leading-snug">
+                        <h3 className="text-base sm:text-lg font-black text-[#17251D] tracking-tight leading-snug">
                           {t.actions.poolFarmers.title}
                         </h3>
-                        <p className="text-xs text-[#657468] leading-relaxed mt-1">
+                        <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed mt-1.5">
                           {t.actions.poolFarmers.desc}
                         </p>
                       </div>
-                      <div className="h-11 w-14 sm:h-12 sm:w-16 rounded-lg overflow-hidden border border-rose-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
+                      <div className="h-14 w-18 sm:h-16 sm:w-22 rounded-xl overflow-hidden border border-rose-200/90 shadow-2xs bg-white shrink-0 mb-0.5">
                         <img 
                           src="/dashboard/farmers_pool.jpg" 
                           alt="Farmer Pooling" 
@@ -1725,31 +1725,31 @@ export const FarmerDashboardPreview: React.FC<FarmerDashboardPreviewProps> = ({
                   {/* CARD 7: GOVT MANDI PRICES */}
                   <div
                     onClick={() => handleNavClick('mandi_prices')}
-                    className="group rounded-xl p-3.5 sm:p-4 bg-gradient-to-br from-[#E8F1E5]/70 via-[#E8F1E5]/30 to-white border border-[#A3D1A5] hover:border-[#176B45] shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[136px] sm:min-h-[140px] xl:min-h-[144px] sm:col-span-2 lg:col-span-1"
+                    className="group rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-[#E8F1E5]/70 via-[#E8F1E5]/30 to-white border border-[#A3D1A5] hover:border-[#176B45] shadow-2xs hover:shadow-xs transition-all transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between min-h-[175px] sm:min-h-[185px] xl:min-h-[195px] sm:col-span-2 lg:col-span-1"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="h-9 w-9 rounded-lg bg-[#104B35] text-white flex items-center justify-center shadow-xs shrink-0">
-                          <Landmark className="h-4.5 w-4.5" />
+                    <div className="flex items-start justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#104B35] text-white flex items-center justify-center shadow-xs shrink-0">
+                          <Landmark className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
                         </div>
-                        <span className="px-2 py-0.5 rounded-md bg-[#104B35] border border-[#37A86B]/40 text-[#37A86B] text-[10px] font-bold flex items-center gap-1.5 shadow-2xs">
+                        <span className="px-2.5 py-1 rounded-md bg-[#104B35] border border-[#37A86B]/40 text-[#37A86B] text-[11px] font-bold flex items-center gap-1.5 shadow-2xs">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#37A86B] animate-pulse" />
                           <span>{t.actions.govtMandi.badge}</span>
                         </span>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-[#176B45]/70 group-hover:text-[#176B45] group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
+                      <ChevronRight className="h-4.5 w-4.5 text-[#176B45]/70 group-hover:text-[#176B45] group-hover:translate-x-0.5 transition-all shrink-0 mt-0.5" />
                     </div>
 
-                    <div className="flex items-end justify-between gap-2.5 mt-2.5">
+                    <div className="flex items-end justify-between gap-3 mt-3.5 sm:mt-4">
                       <div className="min-w-0 flex-1 pr-1">
-                        <h3 className="text-sm sm:text-[15px] font-black text-[#17251D] tracking-tight leading-snug">
+                        <h3 className="text-base sm:text-lg font-black text-[#17251D] tracking-tight leading-snug">
                           {t.actions.govtMandi.title}
                         </h3>
-                        <p className="text-xs text-[#657468] leading-relaxed mt-1">
+                        <p className="text-xs sm:text-[13px] text-[#556358] leading-relaxed mt-1.5">
                           {t.actions.govtMandi.desc}
                         </p>
                       </div>
-                      <div className="h-11 w-14 sm:h-12 sm:w-16 rounded-lg overflow-hidden border border-[#A3D1A5] shadow-2xs bg-white shrink-0 mb-0.5">
+                      <div className="h-14 w-18 sm:h-16 sm:w-22 rounded-xl overflow-hidden border border-[#A3D1A5] shadow-2xs bg-white shrink-0 mb-0.5">
                         <img 
                           src="/dashboard/mandi_market.jpg" 
                           alt="Govt Mandi" 

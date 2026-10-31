@@ -40,7 +40,12 @@ import {
   ChevronDown,
   ChevronUp,
   Calculator,
-  Info
+  Info,
+  Search,
+  ArrowUpDown,
+  SlidersHorizontal,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 export const AggregatorDashboard: React.FC = () => {
@@ -108,6 +113,7 @@ export const AggregatorDashboard: React.FC = () => {
 
   // Active Procurement Plan Builder (Draft)
   const [draftPlan, setDraftPlan] = useState<{
+    id?: string;
     targetReq: any | null;
     selectedFarmers: any[];
     notes: string;
@@ -117,6 +123,9 @@ export const AggregatorDashboard: React.FC = () => {
     notes: ''
   });
   const [showPlanBuilderModal, setShowPlanBuilderModal] = useState(false);
+  const [supplySearchQuery, setSupplySearchQuery] = useState('');
+  const [supplySortBy, setSupplySortBy] = useState<'distance' | 'price_asc' | 'price_desc' | 'qty_desc'>('distance');
+  const [supplyGradeFilter, setSupplyGradeFilter] = useState<'ALL' | 'Grade A' | 'Grade B' | 'Grade C'>('ALL');
 
   const profile = user?.aggregatorProfile;
   const isSubscribed = profile?.subscriptionStatus === 'ACTIVE';
@@ -224,36 +233,157 @@ export const AggregatorDashboard: React.FC = () => {
 
   // Start Procurement Plan for a specific Buyer Demand
   const handleStartPlanForDemand = (req: any) => {
-    // Pre-select compatible supply if available
-    const compatibleSupply = farmerSupply.filter((s: any) => 
-      s.cropName?.toLowerCase() === req.cropName?.toLowerCase()
-    );
-
     setDraftPlan({
       targetReq: req,
-      selectedFarmers: compatibleSupply.slice(0, 3), // default select top 3
+      selectedFarmers: [], // No arbitrary selection or 3-farmer limit
       notes: `Procurement plan for ${req.buyerCompany || req.buyerName}`
     });
+    setSupplySearchQuery('');
     setShowPlanBuilderModal(true);
   };
 
-  // Add/Remove farmer from active draft plan
+  // Add/Remove farmer from active draft plan with dynamic quantity-based allocation
   const toggleFarmerInPlan = (supplyItem: any) => {
-    const exists = draftPlan.selectedFarmers.some(f => f.listingId === supplyItem.listingId || f.id === supplyItem.id);
+    const sId = supplyItem.listingId || supplyItem.id;
+    const exists = draftPlan.selectedFarmers.some(f => (f.listingId || f.id) === sId);
     if (exists) {
       setDraftPlan(prev => ({
         ...prev,
-        selectedFarmers: prev.selectedFarmers.filter(f => (f.listingId || f.id) !== (supplyItem.listingId || supplyItem.id))
+        selectedFarmers: prev.selectedFarmers.filter(f => (f.listingId || f.id) !== sId)
       }));
     } else {
+      const availTons = Number(supplyItem.availableQuantityTons ?? supplyItem.quantityTons ?? 0);
+      const currentAllocated = draftPlan.selectedFarmers.reduce((sum, f) => sum + Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0), 0);
+      const targetTons = Number(draftPlan.targetReq?.quantityTons || 0);
+      const remainingNeeded = Math.max(0, targetTons - currentAllocated);
+      // Allocate either what is needed to reach target demand, or available amount
+      const defaultAlloc = remainingNeeded > 0 ? Math.min(availTons, remainingNeeded) : availTons;
+      const allocFixed = Number(defaultAlloc.toFixed(2));
+
       setDraftPlan(prev => ({
         ...prev,
-        selectedFarmers: [...prev.selectedFarmers, supplyItem]
+        selectedFarmers: [
+          ...prev.selectedFarmers,
+          {
+            listingId: sId,
+            farmerId: supplyItem.farmerId,
+            farmerName: supplyItem.farmerName,
+            availableQuantityTons: availTons,
+            allocatedQuantityTons: allocFixed,
+            quantityTons: allocFixed,
+            quantityKg: Math.round(allocFixed * 1000),
+            pricePerKg: Number(supplyItem.pricePerKg || supplyItem.expectedPricePerKg || 18.5),
+            expectedPricePerKg: Number(supplyItem.expectedPricePerKg || supplyItem.pricePerKg || 18.5),
+            distanceKm: supplyItem.distanceKm,
+            grade: supplyItem.grade,
+            variety: supplyItem.variety,
+            location: supplyItem.location || supplyItem.farmerLocation
+          }
+        ]
       }));
     }
   };
 
-  // Save Procurement Plan
+  // Update specific farmer's allocated quantity
+  const updateFarmerAllocation = (listingId: string, newAllocTons: number) => {
+    setDraftPlan(prev => ({
+      ...prev,
+      selectedFarmers: prev.selectedFarmers.map(f => {
+        if ((f.listingId || f.id) === listingId) {
+          return {
+            ...f,
+            allocatedQuantityTons: newAllocTons,
+            quantityTons: newAllocTons,
+            quantityKg: Math.round(newAllocTons * 1000)
+          };
+        }
+        return f;
+      })
+    }));
+  };
+
+  // Helper: Auto-fill compatible supply lots up to target buyer demand
+  const handleAutoFillDemand = () => {
+    if (!draftPlan.targetReq) return;
+    const targetTons = Number(draftPlan.targetReq.quantityTons || 0);
+    if (targetTons <= 0) return;
+
+    const compatible = farmerSupply.filter(s => 
+      !draftPlan.targetReq || s.cropName?.toLowerCase() === draftPlan.targetReq.cropName?.toLowerCase()
+    );
+
+    let accumulated = 0;
+    const newSelected: any[] = [];
+
+    for (const s of compatible) {
+      if (accumulated >= targetTons) break;
+      const sId = s.listingId || s.id;
+      const avail = Number(s.availableQuantityTons ?? s.quantityTons ?? 0);
+      if (avail <= 0) continue;
+
+      const remainingNeeded = targetTons - accumulated;
+      const alloc = Math.min(avail, remainingNeeded);
+      const allocFixed = Number(alloc.toFixed(2));
+
+      accumulated += allocFixed;
+      newSelected.push({
+        listingId: sId,
+        farmerId: s.farmerId,
+        farmerName: s.farmerName,
+        availableQuantityTons: avail,
+        allocatedQuantityTons: allocFixed,
+        quantityTons: allocFixed,
+        quantityKg: Math.round(allocFixed * 1000),
+        pricePerKg: Number(s.pricePerKg || s.expectedPricePerKg || 18.5),
+        expectedPricePerKg: Number(s.expectedPricePerKg || s.pricePerKg || 18.5),
+        distanceKm: s.distanceKm,
+        grade: s.grade,
+        variety: s.variety,
+        location: s.location || s.farmerLocation
+      });
+    }
+
+    setDraftPlan(prev => ({
+      ...prev,
+      selectedFarmers: newSelected
+    }));
+  };
+
+  // Edit existing procurement plan in builder
+  const handleEditPlan = (plan: ProcurementPlan) => {
+    const req = buyerDemands.find(d => d.id === plan.buyerRequirementId) || {
+      id: plan.buyerRequirementId,
+      buyerCompany: plan.buyerName,
+      buyerName: plan.buyerName,
+      cropName: plan.cropName,
+      variety: plan.variety,
+      quantityTons: plan.targetQuantityTons,
+      offeredPricePerKg: plan.buyerOfferedPricePerKg
+    };
+
+    setDraftPlan({
+      id: plan.id,
+      targetReq: req,
+      selectedFarmers: (plan.selectedFarmers || []).map(f => {
+        const alloc = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+        const avail = Number(f.availableQuantityTons ?? f.quantityTons ?? alloc);
+        return {
+          ...f,
+          availableQuantityTons: avail,
+          allocatedQuantityTons: alloc,
+          quantityTons: alloc,
+          quantityKg: Math.round(alloc * 1000),
+          pricePerKg: Number(f.pricePerKg ?? f.expectedPricePerKg ?? 18.5),
+          expectedPricePerKg: Number(f.expectedPricePerKg ?? f.pricePerKg ?? 18.5)
+        };
+      }),
+      notes: plan.notes || ''
+    });
+    setSupplySearchQuery('');
+    setShowPlanBuilderModal(true);
+  };
+
+  // Save Procurement Plan with arbitrary number of farmer selections and quantity allocations
   const handleSaveProcurementPlan = async () => {
     if (!draftPlan.targetReq) {
       alert('Please select a target buyer demand requirement.');
@@ -262,6 +392,20 @@ export const AggregatorDashboard: React.FC = () => {
     if (draftPlan.selectedFarmers.length === 0) {
       alert('Please select at least one farmer lot to include in the plan.');
       return;
+    }
+
+    // Client-side validations per farmer allocation
+    for (const f of draftPlan.selectedFarmers) {
+      const alloc = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+      const avail = Number(f.availableQuantityTons ?? f.quantityTons ?? 0);
+      if (isNaN(alloc) || alloc <= 0) {
+        alert(`Invalid allocation for ${f.farmerName || 'farmer'}: Allocated quantity must be greater than 0.`);
+        return;
+      }
+      if (alloc > avail) {
+        alert(`Allocation for ${f.farmerName || 'farmer'} (${alloc}T) exceeds available quantity (${avail}T).`);
+        return;
+      }
     }
 
     try {
@@ -273,27 +417,38 @@ export const AggregatorDashboard: React.FC = () => {
         targetQuantityTons: Number(draftPlan.targetReq.quantityTons),
         buyerOfferedPricePerKg: Number(draftPlan.targetReq.offeredPricePerKg),
         notes: draftPlan.notes,
-        selectedFarmers: draftPlan.selectedFarmers.map(f => ({
-          listingId: f.listingId || f.id,
-          farmerId: f.farmerId,
-          farmerName: f.farmerName,
-          quantityTons: Number(f.quantityTons),
-          quantityKg: Number(f.quantityKg || f.quantityTons * 1000),
-          pricePerKg: Number(f.pricePerKg || f.expectedPricePerKg),
-          distanceKm: f.distanceKm,
-          grade: f.grade,
-          variety: f.variety,
-          location: f.location || f.farmerLocation
-        }))
+        selectedFarmers: draftPlan.selectedFarmers.map(f => {
+          const alloc = Number(f.allocatedQuantityTons ?? f.quantityTons);
+          return {
+            listingId: f.listingId || f.id,
+            farmerId: f.farmerId,
+            farmerName: f.farmerName,
+            availableQuantityTons: Number(f.availableQuantityTons ?? f.quantityTons),
+            allocatedQuantityTons: alloc,
+            quantityTons: alloc,
+            quantityKg: Math.round(alloc * 1000),
+            pricePerKg: Number(f.pricePerKg || f.expectedPricePerKg),
+            expectedPricePerKg: Number(f.expectedPricePerKg || f.pricePerKg),
+            distanceKm: f.distanceKm,
+            grade: f.grade,
+            variety: f.variety,
+            location: f.location || f.farmerLocation
+          };
+        })
       };
 
-      await api.createProcurementPlan(payload);
-      alert('Procurement Plan Created Successfully! You can now track fulfillment and create batches when ready.');
+      if (draftPlan.id) {
+        await api.updateProcurementPlan(draftPlan.id, payload);
+        alert('Procurement Plan Updated Successfully!');
+      } else {
+        await api.createProcurementPlan(payload);
+        alert('Procurement Plan Created Successfully! You can now track fulfillment and create batches when ready.');
+      }
       setShowPlanBuilderModal(false);
       await fetchData();
       setActiveTab('procurement');
     } catch (err) {
-      alert('Error creating procurement plan: ' + (err as Error).message);
+      alert('Error saving procurement plan: ' + (err as Error).message);
     }
   };
 
@@ -319,14 +474,22 @@ export const AggregatorDashboard: React.FC = () => {
     }
   };
 
-  // Draft Plan Economics Simulation
-  const draftTotalTons = draftPlan.selectedFarmers.reduce((sum, f) => sum + Number(f.quantityTons || 0), 0);
+  // Draft Plan Economics Simulation - Quantity-Weighted Real-Time Calculations
+  const draftTotalTons = Number(
+    draftPlan.selectedFarmers.reduce((sum, f) => sum + Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0), 0).toFixed(2)
+  );
   const draftTargetTons = Number(draftPlan.targetReq?.quantityTons || 100);
-  const draftRemainingTons = Math.max(0, draftTargetTons - draftTotalTons);
+  const draftRemainingTons = Number(Math.max(0, draftTargetTons - draftTotalTons).toFixed(2));
+  const draftExcessTons = Number(Math.max(0, draftTotalTons - draftTargetTons).toFixed(2));
   const draftBuyerPrice = Number(draftPlan.targetReq?.offeredPricePerKg || 20);
   
+  // Quantity-weighted average farmer procurement cost
   const draftAvgFarmerCost = draftTotalTons > 0
-    ? Number((draftPlan.selectedFarmers.reduce((sum, f) => sum + (Number(f.quantityTons) * Number(f.pricePerKg || f.expectedPricePerKg || 18.5)), 0) / draftTotalTons).toFixed(2))
+    ? Number((draftPlan.selectedFarmers.reduce((sum, f) => {
+        const qty = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+        const price = Number(f.pricePerKg ?? f.expectedPricePerKg ?? 18.5);
+        return sum + (qty * price);
+      }, 0) / draftTotalTons).toFixed(2))
     : 18.5;
   const draftEstLogistics = 1.15;
   const draftGrossMarginPerKg = Number((draftBuyerPrice - draftAvgFarmerCost - draftEstLogistics).toFixed(2));
@@ -1012,10 +1175,17 @@ export const AggregatorDashboard: React.FC = () => {
                 if (buyerDemands.length > 0) {
                   setDraftPlan({
                     targetReq: buyerDemands[0],
-                    selectedFarmers: farmerSupply.slice(0, 3),
+                    selectedFarmers: [],
+                    notes: `Procurement plan for ${buyerDemands[0].buyerCompany || buyerDemands[0].buyerName}`
+                  });
+                } else {
+                  setDraftPlan({
+                    targetReq: null,
+                    selectedFarmers: [],
                     notes: ''
                   });
                 }
+                setSupplySearchQuery('');
                 setShowPlanBuilderModal(true);
               }}
               className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer"
@@ -1101,18 +1271,19 @@ export const AggregatorDashboard: React.FC = () => {
 
                     {/* Participating Farmer Lots */}
                     <div className="space-y-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Selected Farmer Lots ({plan.selectedFarmers?.length || 0}):
-                      </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        <span>Selected Farmer Lots ({plan.selectedFarmers?.length || 0}):</span>
+                        <span className="text-slate-500 font-medium lowercase">scrollable view for multi-farmer plans</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1">
                         {plan.selectedFarmers?.map((f, fIdx) => (
                           <div key={fIdx} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
                             <div>
-                              <span className="font-black text-slate-900 block">{f.farmerName}</span>
+                              <span className="font-black text-slate-900 block truncate max-w-[140px]">{f.farmerName}</span>
                               <span className="text-[10px] text-slate-500">{f.grade || 'Grade A'} • {f.distanceKm ? `${f.distanceKm} km` : 'Local'}</span>
                             </div>
                             <div className="text-right">
-                              <span className="font-extrabold text-emerald-700 block">{f.quantityTons}T</span>
+                              <span className="font-extrabold text-emerald-700 block">{f.quantityTons ?? f.allocatedQuantityTons}T</span>
                               <span className="text-[10px] text-slate-500">@ ₹{f.pricePerKg}/kg</span>
                             </div>
                           </div>
@@ -1121,24 +1292,36 @@ export const AggregatorDashboard: React.FC = () => {
                     </div>
 
                     {/* Actions: Direct Procurement vs Aggregated Batch */}
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                       <span className="text-xs text-slate-500">
                         {plan.selectedFarmers?.length === 1 
                           ? '1 Farmer satisfies selection → Single direct fulfillment'
-                          : `${plan.selectedFarmers?.length} Farmers pooled → Aggregation batch consolidation`}
+                          : `${plan.selectedFarmers?.length || 0} Farmers pooled → Aggregation batch consolidation`}
                       </span>
 
-                      {plan.status !== 'BATCH_CREATED' && (
-                        <button
-                          onClick={() => handleFulfillPlan(plan)}
-                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Boxes className="h-4 w-4" />
-                          <span>
-                            {plan.selectedFarmers?.length === 1 ? 'Execute Direct Procurement' : 'Create Aggregated Batch'}
-                          </span>
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {plan.status !== 'BATCH_CREATED' && (
+                          <button
+                            onClick={() => handleEditPlan(plan)}
+                            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <Edit3 className="h-3.5 w-3.5 text-slate-600" />
+                            <span>Edit Allocations</span>
+                          </button>
+                        )}
+
+                        {plan.status !== 'BATCH_CREATED' && (
+                          <button
+                            onClick={() => handleFulfillPlan(plan)}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Boxes className="h-4 w-4" />
+                            <span>
+                              {plan.selectedFarmers?.length === 1 ? 'Execute Direct Procurement' : 'Create Aggregated Batch'}
+                            </span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1559,95 +1742,356 @@ export const AggregatorDashboard: React.FC = () => {
               </select>
             </div>
 
-            {/* Selected Farmers Checklist */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-700">
-                  Select Compatible Farmer Supply Lots ({farmerSupply.length} available):
-                </span>
-                <span className="font-black text-emerald-700">
-                  Selected: {draftTotalTons} / {draftTargetTons} Ton
-                </span>
+            {/* Quantity-Based Fulfillment Progress Strip */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-700">Procurement Progress:</span>
+                  <span className="bg-emerald-100 text-emerald-900 font-extrabold px-2.5 py-0.5 rounded-full text-[11px]">
+                    Selected: {draftPlan.selectedFarmers.length} {draftPlan.selectedFarmers.length === 1 ? 'farmer' : 'farmers'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 font-black text-xs">
+                  <span className="text-slate-900">
+                    {draftTotalTons} / {draftTargetTons} Tonnes
+                  </span>
+                  <span className={draftTotalTons >= draftTargetTons ? 'text-emerald-700' : 'text-amber-700'}>
+                    ({Math.min(100, Math.round((draftTotalTons / (draftTargetTons || 1)) * 100))}%)
+                  </span>
+                  {draftRemainingTons > 0 ? (
+                    <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full text-[10px]">
+                      Remaining: {draftRemainingTons}T
+                    </span>
+                  ) : draftExcessTons > 0 ? (
+                    <span className="bg-blue-100 text-blue-900 px-2 py-0.5 rounded-full text-[10px]">
+                      Excess: +{draftExcessTons}T
+                    </span>
+                  ) : (
+                    <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full text-[10px]">
+                      ✓ Target Met
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                {farmerSupply
-                  .filter(s => !draftPlan.targetReq || s.cropName?.toLowerCase() === draftPlan.targetReq.cropName?.toLowerCase())
-                  .map((s) => {
-                    const isChecked = draftPlan.selectedFarmers.some(f => (f.listingId || f.id) === (s.listingId || s.id));
-                    return (
-                      <div
-                        key={s.listingId || s.id}
-                        onClick={() => toggleFarmerInPlan(s)}
-                        className={`p-3 rounded-xl border text-xs flex items-center justify-between cursor-pointer transition-all ${
-                          isChecked 
-                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-xs' 
-                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <input 
-                            type="checkbox" 
-                            checked={isChecked} 
-                            onChange={() => {}} 
-                            className="rounded text-emerald-600 cursor-pointer"
-                          />
-                          <div>
-                            <span className="font-black block">{s.farmerName}</span>
-                            <span className="text-[10px] text-slate-500">{s.grade || 'Grade A'} • {s.distanceKm ?? 12} km away • {s.location || 'Local'}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-black text-emerald-800 block">{s.quantityTons} Ton</span>
-                          <span className="text-[10px] text-slate-500">@ ₹{s.expectedPricePerKg || s.pricePerKg}/kg</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+              {/* Progress bar */}
+              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    draftTotalTons >= draftTargetTons ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
+                  style={{ width: `${Math.min(100, (draftTotalTons / (draftTargetTons || 1)) * 100)}%` }}
+                />
               </div>
             </div>
 
-            {/* Transparent Indicative Economics Box */}
+            {/* Smart Supply Matching, Search, Sort & Quick Allocation Tools */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Compatible Farmer Supply Lots:</span>
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAutoFillDemand}
+                    className="px-3 py-1 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-extrabold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                    title="Automatically select lots in order up to target buyer demand"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-700" />
+                    <span>Auto-Fill to Target Demand</span>
+                  </button>
+
+                  {draftPlan.selectedFarmers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDraftPlan(prev => ({ ...prev, selectedFarmers: [] }))}
+                      className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-[11px] transition-colors cursor-pointer"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={supplySearchQuery}
+                    onChange={(e) => setSupplySearchQuery(e.target.value)}
+                    placeholder="Search farmer, variety, location..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500 font-bold">Grade:</span>
+                  <select
+                    value={supplyGradeFilter}
+                    onChange={(e) => setSupplyGradeFilter(e.target.value as any)}
+                    className="w-full py-1.5 px-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
+                  >
+                    <option value="ALL">All Grades</option>
+                    <option value="Grade A">Grade A</option>
+                    <option value="Grade B">Grade B</option>
+                    <option value="Grade C">Grade C</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500 font-bold">Sort:</span>
+                  <select
+                    value={supplySortBy}
+                    onChange={(e) => setSupplySortBy(e.target.value as any)}
+                    className="w-full py-1.5 px-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none font-semibold text-slate-800"
+                  >
+                    <option value="distance">Nearest First</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                    <option value="qty_desc">Available Qty: High to Low</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Compatible Farmer Supply Lots Scrollable List */}
+              <div className="max-h-72 overflow-y-auto space-y-2 pr-1 pt-1">
+                {farmerSupply
+                  .filter(s => {
+                    if (draftPlan.targetReq && s.cropName?.toLowerCase() !== draftPlan.targetReq.cropName?.toLowerCase()) {
+                      return false;
+                    }
+                    if (supplyGradeFilter !== 'ALL' && s.grade !== supplyGradeFilter) {
+                      return false;
+                    }
+                    if (supplySearchQuery.trim()) {
+                      const q = supplySearchQuery.toLowerCase();
+                      const matchName = s.farmerName?.toLowerCase().includes(q);
+                      const matchLoc = s.location?.toLowerCase().includes(q) || s.farmerLocation?.toLowerCase().includes(q);
+                      const matchVar = s.variety?.toLowerCase().includes(q);
+                      if (!matchName && !matchLoc && !matchVar) return false;
+                    }
+                    return true;
+                  })
+                  .sort((a, b) => {
+                    if (supplySortBy === 'price_asc') {
+                      const pa = Number(a.pricePerKg || a.expectedPricePerKg || 0);
+                      const pb = Number(b.pricePerKg || b.expectedPricePerKg || 0);
+                      return pa - pb;
+                    }
+                    if (supplySortBy === 'price_desc') {
+                      const pa = Number(a.pricePerKg || a.expectedPricePerKg || 0);
+                      const pb = Number(b.pricePerKg || b.expectedPricePerKg || 0);
+                      return pb - pa;
+                    }
+                    if (supplySortBy === 'qty_desc') {
+                      const qa = Number(a.availableQuantityTons ?? a.quantityTons ?? 0);
+                      const qb = Number(b.availableQuantityTons ?? b.quantityTons ?? 0);
+                      return qb - qa;
+                    }
+                    const da = Number(a.distanceKm ?? 999);
+                    const db = Number(b.distanceKm ?? 999);
+                    return da - db;
+                  })
+                  .map((s) => {
+                    const sId = s.listingId || s.id;
+                    const selectedItem = draftPlan.selectedFarmers.find(f => (f.listingId || f.id) === sId);
+                    const isChecked = !!selectedItem;
+                    const availTons = Number(s.availableQuantityTons ?? s.quantityTons ?? 0);
+                    const pricePerKg = Number(s.expectedPricePerKg || s.pricePerKg || 18.5);
+                    const currentAlloc = selectedItem ? Number(selectedItem.allocatedQuantityTons ?? selectedItem.quantityTons) : 0;
+                    const hasOverAllocError = isChecked && (currentAlloc > availTons || currentAlloc <= 0);
+
+                    return (
+                      <div
+                        key={sId}
+                        className={`p-3 rounded-2xl border text-xs transition-all ${
+                          isChecked 
+                            ? 'bg-emerald-50/70 border-emerald-400 shadow-xs' 
+                            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          {/* Checkbox and Farmer Details */}
+                          <div 
+                            onClick={() => toggleFarmerInPlan(s)}
+                            className="flex items-start gap-2.5 cursor-pointer flex-1"
+                          >
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked} 
+                              onChange={() => {}} 
+                              className="mt-0.5 rounded text-emerald-600 cursor-pointer"
+                            />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-black text-slate-900">{s.farmerName}</span>
+                                <span className="text-[10px] bg-slate-200/70 text-slate-700 px-1.5 py-0.2 rounded font-semibold">
+                                  {s.grade || 'Grade A'}
+                                </span>
+                                {s.variety && (
+                                  <span className="text-[10px] text-slate-500 font-medium">({s.variety})</span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-500 block">
+                                {s.distanceKm ?? 12} km away • {s.location || s.farmerLocation || 'Local'} • Harvest Status: {s.harvestStatus || 'Ready'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Available Quantity & Expected Price */}
+                          <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
+                            <div>
+                              <span className="font-black text-slate-900 block">
+                                Available: {availTons} Ton
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-bold">
+                                @ ₹{pricePerKg.toFixed(2)}/kg
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Editable Quantity Allocation Controls when Selected */}
+                        {isChecked && (
+                          <div className="mt-3 pt-2.5 border-t border-emerald-200/70 flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-bold text-emerald-950">
+                                Allocated Quantity:
+                              </span>
+                              <div className="relative flex items-center">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0.1"
+                                  max={availTons}
+                                  value={currentAlloc}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    updateFarmerAllocation(sId, isNaN(val) ? 0 : val);
+                                  }}
+                                  className={`w-24 px-2.5 py-1 text-xs font-black rounded-lg border outline-none bg-white ${
+                                    hasOverAllocError 
+                                      ? 'border-red-500 text-red-700' 
+                                      : 'border-emerald-400 text-emerald-950 focus:border-emerald-600'
+                                  }`}
+                                />
+                                <span className="ml-1 text-[11px] font-bold text-slate-500">Ton</span>
+                              </div>
+
+                              {/* Quick helper buttons */}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateFarmerAllocation(sId, availTons)}
+                                  className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-200/70 hover:bg-emerald-300 text-emerald-900 transition-colors"
+                                  title="Allocate entire available quantity"
+                                >
+                                  Max ({availTons}T)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // Allocate what's needed to reach target demand (taking current into account)
+                                    const otherAlloc = draftTotalTons - currentAlloc;
+                                    const needed = Math.max(0, draftTargetTons - otherAlloc);
+                                    const fitAmount = Number(Math.min(availTons, needed).toFixed(2));
+                                    updateFarmerAllocation(sId, fitAmount > 0 ? fitAmount : availTons);
+                                  }}
+                                  className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-200/70 hover:bg-amber-300 text-amber-900 transition-colors"
+                                  title="Fit allocation to reach remaining target demand"
+                                >
+                                  Fit Remaining
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <span className="text-[11px] font-black text-emerald-900">
+                                Lot Total: ₹{Math.round(currentAlloc * 1000 * pricePerKg).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+
+                            {/* Validation warning */}
+                            {currentAlloc > availTons && (
+                              <div className="w-full text-[10px] font-bold text-red-600 flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                <span>Allocation exceeds farmer available quantity of {availTons} Tonnes!</span>
+                              </div>
+                            )}
+                            {currentAlloc <= 0 && (
+                              <div className="w-full text-[10px] font-bold text-red-600 flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                <span>Allocated quantity must be greater than 0 Tonnes!</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {farmerSupply.filter(s => !draftPlan.targetReq || s.cropName?.toLowerCase() === draftPlan.targetReq.cropName?.toLowerCase()).length === 0 && (
+                  <div className="text-center py-6 text-slate-400 bg-slate-50 rounded-xl">
+                    <p className="text-xs font-bold">No compatible farmer supply listings found for {draftPlan.targetReq?.cropName || 'this crop'}.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quantity-Weighted Economics Simulation Box */}
             <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200 space-y-2 text-xs text-amber-950">
-              <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
-                <span className="font-black uppercase tracking-wider text-[11px] text-amber-900">
-                  Economics Simulation (Indicative)
+              <div className="flex flex-wrap items-center justify-between border-b border-amber-200/60 pb-2 gap-2">
+                <span className="font-black uppercase tracking-wider text-[11px] text-amber-900 flex items-center gap-1.5">
+                  <Calculator className="h-3.5 w-3.5 text-amber-800" />
+                  <span>Economics Simulation (Quantity-Weighted)</span>
                 </span>
                 <span className="text-[10px] font-bold text-amber-800">
                   Target: {draftTargetTons}T | Selected: {draftTotalTons}T | Remaining: {draftRemainingTons}T
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Indicative Buyer Price:</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+                <div className="bg-amber-100/40 p-2 rounded-xl">
+                  <span className="text-[10px] text-slate-500 block font-semibold">Indicative Buyer Price</span>
                   <span className="font-black text-slate-900">₹{draftBuyerPrice.toFixed(2)}/kg</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Weighted Farmer Cost:</span>
+                <div className="bg-amber-100/40 p-2 rounded-xl">
+                  <span className="text-[10px] text-slate-500 block font-semibold">Weighted Farmer Cost</span>
                   <span className="font-black text-slate-900">₹{draftAvgFarmerCost.toFixed(2)}/kg</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Estimated Logistics:</span>
+                <div className="bg-amber-100/40 p-2 rounded-xl">
+                  <span className="text-[10px] text-slate-500 block font-semibold">Estimated Logistics</span>
                   <span className="font-black text-slate-900">₹{draftEstLogistics.toFixed(2)}/kg</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-600">Estimated Gross Margin:</span>
-                  <span className="font-black text-emerald-700">₹{draftGrossMarginPerKg.toFixed(2)}/kg</span>
+                <div className="bg-amber-100/40 p-2 rounded-xl">
+                  <span className="text-[10px] text-slate-500 block font-semibold">Est. Gross Margin/kg</span>
+                  <span className={`font-black ${draftGrossMarginPerKg >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                    ₹{draftGrossMarginPerKg.toFixed(2)}/kg
+                  </span>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-amber-200/60 flex justify-between items-center text-xs">
-                <span className="font-extrabold text-amber-900">
-                  Estimated Gross Profit on Selected Volume:
-                </span>
-                <span className="text-base font-black text-emerald-700">
+              <div className="pt-2 border-t border-amber-200/60 flex flex-wrap justify-between items-center text-xs gap-2">
+                <div>
+                  <span className="font-extrabold text-amber-900 block">
+                    Estimated Gross Profit on Selected Volume ({draftTotalTons}T):
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Gross Margin ₹{draftGrossMarginPerKg.toFixed(2)}/kg × {Math.round(draftTotalTons * 1000).toLocaleString('en-IN')} kg
+                  </span>
+                </div>
+                <span className={`text-lg font-black ${draftTotalMargin >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                   ₹{draftTotalMargin.toLocaleString('en-IN')}
                 </span>
               </div>
 
               <div className="text-[10px] text-amber-800 italic pt-1">
-                * All economics are ESTIMATED and INDICATIVE, SUBJECT TO FINAL TERMS. No guaranteed profit claims.
+                * All economics are ESTIMATED and INDICATIVE, SUBJECT TO FINAL TERMS. Quantity-weighted based on actual farmer allocations.
               </div>
             </div>
 
@@ -1656,16 +2100,17 @@ export const AggregatorDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowPlanBuilderModal(false)}
-                className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 font-bold text-xs"
+                className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 font-bold text-xs cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveProcurementPlan}
-                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs cursor-pointer flex items-center gap-1.5"
               >
-                Save Procurement Plan
+                <Check className="h-4 w-4" />
+                <span>{draftPlan.id ? 'Update Procurement Plan' : 'Save Procurement Plan'}</span>
               </button>
             </div>
           </div>

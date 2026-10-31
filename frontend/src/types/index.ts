@@ -180,7 +180,10 @@ export interface ProcurementPlanFarmer {
   farmerName: string;
   quantityTons: number;
   quantityKg?: number;
+  availableQuantityTons?: number;
+  allocatedQuantityTons?: number;
   pricePerKg: number;
+  expectedPricePerKg?: number;
   distanceKm?: number;
   grade?: string;
   variety?: string;

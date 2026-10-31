@@ -7,7 +7,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { db, hashPassword, findUserByIdentifier, findUserByGoogleId, findUserById, pool } = require('./db');
+const { db, hashPassword, findUserByIdentifier, findUserByGoogleId, findUserById, pool, mapRow } = require('./db');
 const { calculateMatch, evaluateEligibility } = require('./services/matchingService');
 const { calculateNetRealization, calculateStorageScenario } = require('./services/netRealizationService');
 const { predictYield, analyzeProduceQualityCV } = require('./services/forecastService');
@@ -2461,10 +2461,145 @@ app.get('/api/aggregator/supply', authMiddleware, requireRole(['aggregator', 'ad
   res.json(supply);
 });
 
+// Helper to validate and calculate farmer allocations with row-level locking & over-allocation prevention
+async function validateAndCalculateFarmerAllocations(client, selectedFarmers, currentPlanId = null) {
+  if (!Array.isArray(selectedFarmers) || selectedFarmers.length === 0) {
+    throw new Error('Please select at least one farmer supply listing.');
+  }
+
+  // Prevent duplicate allocations of the same listing in a single plan
+  const seenListingIds = new Set();
+  for (const f of selectedFarmers) {
+    const lid = f.listingId || f.id;
+    if (!lid) {
+      throw new Error('Each farmer selection must specify a valid listing ID.');
+    }
+    if (seenListingIds.has(lid)) {
+      throw new Error(`Duplicate farmer listing "${lid}" cannot be allocated multiple times in the same procurement plan.`);
+    }
+    seenListingIds.add(lid);
+  }
+
+  // Fetch active plans to compute already committed quantities across the platform
+  const activePlansRes = await client.query(
+    `SELECT id, selected_farmers FROM procurement_plans 
+     WHERE status IN ('DRAFT', 'COMMITTED', 'ACTIVE', 'CONFIRMED', 'AGGREGATED')
+       AND ($1::varchar IS NULL OR id != $1)`,
+    [currentPlanId]
+  );
+
+  const listingCommittedMap = {};
+  for (const planRow of activePlansRes.rows) {
+    const sf = Array.isArray(planRow.selected_farmers) ? planRow.selected_farmers : [];
+    for (const item of sf) {
+      const id = item.listingId || item.id;
+      if (id) {
+        const qty = Number(item.quantityKg) || 
+          (item.allocatedQuantityTons !== undefined ? Number(item.allocatedQuantityTons) * 1000 : 
+          (item.quantityTons !== undefined ? Number(item.quantityTons) * 1000 : 0));
+        listingCommittedMap[id] = (listingCommittedMap[id] || 0) + qty;
+      }
+    }
+  }
+
+  const validatedFarmers = [];
+  let totalPlannedKg = 0;
+  let totalProcCost = 0;
+
+  for (const f of selectedFarmers) {
+    const lid = f.listingId || f.id;
+    // Lock listing row to prevent concurrent over-allocation
+    const listingRes = await client.query(
+      `SELECT * FROM farmer_listings WHERE id = $1 FOR UPDATE`,
+      [lid]
+    );
+
+    if (listingRes.rows.length === 0) {
+      throw new Error(`Farmer listing "${lid}" was not found.`);
+    }
+
+    const listing = mapRow(listingRes.rows[0]);
+    if (listing.status !== 'ACTIVE') {
+      throw new Error(`Farmer listing "${listing.cropName || listing.crop_name}" (${lid}) is no longer available (status: ${listing.status}).`);
+    }
+
+    const listingTotalKg = Number(listing.quantityKg) || Number((listing.quantityTons || 0) * 1000) || 0;
+    const alreadyCommittedKg = listingCommittedMap[lid] || 0;
+    const remainingAvailableKg = Math.max(0, listingTotalKg - alreadyCommittedKg);
+
+    // Determine requested allocation quantity
+    const requestedKg = Number(f.quantityKg) || 
+      (f.allocatedQuantityTons !== undefined ? Number(f.allocatedQuantityTons) * 1000 : 
+      (f.quantityTons !== undefined ? Number(f.quantityTons) * 1000 : listingTotalKg));
+    const requestedTons = Number((requestedKg / 1000).toFixed(2));
+
+    if (requestedKg <= 0) {
+      throw new Error(`Allocated quantity for ${listing.farmerName || 'Farmer'} must be greater than zero.`);
+    }
+
+    if (requestedKg > remainingAvailableKg) {
+      throw new Error(
+        `Insufficient available supply for ${listing.farmerName || 'Farmer'} (${listing.cropName || 'Produce'}). ` +
+        `Available: ${(remainingAvailableKg / 1000).toFixed(2)}T ` +
+        `(${(alreadyCommittedKg / 1000).toFixed(2)}T already committed in other active plans), ` +
+        `but ${requestedTons}T was requested.`
+      );
+    }
+
+    const pricePerKg = Number(f.pricePerKg || f.expectedPricePerKg || listing.expectedPricePerKg) || 18.5;
+    totalPlannedKg += requestedKg;
+    totalProcCost += (requestedKg * pricePerKg);
+
+    validatedFarmers.push({
+      listingId: lid,
+      farmerId: listing.farmerId || f.farmerId,
+      farmerName: listing.farmerName || f.farmerName,
+      variety: f.variety || listing.variety || 'Standard',
+      grade: f.grade || listing.grade || 'Grade A',
+      availableQuantityTons: Number((listingTotalKg / 1000).toFixed(2)),
+      allocatedQuantityTons: requestedTons,
+      quantityTons: requestedTons,
+      quantityKg: requestedKg,
+      pricePerKg,
+      distanceKm: f.distanceKm || listing.distanceKm || 12,
+      location: f.location || listing.location || 'Local'
+    });
+  }
+
+  return {
+    validatedFarmers,
+    totalPlannedKg,
+    totalProcCost
+  };
+}
+
 // GET /api/aggregator/procurement-plans
 app.get('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggregator', 'admin']), async (req, res) => {
   const plans = await db.find('procurementPlans', p => p.aggregatorId === req.user.id);
-  res.json(plans);
+  const enriched = plans.map(p => {
+    const targetTons = Number(p.targetQuantityTons || (p.targetQuantityKg ? p.targetQuantityKg / 1000 : 0));
+    const totalProc = Number(p.totalProcuredTons || (p.plannedQuantityKg ? p.plannedQuantityKg / 1000 : 0));
+    const sf = Array.isArray(p.selectedFarmers) ? p.selectedFarmers : [];
+    const procCost = Number(p.estimatedProcurementCost || 0);
+    const buyerPrice = Number(p.buyerOfferedPricePerKg || p.indicativeBuyerPricePerKg || 20);
+    const avgPrice = totalProc > 0 ? Number((procCost / (totalProc * 1000)).toFixed(2)) : Number(p.avgFarmerPricePerKg || 18.5);
+    const grossMarginTotal = Number(p.estimatedGrossMargin || p.estimatedGrossMarginTotal || 0);
+    const grossMarginPerKg = totalProc > 0 ? Number((grossMarginTotal / (totalProc * 1000)).toFixed(2)) : Number(p.estimatedGrossMarginPerKg || 0);
+
+    return {
+      ...p,
+      selectedFarmers: sf,
+      targetQuantityTons: targetTons,
+      totalProcuredTons: totalProc,
+      remainingTons: Math.max(0, targetTons - totalProc),
+      buyerOfferedPricePerKg: buyerPrice,
+      indicativeBuyerPricePerKg: buyerPrice,
+      avgFarmerPricePerKg: avgPrice,
+      estimatedGrossMarginTotal: grossMarginTotal,
+      estimatedGrossMarginPerKg: grossMarginPerKg
+    };
+  });
+  res.json(enriched);
 });
 
 // POST /api/aggregator/procurement-plans
@@ -2474,6 +2609,7 @@ app.post('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggr
     cropName,
     variety,
     targetQuantityKg,
+    targetQuantityTons,
     selectedFarmers = [],
     notes
   } = req.body;
@@ -2483,44 +2619,101 @@ app.post('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggr
     reqItem = await db.findById('buyerRequirements', buyerRequirementId);
   }
 
-  const plannedQtyKg = selectedFarmers.reduce((sum, f) => sum + (Number(f.quantityKg || (f.quantityTons * 1000)) || 0), 0);
-  const estProcCost = selectedFarmers.reduce((sum, f) => {
-    const qty = Number(f.quantityKg || (f.quantityTons * 1000)) || 0;
-    const price = Number(f.expectedPricePerKg || f.purchasePricePerKg) || 18;
-    return sum + (qty * price);
-  }, 0);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  const indicativeBuyerPrice = Number(reqItem?.offeredPricePerKg || req.body.indicativeBuyerPricePerKg || 20);
-  const estLogistics = Number((plannedQtyKg * 1.25).toFixed(2));
-  const indicativeGrossRevenue = plannedQtyKg * indicativeBuyerPrice;
-  const estGrossMargin = Number((indicativeGrossRevenue - estProcCost).toFixed(2));
-  const estNetMargin = Number((estGrossMargin - estLogistics).toFixed(2));
+    const { validatedFarmers, totalPlannedKg, totalProcCost } = 
+      await validateAndCalculateFarmerAllocations(client, selectedFarmers, null);
 
-  const plan = {
-    id: `plan-${Date.now()}`,
-    aggregatorId: req.user.id,
-    aggregatorName: req.user.aggregatorProfile?.businessName || req.user.name,
-    buyerRequirementId: reqItem?.id || buyerRequirementId || null,
-    buyerName: reqItem?.buyerName || req.body.buyerName || 'Verified Buyer',
-    buyerCompany: reqItem?.buyerCompany || req.body.buyerCompany || 'Commercial Buyer',
-    cropName: reqItem?.cropName || cropName || 'Potato',
-    variety: reqItem?.variety || variety || 'All Varieties',
-    targetQuantityKg: Number(targetQuantityKg || (reqItem ? reqItem.quantityTons * 1000 : 20000)),
-    plannedQuantityKg: plannedQtyKg,
-    selectedFarmers,
-    estimatedProcurementCost: estProcCost,
-    indicativeBuyerPricePerKg: indicativeBuyerPrice,
-    estimatedLogisticsCost: estLogistics,
-    estimatedGrossMargin: estGrossMargin,
-    estimatedNetMargin: estNetMargin,
-    status: 'DRAFT',
-    notes: notes || '',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
+    const targetKg = Number(
+      targetQuantityKg || 
+      (targetQuantityTons ? targetQuantityTons * 1000 : (reqItem ? reqItem.quantityTons * 1000 : 20000))
+    );
+    const targetTons = Number((targetKg / 1000).toFixed(2));
+    const plannedTons = Number((totalPlannedKg / 1000).toFixed(2));
+    const remainingTons = Number((Math.max(0, targetKg - totalPlannedKg) / 1000).toFixed(2));
+    const indicativeBuyerPrice = Number(reqItem?.offeredPricePerKg || req.body.buyerOfferedPricePerKg || req.body.indicativeBuyerPricePerKg || 20);
+    const estLogistics = Number((totalPlannedKg * 1.15).toFixed(2));
+    const indicativeGrossRevenue = totalPlannedKg * indicativeBuyerPrice;
+    const estGrossMargin = Number((indicativeGrossRevenue - totalProcCost).toFixed(2));
+    const estNetMargin = Number((estGrossMargin - estLogistics).toFixed(2));
+    const avgFarmerPrice = plannedTons > 0 ? Number((totalProcCost / totalPlannedKg).toFixed(2)) : 18.5;
+    const grossMarginPerKg = plannedTons > 0 ? Number(((indicativeGrossRevenue - totalProcCost) / totalPlannedKg).toFixed(2)) : 0;
 
-  await db.insert('procurementPlans', plan);
-  res.status(201).json(plan);
+    const plan = {
+      id: `plan-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      aggregatorId: req.user.id,
+      aggregatorName: req.user.aggregatorProfile?.businessName || req.user.name,
+      buyerRequirementId: reqItem?.id || buyerRequirementId || null,
+      buyerName: reqItem?.buyerName || req.body.buyerName || 'Verified Buyer',
+      buyerCompany: reqItem?.buyerCompany || req.body.buyerCompany || 'Commercial Buyer',
+      cropName: reqItem?.cropName || cropName || 'Potato',
+      variety: reqItem?.variety || variety || 'All Varieties',
+      targetQuantityKg: targetKg,
+      targetQuantityTons: targetTons,
+      plannedQuantityKg: totalPlannedKg,
+      totalProcuredTons: plannedTons,
+      remainingTons,
+      selectedFarmers: validatedFarmers,
+      estimatedProcurementCost: totalProcCost,
+      avgFarmerPricePerKg: avgFarmerPrice,
+      indicativeBuyerPricePerKg: indicativeBuyerPrice,
+      buyerOfferedPricePerKg: indicativeBuyerPrice,
+      estimatedLogisticsCostPerKg: 1.15,
+      estimatedLogisticsCost: estLogistics,
+      estimatedGrossMargin: estGrossMargin,
+      estimatedGrossMarginTotal: estGrossMargin,
+      estimatedGrossMarginPerKg: grossMarginPerKg,
+      estimatedNetMargin: estNetMargin,
+      status: 'DRAFT',
+      notes: notes || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    const insertSql = `
+      INSERT INTO procurement_plans (
+        id, aggregator_id, aggregator_name, buyer_requirement_id, buyer_name, buyer_company,
+        crop_name, variety, target_quantity_kg, planned_quantity_kg, selected_farmers,
+        estimated_procurement_cost, indicative_buyer_price_per_kg, estimated_logistics_cost,
+        estimated_gross_margin, estimated_net_margin, status, notes, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+      ) RETURNING *
+    `;
+    const insertRes = await client.query(insertSql, [
+      plan.id,
+      plan.aggregatorId,
+      plan.aggregatorName,
+      plan.buyerRequirementId,
+      plan.buyerName,
+      plan.buyerCompany,
+      plan.cropName,
+      plan.variety,
+      plan.targetQuantityKg,
+      plan.plannedQuantityKg,
+      JSON.stringify(plan.selectedFarmers),
+      plan.estimatedProcurementCost,
+      plan.indicativeBuyerPricePerKg,
+      plan.estimatedLogisticsCost,
+      plan.estimatedGrossMargin,
+      plan.estimatedNetMargin,
+      plan.status,
+      plan.notes,
+      plan.createdAt,
+      plan.updatedAt
+    ]);
+
+    await client.query('COMMIT');
+    const savedPlan = { ...plan, ...mapRow(insertRes.rows[0]), selectedFarmers: validatedFarmers };
+    res.status(201).json(savedPlan);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: err.message || 'Error creating procurement plan' });
+  } finally {
+    client.release();
+  }
 });
 
 // PUT /api/aggregator/procurement-plans/:id
@@ -2531,26 +2724,93 @@ app.put('/api/aggregator/procurement-plans/:id', authMiddleware, requireRole(['a
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  const { selectedFarmers, status, notes } = req.body;
-  if (selectedFarmers !== undefined) {
-    plan.selectedFarmers = selectedFarmers;
-    plan.plannedQuantityKg = selectedFarmers.reduce((sum, f) => sum + (Number(f.quantityKg || (f.quantityTons * 1000)) || 0), 0);
-    plan.estimatedProcurementCost = selectedFarmers.reduce((sum, f) => {
-      const qty = Number(f.quantityKg || (f.quantityTons * 1000)) || 0;
-      const price = Number(f.expectedPricePerKg || f.purchasePricePerKg) || 18;
-      return sum + (qty * price);
-    }, 0);
-    const indicativeGrossRevenue = plan.plannedQuantityKg * plan.indicativeBuyerPricePerKg;
-    plan.estimatedLogisticsCost = Number((plan.plannedQuantityKg * 1.25).toFixed(2));
-    plan.estimatedGrossMargin = Number((indicativeGrossRevenue - plan.estimatedProcurementCost).toFixed(2));
-    plan.estimatedNetMargin = Number((plan.estimatedGrossMargin - plan.estimatedLogisticsCost).toFixed(2));
-  }
-  if (status) plan.status = status;
-  if (notes !== undefined) plan.notes = notes;
-  plan.updatedAt = new Date().toISOString();
+  const { selectedFarmers, status, notes, targetQuantityTons, targetQuantityKg, buyerOfferedPricePerKg, indicativeBuyerPricePerKg } = req.body;
 
-  await db.update('procurementPlans', plan.id, plan);
-  res.json(plan);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let validatedFarmers = plan.selectedFarmers;
+    let totalPlannedKg = Number(plan.plannedQuantityKg || 0);
+    let totalProcCost = Number(plan.estimatedProcurementCost || 0);
+
+    if (selectedFarmers !== undefined) {
+      const calcResult = await validateAndCalculateFarmerAllocations(client, selectedFarmers, plan.id);
+      validatedFarmers = calcResult.validatedFarmers;
+      totalPlannedKg = calcResult.totalPlannedKg;
+      totalProcCost = calcResult.totalProcCost;
+    }
+
+    const indicativePrice = Number(buyerOfferedPricePerKg || indicativeBuyerPricePerKg || plan.indicativeBuyerPricePerKg || 20);
+    const targetKg = Number(
+      targetQuantityKg || 
+      (targetQuantityTons ? targetQuantityTons * 1000 : plan.targetQuantityKg || 20000)
+    );
+    const targetTons = Number((targetKg / 1000).toFixed(2));
+    const plannedTons = Number((totalPlannedKg / 1000).toFixed(2));
+    const remainingTons = Number((Math.max(0, targetKg - totalPlannedKg) / 1000).toFixed(2));
+    const estLogistics = Number((totalPlannedKg * 1.15).toFixed(2));
+    const indicativeGrossRevenue = totalPlannedKg * indicativePrice;
+    const estGrossMargin = Number((indicativeGrossRevenue - totalProcCost).toFixed(2));
+    const estNetMargin = Number((estGrossMargin - estLogistics).toFixed(2));
+    const avgFarmerPrice = plannedTons > 0 ? Number((totalProcCost / totalPlannedKg).toFixed(2)) : 18.5;
+    const grossMarginPerKg = plannedTons > 0 ? Number(((indicativeGrossRevenue - totalProcCost) / totalPlannedKg).toFixed(2)) : 0;
+
+    const newStatus = status || plan.status;
+    const newNotes = notes !== undefined ? notes : plan.notes;
+    const updatedAt = new Date().toISOString();
+
+    const updateSql = `
+      UPDATE procurement_plans SET
+        target_quantity_kg = $1,
+        planned_quantity_kg = $2,
+        selected_farmers = $3,
+        estimated_procurement_cost = $4,
+        indicative_buyer_price_per_kg = $5,
+        estimated_logistics_cost = $6,
+        estimated_gross_margin = $7,
+        estimated_net_margin = $8,
+        status = $9,
+        notes = $10,
+        updated_at = $11
+      WHERE id = $12
+      RETURNING *
+    `;
+    const updateRes = await client.query(updateSql, [
+      targetKg,
+      totalPlannedKg,
+      JSON.stringify(validatedFarmers),
+      totalProcCost,
+      indicativePrice,
+      estLogistics,
+      estGrossMargin,
+      estNetMargin,
+      newStatus,
+      newNotes,
+      updatedAt,
+      plan.id
+    ]);
+
+    await client.query('COMMIT');
+    const updatedPlan = {
+      ...plan,
+      ...mapRow(updateRes.rows[0]),
+      selectedFarmers: validatedFarmers,
+      targetQuantityTons: targetTons,
+      totalProcuredTons: plannedTons,
+      remainingTons,
+      buyerOfferedPricePerKg: indicativePrice,
+      avgFarmerPricePerKg: avgFarmerPrice,
+      estimatedGrossMarginPerKg: grossMarginPerKg,
+      estimatedGrossMarginTotal: estGrossMargin
+    };
+    res.json(updatedPlan);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: err.message || 'Error updating procurement plan' });
+  } finally {
+    client.release();
+  }
 });
 
 // POST /api/aggregator/procurement-plans/:id/create-batch
@@ -4675,5 +4935,7 @@ if (require.main === module) {
     console.log(`🚀 KisanConnect API Server running on http://localhost:${PORT}`);
   });
 }
+
+app.validateAndCalculateFarmerAllocations = validateAndCalculateFarmerAllocations;
 
 module.exports = app;

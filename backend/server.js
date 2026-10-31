@@ -2377,6 +2377,64 @@ app.get('/api/matches/requirement/:reqId', optionalAuth, async (req, res) => {
 // AGGREGATOR DEMAND, SUPPLY & PROCUREMENT PLANS
 // ---------------------------------------------
 
+// Helper to fetch committed quantities from active procurement plans
+async function getListingCommittedQuantities(clientOrPool, excludePlanId = null) {
+  const queryFn = (clientOrPool && typeof clientOrPool.query === 'function') 
+    ? clientOrPool.query.bind(clientOrPool) 
+    : pool.query.bind(pool);
+  
+  const committedMap = {};
+  try {
+    const res = await queryFn(
+      `SELECT id, status, selected_farmers FROM procurement_plans 
+       WHERE status IN ('ACTIVE', 'COMMITTED', 'AGGREGATED', 'DIRECT_FULFILLMENT', 'BATCH_CREATED')
+         AND ($1::varchar IS NULL OR id != $1)`,
+      [excludePlanId]
+    );
+    for (const row of (res?.rows || [])) {
+      const sf = Array.isArray(row.selected_farmers) ? row.selected_farmers : [];
+      for (const item of sf) {
+        const id = item.listingId || item.id;
+        if (id) {
+          const qty = Number(item.quantityKg) || 
+            (item.allocatedQuantityTons !== undefined ? Number(item.allocatedQuantityTons) * 1000 : 
+            (item.quantityTons !== undefined ? Number(item.quantityTons) * 1000 : 0));
+          committedMap[id] = (committedMap[id] || 0) + qty;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[COMMITTED-MAP] Warning fetching committed quantities:', err.message);
+  }
+  return committedMap;
+}
+
+// Unified Available Inventory Calculation per Listing
+function calculateAvailableForListing(listing, committedMap = {}) {
+  const totalKg = Number(listing.quantityKg || listing.quantity_kg) || 
+    Number(((listing.quantityTons !== undefined ? listing.quantityTons : (listing.quantity_tons !== undefined ? listing.quantity_tons : 0))) * 1000) || 0;
+  const confirmedKg = Number((listing.confirmedQuantityTons || listing.confirmed_quantity_tons || 0) * 1000);
+  const rowReservedKg = Number((listing.reservedQuantityTons || listing.reserved_quantity_tons || 0) * 1000);
+  const planCommittedKg = committedMap[listing.id] || 0;
+  
+  // Platform reservation is whichever is higher: active plan allocations or explicit listing reservation
+  const activeReservedKg = Math.max(planCommittedKg, rowReservedKg);
+  const committedTotalKg = activeReservedKg + confirmedKg;
+  const availableKg = Math.max(0, totalKg - committedTotalKg);
+  
+  return {
+    totalKg,
+    totalTons: Number((totalKg / 1000).toFixed(2)),
+    availableKg,
+    availableTons: Number((availableKg / 1000).toFixed(2)),
+    reservedKg: activeReservedKg,
+    reservedTons: Number((activeReservedKg / 1000).toFixed(2)),
+    confirmedKg,
+    confirmedTons: Number((confirmedKg / 1000).toFixed(2)),
+    isFullyCommitted: availableKg <= 0
+  };
+}
+
 // GET /api/aggregator/demand - Open buyer demand in aggregator service area
 app.get('/api/aggregator/demand', authMiddleware, requireRole(['aggregator', 'admin']), async (req, res) => {
   const userCoords = resolveCoordinates(req.user);
@@ -2387,23 +2445,41 @@ app.get('/api/aggregator/demand', authMiddleware, requireRole(['aggregator', 'ad
   const allBatches = await db.find('aggregationBatches');
   const allPlans = await db.find('procurementPlans', p => p.aggregatorId === req.user.id);
 
+  let committedMap = {};
+  try {
+    committedMap = await getListingCommittedQuantities(pool, null);
+  } catch (e) {}
+
   const demands = allReqs.map(reqItem => {
     const reqCoords = resolveCoordinates(reqItem);
     const distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lon, reqCoords.lat, reqCoords.lon);
 
-    // Compatible farmer listings in aggregator radius
-    const compatibleListings = allListings.filter(l => {
+    // Compatible farmer listings in aggregator radius & state-wide
+    const compatibleListingsInRadius = [];
+    const allCompatibleListings = [];
+
+    for (const l of allListings) {
       const isCrop = (l.cropName || '').toLowerCase() === (reqItem.cropName || '').toLowerCase();
-      if (!isCrop) return false;
+      if (!isCrop) continue;
+
+      const { availableTons } = calculateAvailableForListing(l, committedMap);
       const fCoords = resolveCoordinates(l);
       const fDist = calculateDistanceKm(userCoords.lat, userCoords.lon, fCoords.lat, fCoords.lon);
-      return fDist <= radiusKm;
-    });
 
-    const availableSupplyTons = Number(compatibleListings.reduce((sum, l) => sum + (Number(l.quantityTons) || 0), 0).toFixed(1));
+      const enrichedListing = { ...l, availableTons, fDist };
+      allCompatibleListings.push(enrichedListing);
+      if (fDist <= radiusKm) {
+        compatibleListingsInRadius.push(enrichedListing);
+      }
+    }
+
+    // Available uncommitted supply in aggregator radius
+    const availableSupplyTons = Number(compatibleListingsInRadius.reduce((sum, l) => sum + l.availableTons, 0).toFixed(1));
+    // Total regional compatible available supply
+    const totalRegionalSupplyTons = Number(allCompatibleListings.reduce((sum, l) => sum + l.availableTons, 0).toFixed(1));
 
     // Committed volumes in plans & batches
-    const relatedPlans = allPlans.filter(p => p.buyerRequirementId === reqItem.id);
+    const relatedPlans = allPlans.filter(p => p.buyerRequirementId === reqItem.id && p.status !== 'CANCELLED' && p.status !== 'EXPIRED');
     const committedPlanTons = Number(relatedPlans.reduce((sum, p) => sum + ((Number(p.plannedQuantityKg) || 0) / 1000), 0).toFixed(1));
     const relatedBatches = allBatches.filter(b => b.buyerRequirementId === reqItem.id);
     const committedBatchTons = Number(relatedBatches.reduce((sum, b) => sum + (Number(b.currentAggregatedTons) || 0), 0).toFixed(1));
@@ -2419,10 +2495,13 @@ app.get('/api/aggregator/demand', authMiddleware, requireRole(['aggregator', 'ad
       minimumDirectFarmerLotKg: reqItem.minimumDirectFarmerLotKg !== undefined ? Number(reqItem.minimumDirectFarmerLotKg) : 0,
       aggregationAllowed: reqItem.aggregationAllowed !== false && reqItem.aggregation_allowed !== false,
       distanceKm,
+      serviceRadiusKm: radiusKm,
       availableSupplyTons,
+      totalRegionalSupplyTons,
       committedTons,
       remainingTons,
-      compatibleFarmersCount: compatibleListings.length
+      compatibleFarmersCount: compatibleListingsInRadius.length,
+      regionalFarmersCount: allCompatibleListings.length
     };
   }).filter(d => {
     if (req.query.crop && d.cropName.toLowerCase() !== req.query.crop.toLowerCase()) return false;
@@ -2441,20 +2520,37 @@ app.get('/api/aggregator/supply', authMiddleware, requireRole(['aggregator', 'ad
   const allListings = await db.find('farmerListings', l => l.status === 'ACTIVE');
   const cropFilter = req.query.crop;
 
+  let committedMap = {};
+  try {
+    committedMap = await getListingCommittedQuantities(pool, null);
+  } catch (e) {}
+
   const supply = (await Promise.all(allListings.map(async listing => {
     const fCoords = resolveCoordinates(listing);
     const distanceKm = calculateDistanceKm(userCoords.lat, userCoords.lon, fCoords.lat, fCoords.lon);
     const sanitized = await sanitizeListing(listing, req.user);
+    const { totalKg, totalTons, availableKg, availableTons, reservedTons, confirmedTons, isFullyCommitted } = 
+      calculateAvailableForListing(listing, committedMap);
+
     return {
       ...sanitized,
-      quantityKg: listing.quantityKg ? Number(listing.quantityKg) : Number(listing.quantityTons * 1000),
+      listingId: listing.id,
+      quantityKg: totalKg,
+      quantityTons: totalTons,
+      availableQuantityKg: availableKg,
+      availableQuantityTons: availableTons,
+      reservedQuantityTons: reservedTons,
+      confirmedQuantityTons: confirmedTons,
+      isFullyCommitted,
       distanceKm,
+      withinRadius: distanceKm <= radiusKm,
       latitude: fCoords.lat,
       longitude: fCoords.lon
     };
   }))).filter(item => {
     if (cropFilter && cropFilter !== 'All' && item.cropName.toLowerCase() !== cropFilter.toLowerCase()) return false;
-    if (req.query.radiusKm) return item.distanceKm <= radiusKm;
+    if (req.query.withinRadius === 'true') return item.distanceKm <= radiusKm;
+    if (req.query.radiusKm && !req.query.showAll) return item.distanceKm <= radiusKm;
     return true;
   }).sort((a, b) => a.distanceKm - b.distanceKm);
 
@@ -2467,7 +2563,7 @@ async function validateAndCalculateFarmerAllocations(client, selectedFarmers, cu
     throw new Error('Please select at least one farmer supply listing.');
   }
 
-  // Prevent duplicate allocations of the same listing in a single plan
+  // Prevent duplicate allocations of the same listing ID in a single plan
   const seenListingIds = new Set();
   for (const f of selectedFarmers) {
     const lid = f.listingId || f.id;
@@ -2481,28 +2577,10 @@ async function validateAndCalculateFarmerAllocations(client, selectedFarmers, cu
   }
 
   // Fetch active plans to compute already committed quantities across the platform
-  const activePlansRes = await client.query(
-    `SELECT id, selected_farmers FROM procurement_plans 
-     WHERE status IN ('DRAFT', 'COMMITTED', 'ACTIVE', 'CONFIRMED', 'AGGREGATED')
-       AND ($1::varchar IS NULL OR id != $1)`,
-    [currentPlanId]
-  );
-
-  const listingCommittedMap = {};
-  for (const planRow of activePlansRes.rows) {
-    const sf = Array.isArray(planRow.selected_farmers) ? planRow.selected_farmers : [];
-    for (const item of sf) {
-      const id = item.listingId || item.id;
-      if (id) {
-        const qty = Number(item.quantityKg) || 
-          (item.allocatedQuantityTons !== undefined ? Number(item.allocatedQuantityTons) * 1000 : 
-          (item.quantityTons !== undefined ? Number(item.quantityTons) * 1000 : 0));
-        listingCommittedMap[id] = (listingCommittedMap[id] || 0) + qty;
-      }
-    }
-  }
+  const listingCommittedMap = await getListingCommittedQuantities(client, currentPlanId);
 
   const validatedFarmers = [];
+  const physicalBatchesSeen = new Map(); // Detect multiple listings representing identical physical produce
   let totalPlannedKg = 0;
   let totalProcCost = 0;
 
@@ -2514,7 +2592,7 @@ async function validateAndCalculateFarmerAllocations(client, selectedFarmers, cu
       [lid]
     );
 
-    if (listingRes.rows.length === 0) {
+    if (!listingRes.rows || listingRes.rows.length === 0) {
       throw new Error(`Farmer listing "${lid}" was not found.`);
     }
 
@@ -2523,9 +2601,28 @@ async function validateAndCalculateFarmerAllocations(client, selectedFarmers, cu
       throw new Error(`Farmer listing "${listing.cropName || listing.crop_name}" (${lid}) is no longer available (status: ${listing.status}).`);
     }
 
+    // Physical produce deduplication check:
+    // If two listings share identical farmer, crop, variety, grade, and harvestDate, they represent duplicate physical inventory
+    const fId = listing.farmerId || listing.farmer_id || f.farmerId;
+    const crop = (listing.cropName || listing.crop_name || f.cropName || '').toLowerCase().trim();
+    const variety = (listing.variety || f.variety || '').toLowerCase().trim();
+    const grade = (listing.grade || f.grade || '').toLowerCase().trim();
+    const harvestDate = listing.harvestDate || listing.harvest_date || '';
+    const physicalProduceKey = `${fId}::${crop}::${variety}::${grade}::${harvestDate}`;
+
+    if (physicalBatchesSeen.has(physicalProduceKey)) {
+      const priorLid = physicalBatchesSeen.get(physicalProduceKey);
+      throw new Error(
+        `Duplicate physical inventory detected for ${listing.farmerName || 'Farmer'} (${listing.cropName} - ${listing.variety || 'Standard'}). ` +
+        `Listings "${priorLid}" and "${lid}" reference the same physical harvest lot and cannot both be allocated in the same procurement plan.`
+      );
+    }
+    physicalBatchesSeen.set(physicalProduceKey, lid);
+
     const listingTotalKg = Number(listing.quantityKg) || Number((listing.quantityTons || 0) * 1000) || 0;
+    const confirmedKg = Number((listing.confirmedQuantityTons || listing.confirmed_quantity_tons || 0) * 1000);
     const alreadyCommittedKg = listingCommittedMap[lid] || 0;
-    const remainingAvailableKg = Math.max(0, listingTotalKg - alreadyCommittedKg);
+    const remainingAvailableKg = Math.max(0, listingTotalKg - alreadyCommittedKg - confirmedKg);
 
     // Determine requested allocation quantity
     const requestedKg = Number(f.quantityKg) || 
@@ -2534,12 +2631,12 @@ async function validateAndCalculateFarmerAllocations(client, selectedFarmers, cu
     const requestedTons = Number((requestedKg / 1000).toFixed(2));
 
     if (requestedKg <= 0) {
-      throw new Error(`Allocated quantity for ${listing.farmerName || 'Farmer'} must be greater than zero.`);
+      throw new Error(`Allocated quantity for ${listing.farmerName || 'Farmer'} (Listing #${lid}) must be greater than zero.`);
     }
 
     if (requestedKg > remainingAvailableKg) {
       throw new Error(
-        `Insufficient available supply for ${listing.farmerName || 'Farmer'} (${listing.cropName || 'Produce'}). ` +
+        `Insufficient available supply for ${listing.farmerName || 'Farmer'} (${listing.cropName || 'Produce'}, Listing #${lid}). ` +
         `Available: ${(remainingAvailableKg / 1000).toFixed(2)}T ` +
         `(${(alreadyCommittedKg / 1000).toFixed(2)}T already committed in other active plans), ` +
         `but ${requestedTons}T was requested.`
@@ -2552,11 +2649,11 @@ async function validateAndCalculateFarmerAllocations(client, selectedFarmers, cu
 
     validatedFarmers.push({
       listingId: lid,
-      farmerId: listing.farmerId || f.farmerId,
+      farmerId: fId,
       farmerName: listing.farmerName || f.farmerName,
-      variety: f.variety || listing.variety || 'Standard',
-      grade: f.grade || listing.grade || 'Grade A',
-      availableQuantityTons: Number((listingTotalKg / 1000).toFixed(2)),
+      variety: listing.variety || f.variety || 'Standard',
+      grade: listing.grade || f.grade || 'Grade A',
+      availableQuantityTons: Number((remainingAvailableKg / 1000).toFixed(2)),
       allocatedQuantityTons: requestedTons,
       quantityTons: requestedTons,
       quantityKg: requestedKg,
@@ -2666,7 +2763,7 @@ app.post('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggr
       estimatedGrossMarginTotal: estGrossMargin,
       estimatedGrossMarginPerKg: grossMarginPerKg,
       estimatedNetMargin: estNetMargin,
-      status: 'DRAFT',
+      status: 'ACTIVE',
       notes: notes || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -2705,6 +2802,19 @@ app.post('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggr
       plan.updatedAt
     ]);
 
+    // Atomically reserve inventory on farmer_listings
+    for (const f of validatedFarmers) {
+      const tons = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+      if (f.listingId && tons > 0) {
+        await client.query(
+          `UPDATE farmer_listings 
+           SET reserved_quantity_tons = COALESCE(reserved_quantity_tons, 0) + $1 
+           WHERE id = $2`,
+          [tons, f.listingId]
+        );
+      }
+    }
+
     await client.query('COMMIT');
     const savedPlan = { ...plan, ...mapRow(insertRes.rows[0]), selectedFarmers: validatedFarmers };
     res.status(201).json(savedPlan);
@@ -2739,6 +2849,34 @@ app.put('/api/aggregator/procurement-plans/:id', authMiddleware, requireRole(['a
       validatedFarmers = calcResult.validatedFarmers;
       totalPlannedKg = calcResult.totalPlannedKg;
       totalProcCost = calcResult.totalProcCost;
+
+      // Revert previous reservations
+      const oldSf = Array.isArray(plan.selectedFarmers) ? plan.selectedFarmers : [];
+      for (const f of oldSf) {
+        const tons = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+        const lid = f.listingId || f.id;
+        if (lid && tons > 0) {
+          await client.query(
+            `UPDATE farmer_listings 
+             SET reserved_quantity_tons = GREATEST(0, COALESCE(reserved_quantity_tons, 0) - $1) 
+             WHERE id = $2`,
+            [tons, lid]
+          );
+        }
+      }
+
+      // Apply updated reservations
+      for (const f of validatedFarmers) {
+        const tons = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+        if (f.listingId && tons > 0) {
+          await client.query(
+            `UPDATE farmer_listings 
+             SET reserved_quantity_tons = COALESCE(reserved_quantity_tons, 0) + $1 
+             WHERE id = $2`,
+            [tons, f.listingId]
+          );
+        }
+      }
     }
 
     const indicativePrice = Number(buyerOfferedPricePerKg || indicativeBuyerPricePerKg || plan.indicativeBuyerPricePerKg || 20);
@@ -2811,6 +2949,70 @@ app.put('/api/aggregator/procurement-plans/:id', authMiddleware, requireRole(['a
   } finally {
     client.release();
   }
+});
+
+// POST /api/aggregator/procurement-plans/:id/cancel - Cancel plan and release inventory reservations
+app.post('/api/aggregator/procurement-plans/:id/cancel', authMiddleware, requireRole(['aggregator', 'admin']), requireActiveStatus, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const planRes = await client.query('SELECT * FROM procurement_plans WHERE id = $1 FOR UPDATE', [req.params.id]);
+    if (planRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Procurement plan not found' });
+    }
+    const plan = mapRow(planRes.rows[0]);
+    if (plan.aggregatorId !== req.user.id && req.user.role !== 'admin') {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (plan.status === 'CANCELLED') {
+      await client.query('ROLLBACK');
+      return res.json({ success: true, message: 'Plan was already cancelled', plan });
+    }
+
+    // Release reservations on farmer_listings
+    const sf = Array.isArray(plan.selectedFarmers) ? plan.selectedFarmers : [];
+    for (const f of sf) {
+      const lid = f.listingId || f.id;
+      const tons = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+      if (lid && tons > 0) {
+        await client.query(
+          `UPDATE farmer_listings 
+           SET reserved_quantity_tons = GREATEST(0, COALESCE(reserved_quantity_tons, 0) - $1) 
+           WHERE id = $2`,
+          [tons, lid]
+        );
+      }
+    }
+
+    const updateRes = await client.query(
+      `UPDATE procurement_plans 
+       SET status = 'CANCELLED', updated_at = NOW() 
+       WHERE id = $1 
+       RETURNING *`,
+      [plan.id]
+    );
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: 'Procurement plan cancelled and farmer reservations released.',
+      plan: mapRow(updateRes.rows[0])
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message || 'Error cancelling procurement plan' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/aggregator/procurement-plans/:id - Cancel/delete plan and release reservations
+app.delete('/api/aggregator/procurement-plans/:id', authMiddleware, requireRole(['aggregator', 'admin']), requireActiveStatus, async (req, res) => {
+  req.url = `/api/aggregator/procurement-plans/${req.params.id}/cancel`;
+  return app._router.handle(req, res);
 });
 
 // POST /api/aggregator/procurement-plans/:id/create-batch
@@ -4937,5 +5139,7 @@ if (require.main === module) {
 }
 
 app.validateAndCalculateFarmerAllocations = validateAndCalculateFarmerAllocations;
+app.getListingCommittedQuantities = getListingCommittedQuantities;
+app.calculateAvailableForListing = calculateAvailableForListing;
 
 module.exports = app;

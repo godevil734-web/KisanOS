@@ -162,6 +162,8 @@ export const api = {
     request<any>(`/aggregator/procurement-plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   createBatchFromPlan: (id: string, data: any = {}) => 
     request<any>(`/aggregator/procurement-plans/${id}/create-batch`, { method: 'POST', body: JSON.stringify(data) }),
+  cancelProcurementPlan: (id: string) =>
+    request<any>(`/aggregator/procurement-plans/${id}/cancel`, { method: 'POST' }),
 
   // AI Recommendation
   getAiBuyerRecommendation: (data: any) => 

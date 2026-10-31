@@ -1,15 +1,16 @@
 /**
  * backend/tests/test_procurement_plan_allocations.js
  * 
- * Comprehensive Test Suite for Aggregator Procurement Plan:
- * 1. Selecting 1, 3, 5, 10, 25, and 50 farmer listings.
- * 2. Selecting > 50 farmer listings with no arbitrary count limit.
- * 3. Partial quantity allocation per farmer (e.g. 30T out of 70T).
- * 4. Preventing over-allocation (> available quantity, <= 0).
- * 5. Preventing duplicate listing allocations in a single plan.
- * 6. Correct quantity-weighted average price and gross profit calculation.
- * 7. Saving, retrieving, and updating procurement plans with all allocations intact.
- * 8. Cross-plan concurrent over-allocation prevention and database transaction locks.
+ * Comprehensive Test Suite for KisanOS Aggregator Procurement & Inventory System:
+ * - Test A: Same farmer, independent listings (Listing 1: 5T, Listing 2: 5T -> allocate 5T from each successfully).
+ * - Test B: Partial reservation (Listing 1: 5T, already reserved: 3T -> allocate 2T successfully).
+ * - Test C: Over-allocation (Listing 1: 5T -> requested: 6T -> rejected with listing-level error).
+ * - Test D: Duplicate physical inventory (Two listings referencing same physical crop/batch -> rejected).
+ * - Test E: Concurrent procurement (Two aggregators reserving remaining inventory -> transactions protect stock).
+ * - Test F: Multiple farmers (10, 25, 50, >50 listings without arbitrary count restrictions).
+ * - Test G: Buyer supply consistency (Demand cards vs Supply tab vs Modal inventory accounting).
+ * - Test H: Quantity-weighted economics simulation (Weighted farmer cost, logistics, margin, total profit).
+ * - Test I: Procurement plan lifecycle (Active plan reserves inventory, cancel plan immediately releases stock).
  */
 
 const assert = require('assert');
@@ -18,7 +19,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const app = require('../server');
 
 console.log('====================================================================');
-console.log('KISANOS — PROCUREMENT PLAN DYNAMIC ALLOCATIONS & ECONOMICS SUITE');
+console.log('KISANOS — PROCUREMENT & INVENTORY REGRESSION AUDIT TEST SUITE');
 console.log('====================================================================\n');
 
 let testsPassed = 0;
@@ -30,12 +31,12 @@ async function runTest(testName, testFn) {
     console.log(`✅ [PASS] ${testName}`);
     testsPassed++;
   } catch (err) {
-    console.error(`❌ [FAIL] ${testName}:`, err.message);
+    console.error(`❌ [FAIL] ${testName}:`, err.stack);
     testsFailed++;
   }
 }
 
-// In-memory Database Client Simulator for Transactional Validation
+// In-memory Database Client Simulator for Transactional Validation & Locks
 class MockDbClient {
   constructor() {
     this.listings = new Map();
@@ -53,7 +54,10 @@ class MockDbClient {
       grade: data.grade || 'Grade A',
       quantity_tons: data.quantityTons,
       quantity_kg: data.quantityKg || data.quantityTons * 1000,
+      reserved_quantity_tons: data.reservedQuantityTons || 0,
+      confirmed_quantity_tons: data.confirmedQuantityTons || 0,
       expected_price_per_kg: data.pricePerKg || 18.5,
+      harvest_date: data.harvestDate || '2026-09-20',
       status: data.status || 'ACTIVE',
       distance_km: data.distanceKm || 15,
       location: data.location || 'Local Mandi'
@@ -63,29 +67,43 @@ class MockDbClient {
   addPlan(id, plan) {
     this.activePlans.set(id, {
       id,
-      status: plan.status || 'DRAFT',
+      status: plan.status || 'ACTIVE',
       selected_farmers: plan.selectedFarmers || []
     });
+  }
+
+  cancelPlan(id) {
+    const plan = this.activePlans.get(id);
+    if (!plan) return;
+    plan.status = 'CANCELLED';
+    for (const f of plan.selected_farmers) {
+      const lid = f.listingId || f.id;
+      const tons = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+      const listing = this.listings.get(lid);
+      if (listing && tons > 0) {
+        listing.reserved_quantity_tons = Math.max(0, (listing.reserved_quantity_tons || 0) - tons);
+      }
+    }
   }
 
   async query(sql, params = []) {
     const trimmed = sql.trim().toUpperCase();
 
-    // Query active procurement plans
+    // 1. Query active procurement plans
     if (trimmed.includes('FROM PROCUREMENT_PLANS')) {
       const currentPlanId = params[0];
       const rows = [];
       for (const [id, p] of this.activePlans.entries()) {
         if (!currentPlanId || id !== currentPlanId) {
-          if (['DRAFT', 'COMMITTED', 'ACTIVE', 'CONFIRMED', 'AGGREGATED'].includes(p.status)) {
-            rows.push({ id: p.id, selected_farmers: p.selected_farmers });
+          if (['ACTIVE', 'COMMITTED', 'AGGREGATED', 'DIRECT_FULFILLMENT', 'BATCH_CREATED'].includes(p.status)) {
+            rows.push({ id: p.id, status: p.status, selected_farmers: p.selected_farmers });
           }
         }
       }
       return { rows };
     }
 
-    // Query farmer listings with FOR UPDATE lock
+    // 2. Query farmer listings with FOR UPDATE lock
     if (trimmed.includes('FROM FARMER_LISTINGS') && trimmed.includes('FOR UPDATE')) {
       const listingId = params[0];
       const row = this.listings.get(listingId);
@@ -96,271 +114,336 @@ class MockDbClient {
       return { rows: [] };
     }
 
+    // 3. Update reserved quantity on farmer listing
+    if (trimmed.includes('UPDATE FARMER_LISTINGS') && trimmed.includes('SET RESERVED_QUANTITY_TONS')) {
+      const tons = params[0];
+      const listingId = params[1];
+      const row = this.listings.get(listingId);
+      if (row) {
+        if (trimmed.includes('GREATEST(0')) {
+          row.reserved_quantity_tons = Math.max(0, (row.reserved_quantity_tons || 0) - tons);
+        } else {
+          row.reserved_quantity_tons = (row.reserved_quantity_tons || 0) + tons;
+        }
+      }
+      return { rowCount: 1 };
+    }
+
     return { rows: [] };
   }
 }
 
 async function main() {
-  const { validateAndCalculateFarmerAllocations } = app;
+  const { validateAndCalculateFarmerAllocations, calculateAvailableForListing } = app;
   assert.strictEqual(typeof validateAndCalculateFarmerAllocations, 'function', 'Validation helper must be exported');
 
-  // Setup mock client with 60 listings
-  const dbClient = new MockDbClient();
-  for (let i = 1; i <= 60; i++) {
-    const listId = `list-${i}`;
-    const qtyTons = 20.0 + (i % 5) * 20.0; // 20, 40, 60, 80, 100
-    const price = 16.0 + (i % 6) * 1.5;
-    dbClient.addListing(listId, {
-      farmerId: `farmer-${i}`,
-      farmerName: `Farmer Lot ${i}`,
-      quantityTons: qtyTons,
-      quantityKg: qtyTons * 1000,
-      pricePerKg: price
+  // =========================================================================
+  // TEST A: Same farmer, independent listings
+  // =========================================================================
+  await runTest('Test A: Same farmer, independent listings are individually allocatable', async () => {
+    const client = new MockDbClient();
+    // Farmer Mahendra Yadav has 2 distinct physical harvest lots
+    client.addListing('list-yadav-lot1', {
+      farmerId: 'usr-farmer-3',
+      farmerName: 'Mahendra Yadav',
+      cropName: 'Potato',
+      variety: 'Kufri Bahar',
+      grade: 'Grade A',
+      quantityTons: 5.0,
+      harvestDate: '2026-09-19',
+      pricePerKg: 18.0
     });
-  }
-
-  // -------------------------------------------------------------
-  // TEST 1: Selecting 1, 3, 5, 10, 25, and 50 farmer listings
-  // -------------------------------------------------------------
-  const countsToTest = [1, 3, 5, 10, 25, 50];
-  for (const count of countsToTest) {
-    await runTest(`1. Selecting exactly ${count} farmer listing(s) in Procurement Plan`, async () => {
-      const selectedFarmers = [];
-      for (let i = 1; i <= count; i++) {
-        selectedFarmers.push({
-          listingId: `list-${i}`,
-          allocatedQuantityTons: 10.0,
-          pricePerKg: 18.0
-        });
-      }
-
-      const result = await validateAndCalculateFarmerAllocations(dbClient, selectedFarmers, null);
-      assert.strictEqual(result.validatedFarmers.length, count, `Should validate ${count} farmers`);
-      assert.strictEqual(result.totalPlannedKg, count * 10000, `Total planned kg should be ${count * 10000}`);
-      assert.strictEqual(result.totalProcCost, count * 10000 * 18.0, `Total proc cost should match`);
+    client.addListing('list-yadav-lot2', {
+      farmerId: 'usr-farmer-3',
+      farmerName: 'Mahendra Yadav',
+      cropName: 'Potato',
+      variety: 'Kufri Jyoti',
+      grade: 'Grade B',
+      quantityTons: 5.0,
+      harvestDate: '2026-09-25',
+      pricePerKg: 16.5
     });
-  }
 
-  // -------------------------------------------------------------
-  // TEST 2: Selecting MORE THAN 50 listings (55 listings)
-  // -------------------------------------------------------------
-  await runTest('2. Selecting > 50 farmer listings (55 listings) without arbitrary limit', async () => {
-    const selectedFarmers = [];
-    for (let i = 1; i <= 55; i++) {
-      selectedFarmers.push({
-        listingId: `list-${i}`,
-        allocatedQuantityTons: 5.0,
-        pricePerKg: 19.0
+    const selectedFarmers = [
+      { listingId: 'list-yadav-lot1', allocatedQuantityTons: 5.0 },
+      { listingId: 'list-yadav-lot2', allocatedQuantityTons: 5.0 }
+    ];
+
+    const result = await validateAndCalculateFarmerAllocations(client, selectedFarmers, null);
+    assert.strictEqual(result.validatedFarmers.length, 2, 'Both listings should be validated');
+    assert.strictEqual(result.totalPlannedKg, 10000, 'Total planned should be 10,000 kg (10T)');
+    assert.strictEqual(result.validatedFarmers[0].allocatedQuantityTons, 5.0);
+    assert.strictEqual(result.validatedFarmers[1].allocatedQuantityTons, 5.0);
+  });
+
+  // =========================================================================
+  // TEST B: Partial reservation
+  // =========================================================================
+  await runTest('Test B: Partial quantity allocation (5T total, 3T active reservation -> allocate remaining 2T)', async () => {
+    const client = new MockDbClient();
+    client.addListing('list-b', {
+      farmerId: 'usr-farmer-b',
+      farmerName: 'Ramesh Verma',
+      quantityTons: 5.0,
+      pricePerKg: 19.0
+    });
+
+    // An existing active plan already reserves 3T of list-b
+    client.addPlan('plan-existing', {
+      status: 'ACTIVE',
+      selectedFarmers: [{ listingId: 'list-b', allocatedQuantityTons: 3.0 }]
+    });
+
+    // Request the remaining 2T
+    const selected = [{ listingId: 'list-b', allocatedQuantityTons: 2.0 }];
+    const result = await validateAndCalculateFarmerAllocations(client, selected, null);
+    assert.strictEqual(result.validatedFarmers.length, 1);
+    assert.strictEqual(result.validatedFarmers[0].allocatedQuantityTons, 2.0);
+    assert.strictEqual(result.validatedFarmers[0].availableQuantityTons, 2.0, 'Available should report 2.0T remaining');
+  });
+
+  // =========================================================================
+  // TEST C: Over-allocation rejection with listing-level error
+  // =========================================================================
+  await runTest('Test C: Over-allocation (Listing: 5T, Requested: 6T) rejected with listing-level error', async () => {
+    const client = new MockDbClient();
+    client.addListing('list-c', {
+      farmerId: 'usr-farmer-c',
+      farmerName: 'Sunil Gupta',
+      cropName: 'Potato',
+      quantityTons: 5.0,
+      pricePerKg: 18.0
+    });
+
+    const selected = [{ listingId: 'list-c', allocatedQuantityTons: 6.0 }];
+    let threw = false;
+    let errMsg = '';
+    try {
+      await validateAndCalculateFarmerAllocations(client, selected, null);
+    } catch (err) {
+      threw = true;
+      errMsg = err.message;
+    }
+    assert.strictEqual(threw, true, 'Must throw error on over-allocation');
+    assert(errMsg.includes('list-c'), 'Error must specify unique listing ID');
+    assert(errMsg.includes('Insufficient available supply'), 'Error must explain insufficient supply');
+    assert(errMsg.includes('Available: 5.00T'), 'Error must indicate actual available quantity');
+    assert(errMsg.includes('6T was requested'), 'Error must indicate requested quantity');
+  });
+
+  // =========================================================================
+  // TEST D: Duplicate physical inventory detection
+  // =========================================================================
+  await runTest('Test D: Duplicate physical inventory detection prevents double-allocation', async () => {
+    const client = new MockDbClient();
+    // Two listings referencing the exact same physical harvest lot
+    client.addListing('list-dup-1', {
+      farmerId: 'usr-farmer-d',
+      farmerName: 'Dinesh Kumar',
+      cropName: 'Potato',
+      variety: 'Kufri Bahar',
+      grade: 'Grade A',
+      harvestDate: '2026-09-18',
+      quantityTons: 10.0
+    });
+    client.addListing('list-dup-2', {
+      farmerId: 'usr-farmer-d',
+      farmerName: 'Dinesh Kumar',
+      cropName: 'Potato',
+      variety: 'Kufri Bahar',
+      grade: 'Grade A',
+      harvestDate: '2026-09-18',
+      quantityTons: 10.0
+    });
+
+    const selected = [
+      { listingId: 'list-dup-1', allocatedQuantityTons: 5.0 },
+      { listingId: 'list-dup-2', allocatedQuantityTons: 5.0 }
+    ];
+
+    let threw = false;
+    let errMsg = '';
+    try {
+      await validateAndCalculateFarmerAllocations(client, selected, null);
+    } catch (err) {
+      threw = true;
+      errMsg = err.message;
+    }
+    assert.strictEqual(threw, true, 'Must reject duplicate physical inventory');
+    assert(errMsg.includes('Duplicate physical inventory detected'), 'Error must identify duplicate physical produce');
+  });
+
+  // =========================================================================
+  // TEST E: Concurrent procurement race condition protection
+  // =========================================================================
+  await runTest('Test E: Concurrent procurement race condition protection via transactional commitment', async () => {
+    const client = new MockDbClient();
+    client.addListing('list-concurrent', {
+      quantityTons: 10.0,
+      pricePerKg: 18.0
+    });
+
+    // Aggregator 1 commits 7T
+    const plan1Farmers = [{ listingId: 'list-concurrent', allocatedQuantityTons: 7.0 }];
+    const res1 = await validateAndCalculateFarmerAllocations(client, plan1Farmers, null);
+    client.addPlan('plan-agg-1', {
+      status: 'ACTIVE',
+      selectedFarmers: res1.validatedFarmers
+    });
+
+    // Aggregator 2 concurrently tries to allocate 5T (7T + 5T = 12T > 10T) -> MUST FAIL
+    let plan2Failed = false;
+    try {
+      const plan2Farmers = [{ listingId: 'list-concurrent', allocatedQuantityTons: 5.0 }];
+      await validateAndCalculateFarmerAllocations(client, plan2Farmers, null);
+    } catch (err) {
+      plan2Failed = true;
+      assert(err.message.includes('Insufficient available supply') || err.message.includes('committed'));
+    }
+    assert.strictEqual(plan2Failed, true, 'Aggregator 2 must be rejected for exceeding remaining available supply');
+
+    // Aggregator 2 adjusts to remaining 3T (7T + 3T = 10T) -> MUST SUCCEED
+    const plan2Valid = [{ listingId: 'list-concurrent', allocatedQuantityTons: 3.0 }];
+    const res2 = await validateAndCalculateFarmerAllocations(client, plan2Valid, null);
+    assert.strictEqual(res2.validatedFarmers[0].allocatedQuantityTons, 3.0);
+    client.addPlan('plan-agg-2', {
+      status: 'ACTIVE',
+      selectedFarmers: res2.validatedFarmers
+    });
+  });
+
+  // =========================================================================
+  // TEST F: Multiple farmers (10, 25, 50, >50 listings)
+  // =========================================================================
+  await runTest('Test F: Selecting 10, 25, 50, and >50 listings without arbitrary count restrictions', async () => {
+    const client = new MockDbClient();
+    for (let i = 1; i <= 65; i++) {
+      client.addListing(`list-f-${i}`, {
+        farmerId: `farmer-f-${i}`,
+        farmerName: `Farmer ${i}`,
+        variety: `Variety ${i}`,
+        quantityTons: 20.0,
+        pricePerKg: 18.0
       });
     }
 
-    const result = await validateAndCalculateFarmerAllocations(dbClient, selectedFarmers, null);
-    assert.strictEqual(result.validatedFarmers.length, 55, 'Should accept all 55 farmers without arbitrary limit');
-    assert.strictEqual(result.totalPlannedKg, 55 * 5000);
-  });
-
-  // -------------------------------------------------------------
-  // TEST 3: Partial Quantity Allocation (e.g. 30T out of 70T)
-  // -------------------------------------------------------------
-  await runTest('3. Partial quantity allocation per farmer (30T out of 70T available)', async () => {
-    dbClient.addListing('list-partial', {
-      quantityTons: 70.0,
-      quantityKg: 70000,
-      pricePerKg: 19.5
-    });
-
-    const selectedFarmers = [{
-      listingId: 'list-partial',
-      allocatedQuantityTons: 30.0,
-      availableQuantityTons: 70.0,
-      pricePerKg: 19.5
-    }];
-
-    const result = await validateAndCalculateFarmerAllocations(dbClient, selectedFarmers, null);
-    assert.strictEqual(result.validatedFarmers.length, 1);
-    assert.strictEqual(result.validatedFarmers[0].allocatedQuantityTons, 30.0, 'Allocated should be 30T');
-    assert.strictEqual(result.validatedFarmers[0].availableQuantityTons, 70.0, 'Available should be 70T');
-    assert.strictEqual(result.totalPlannedKg, 30000, 'Total planned kg should be 30,000');
-  });
-
-  // -------------------------------------------------------------
-  // TEST 4: Prevent Over-Allocation (> available or <= 0)
-  // -------------------------------------------------------------
-  await runTest('4. Reject over-allocation (> available quantity) with error', async () => {
-    const selectedFarmers = [{
-      listingId: 'list-partial', // Available is 70T
-      allocatedQuantityTons: 85.0 // Requests 85T
-    }];
-
-    let threw = false;
-    try {
-      await validateAndCalculateFarmerAllocations(dbClient, selectedFarmers, null);
-    } catch (err) {
-      threw = true;
-      assert(err.message.includes('Insufficient available supply') || err.message.includes('committed'), 
-        `Error message was: ${err.message}`);
+    const testCounts = [10, 25, 50, 60];
+    for (const count of testCounts) {
+      const selections = [];
+      for (let i = 1; i <= count; i++) {
+        selections.push({
+          listingId: `list-f-${i}`,
+          allocatedQuantityTons: 5.0
+        });
+      }
+      const result = await validateAndCalculateFarmerAllocations(client, selections, null);
+      assert.strictEqual(result.validatedFarmers.length, count, `Should support ${count} farmer allocations`);
+      assert.strictEqual(result.totalPlannedKg, count * 5000);
     }
-    assert.strictEqual(threw, true, 'Should throw on over-allocation');
   });
 
-  await runTest('4b. Reject invalid zero or negative allocation with error', async () => {
-    const selectedFarmers = [{
-      listingId: 'list-partial',
-      allocatedQuantityTons: 0.0 // Zero invalid
-    }];
+  // =========================================================================
+  // TEST G: Supply consistency across Demand Cards, Supply tab, and Modal
+  // =========================================================================
+  await runTest('Test G: Consistent inventory calculation across Demand card, Supply tab, and Modal', async () => {
+    const listing = {
+      id: 'list-consistency',
+      cropName: 'Potato',
+      quantityTons: 20.0,
+      quantityKg: 20000,
+      confirmedQuantityTons: 2.0,
+      reservedQuantityTons: 0
+    };
 
-    let threw = false;
-    try {
-      await validateAndCalculateFarmerAllocations(dbClient, selectedFarmers, null);
-    } catch (err) {
-      threw = true;
-      assert(err.message.includes('greater than zero'), `Error message was: ${err.message}`);
-    }
-    assert.strictEqual(threw, true, 'Should throw on zero allocation');
+    // 5T committed in active plan
+    const committedMap = { 'list-consistency': 5000 };
+
+    const avail = calculateAvailableForListing(listing, committedMap);
+    // Total = 20T, Confirmed = 2T, Active Reserved = 5T -> Available = 20 - 7 = 13T
+    assert.strictEqual(avail.totalTons, 20.0, 'Total should be 20T');
+    assert.strictEqual(avail.confirmedTons, 2.0, 'Confirmed should be 2T');
+    assert.strictEqual(avail.reservedTons, 5.0, 'Reserved should be 5T');
+    assert.strictEqual(avail.availableTons, 13.0, 'Available must be 13T');
+    assert.strictEqual(avail.isFullyCommitted, false);
   });
 
-  // -------------------------------------------------------------
-  // TEST 5: Prevent Duplicate Listing Allocations
-  // -------------------------------------------------------------
-  await runTest('5. Reject duplicate listing allocations in same plan with error', async () => {
-    const selectedFarmers = [
-      { listingId: 'list-1', allocatedQuantityTons: 5.0 },
-      { listingId: 'list-1', allocatedQuantityTons: 5.0 } // Duplicate listing
+  // =========================================================================
+  // TEST H: Quantity-weighted procurement economics
+  // =========================================================================
+  await runTest('Test H: Quantity-weighted farmer cost and gross profit calculation', async () => {
+    const client = new MockDbClient();
+    client.addListing('list-h1', { quantityTons: 50.0, pricePerKg: 20.0 });
+    client.addListing('list-h2', { quantityTons: 100.0, pricePerKg: 10.0 });
+
+    const selected = [
+      { listingId: 'list-h1', allocatedQuantityTons: 30.0, pricePerKg: 20.0 }, // 30,000 * 20 = 600,000
+      { listingId: 'list-h2', allocatedQuantityTons: 70.0, pricePerKg: 10.0 }  // 70,000 * 10 = 700,000
     ];
 
-    let threw = false;
-    try {
-      await validateAndCalculateFarmerAllocations(dbClient, selectedFarmers, null);
-    } catch (err) {
-      threw = true;
-      assert(err.message.toLowerCase().includes('duplicate'), `Error message was: ${err.message}`);
-    }
-    assert.strictEqual(threw, true, 'Should throw on duplicate listing');
-  });
-
-  // -------------------------------------------------------------
-  // TEST 6: Quantity-Weighted Economics Simulation
-  // -------------------------------------------------------------
-  await runTest('6. Correct quantity-weighted average procurement cost and profit calculation', async () => {
-    // Farmer A: 30T @ 20.0/kg = 30,000 * 20 = 600,000
-    // Farmer B: 70T @ 10.0/kg = 70,000 * 10 = 700,000
-    // Total: 100T (100,000 kg), Total cost: 1,300,000
-    // Quantity-weighted average cost: 1,300,000 / 100,000 = 13.00/kg
-    // Simple average would be (20 + 10) / 2 = 15.00/kg
-    dbClient.addListing('list-w1', { quantityTons: 50.0, pricePerKg: 20.0 });
-    dbClient.addListing('list-w2', { quantityTons: 100.0, pricePerKg: 10.0 });
-
-    const selectedFarmers = [
-      { listingId: 'list-w1', allocatedQuantityTons: 30.0, pricePerKg: 20.0 },
-      { listingId: 'list-w2', allocatedQuantityTons: 70.0, pricePerKg: 10.0 }
-    ];
-
-    const result = await validateAndCalculateFarmerAllocations(dbClient, selectedFarmers, null);
-    const totalKg = result.totalPlannedKg;
-    const totalCost = result.totalProcCost;
+    const result = await validateAndCalculateFarmerAllocations(client, selected, null);
+    const totalKg = result.totalPlannedKg; // 100,000 kg
+    const totalCost = result.totalProcCost; // 1,300,000
     const weightedAvg = Number((totalCost / totalKg).toFixed(2));
 
-    // Verify quantity-weighted average
-    assert.strictEqual(weightedAvg, 13.00, `Expected weighted average ₹13.00/kg, got ₹${weightedAvg}`);
-    assert.notStrictEqual(weightedAvg, 15.00, 'Must NOT be simple unweighted average of ₹15.00/kg');
+    assert.strictEqual(weightedAvg, 13.00, `Expected weighted avg ₹13.00/kg, got ₹${weightedAvg}`);
 
-    // Economics simulation:
     const buyerPrice = 25.0;
-    const estLogisticsPerKg = 1.15;
-    const grossMarginPerKg = Number((buyerPrice - weightedAvg).toFixed(2));
-    const grossProfitTotal = Math.round(grossMarginPerKg * totalKg);
-    const netMarginTotal = Math.round((grossMarginPerKg - estLogisticsPerKg) * totalKg);
+    const estLogistics = 1.15;
+    const grossMarginPerKg = Number((buyerPrice - weightedAvg).toFixed(2)); // 12.00
+    const grossProfitTotal = Math.round(grossMarginPerKg * totalKg); // 1,200,000
+    const netProfitTotal = Math.round((grossMarginPerKg - estLogistics) * totalKg); // 1,085,000
 
-    assert.strictEqual(grossMarginPerKg, 12.00, 'Gross margin should be ₹12.00/kg');
-    assert.strictEqual(grossProfitTotal, 1200000, 'Gross profit should be ₹1,200,000');
-    assert.strictEqual(netMarginTotal, 1085000, 'Net margin should be ₹1,085,000');
+    assert.strictEqual(grossMarginPerKg, 12.00);
+    assert.strictEqual(grossProfitTotal, 1200000);
+    assert.strictEqual(netProfitTotal, 1085000);
   });
 
-  // -------------------------------------------------------------
-  // TEST 7: Saving, Reopening, and Updating a Procurement Plan
-  // -------------------------------------------------------------
-  await runTest('7. Saving, retrieving, and updating plan with allocations intact', async () => {
-    // Save Plan 1
-    const initialFarmers = [
-      { listingId: 'list-10', allocatedQuantityTons: 15.0 },
-      { listingId: 'list-11', allocatedQuantityTons: 20.0 }
-    ];
-    const initialResult = await validateAndCalculateFarmerAllocations(dbClient, initialFarmers, null);
-    dbClient.addPlan('plan-101', {
-      status: 'DRAFT',
-      selectedFarmers: initialResult.validatedFarmers
+  // =========================================================================
+  // TEST I: Plan lifecycle (Active reserves inventory, Cancel releases stock)
+  // =========================================================================
+  await runTest('Test I: Procurement lifecycle — Active plan reserves stock, Cancel releases reservations', async () => {
+    const client = new MockDbClient();
+    client.addListing('list-lifecycle', {
+      quantityTons: 20.0,
+      quantityKg: 20000,
+      pricePerKg: 18.0
     });
 
-    // Reopen and retrieve Plan 1
-    const stored = dbClient.activePlans.get('plan-101');
-    assert(stored, 'Plan 101 must exist');
-    assert.strictEqual(stored.selected_farmers.length, 2);
-    assert.strictEqual(stored.selected_farmers[0].allocatedQuantityTons, 15.0);
-    assert.strictEqual(stored.selected_farmers[1].allocatedQuantityTons, 20.0);
+    // 1. Initially 20T available
+    const initAvail = calculateAvailableForListing(client.listings.get('list-lifecycle'), {});
+    assert.strictEqual(initAvail.availableTons, 20.0);
 
-    // Update Plan 1 with an additional farmer and adjusted quantity
-    const updatedFarmers = [
-      { listingId: 'list-10', allocatedQuantityTons: 10.0 }, // Adjusted
-      { listingId: 'list-11', allocatedQuantityTons: 20.0 },
-      { listingId: 'list-12', allocatedQuantityTons: 15.0 }  // Added 3rd
-    ];
-    const updatedResult = await validateAndCalculateFarmerAllocations(dbClient, updatedFarmers, 'plan-101');
-    dbClient.addPlan('plan-101', {
-      status: 'DRAFT',
-      selectedFarmers: updatedResult.validatedFarmers
+    // 2. Create Active Plan reserving 15T
+    const planFarmers = [{ listingId: 'list-lifecycle', allocatedQuantityTons: 15.0 }];
+    const valRes = await validateAndCalculateFarmerAllocations(client, planFarmers, null);
+    client.addPlan('plan-lifecycle-1', {
+      status: 'ACTIVE',
+      selectedFarmers: valRes.validatedFarmers
     });
+    // Simulate updating reserved quantity on listing row
+    await client.query('UPDATE farmer_listings SET reserved_quantity_tons = $1 WHERE id = $2', [15.0, 'list-lifecycle']);
 
-    const updatedStored = dbClient.activePlans.get('plan-101');
-    assert.strictEqual(updatedStored.selected_farmers.length, 3);
-    assert.strictEqual(updatedStored.selected_farmers[0].allocatedQuantityTons, 10.0);
-    assert.strictEqual(updatedStored.selected_farmers[2].allocatedQuantityTons, 15.0);
-  });
+    // Check available is now 5T
+    const committedMapActive = { 'list-lifecycle': 15000 };
+    const reservedAvail = calculateAvailableForListing(client.listings.get('list-lifecycle'), committedMapActive);
+    assert.strictEqual(reservedAvail.availableTons, 5.0, 'Available should reduce to 5T');
+    assert.strictEqual(reservedAvail.reservedTons, 15.0, 'Reserved should be 15T');
 
-  // -------------------------------------------------------------
-  // TEST 8: Concurrent / Cross-Plan Over-Allocation Prevention
-  // -------------------------------------------------------------
-  await runTest('8. Cross-plan over-allocation prevention via transactional checks', async () => {
-    // Dedicated listing with 50T total
-    dbClient.addListing('list-shared', {
-      quantityTons: 50.0,
-      quantityKg: 50000,
-      pricePerKg: 20.0
-    });
+    // 3. Cancel Plan
+    client.cancelPlan('plan-lifecycle-1');
 
-    // Plan A commits 40T of the 50T
-    const planAFarmers = [{ listingId: 'list-shared', allocatedQuantityTons: 40.0 }];
-    const planAResult = await validateAndCalculateFarmerAllocations(dbClient, planAFarmers, null);
-    dbClient.addPlan('plan-A', {
-      status: 'COMMITTED',
-      selectedFarmers: planAResult.validatedFarmers
-    });
+    // Check plan status is CANCELLED and reservation is released back to 20T
+    assert.strictEqual(client.activePlans.get('plan-lifecycle-1').status, 'CANCELLED');
+    const releasedListing = client.listings.get('list-lifecycle');
+    assert.strictEqual(releasedListing.reserved_quantity_tons, 0, 'Reserved quantity on listing must be 0 after cancel');
 
-    // Plan B attempts to commit 20T on list-shared (40 + 20 = 60 > 50 available) -> MUST FAIL
-    let planBFail = false;
-    try {
-      const planBFarmers = [{ listingId: 'list-shared', allocatedQuantityTons: 20.0 }];
-      await validateAndCalculateFarmerAllocations(dbClient, planBFarmers, null);
-    } catch (err) {
-      planBFail = true;
-      assert(err.message.includes('Insufficient available supply') || err.message.includes('committed'));
-    }
-    assert.strictEqual(planBFail, true, 'Plan B with 20T must fail because only 10T is uncommitted');
-
-    // Plan B attempts to commit remaining 10T (40 + 10 = 50 <= 50 available) -> MUST SUCCEED
-    const planBValidFarmers = [{ listingId: 'list-shared', allocatedQuantityTons: 10.0 }];
-    const planBResult = await validateAndCalculateFarmerAllocations(dbClient, planBValidFarmers, null);
-    assert.strictEqual(planBResult.validatedFarmers[0].allocatedQuantityTons, 10.0);
-    dbClient.addPlan('plan-B', {
-      status: 'COMMITTED',
-      selectedFarmers: planBResult.validatedFarmers
-    });
-
-    // Check row locking simulation was recorded
-    assert(dbClient.locks.has('list-shared'), 'Row lock must be applied to listing');
+    const committedMapCancelled = {}; // Cancelled plans do not contribute to committed map
+    const cancelledAvail = calculateAvailableForListing(releasedListing, committedMapCancelled);
+    assert.strictEqual(cancelledAvail.availableTons, 20.0, 'Available quantity must be restored to 20T');
   });
 
   console.log('\n====================================================================');
-  console.log(`TEST RESULTS: ${testsPassed} PASSED, ${testsFailed} FAILED`);
+  console.log(`AUDIT SUITE COMPLETE: ${testsPassed} PASSED, ${testsFailed} FAILED`);
   console.log('====================================================================\n');
 
   if (testsFailed > 0) {

@@ -45,7 +45,9 @@ import {
   ArrowUpDown,
   SlidersHorizontal,
   Edit3,
-  Trash2
+  Trash2,
+  RotateCw,
+  XCircle
 } from 'lucide-react';
 
 export const AggregatorDashboard: React.FC = () => {
@@ -123,6 +125,9 @@ export const AggregatorDashboard: React.FC = () => {
     notes: ''
   });
   const [showPlanBuilderModal, setShowPlanBuilderModal] = useState(false);
+  const [planSaveError, setPlanSaveError] = useState<string | null>(null);
+  const [isRefreshingSupply, setIsRefreshingSupply] = useState(false);
+  const [onlyWithinRadius, setOnlyWithinRadius] = useState(false);
   const [supplySearchQuery, setSupplySearchQuery] = useState('');
   const [supplySortBy, setSupplySortBy] = useState<'distance' | 'price_asc' | 'price_desc' | 'qty_desc'>('distance');
   const [supplyGradeFilter, setSupplyGradeFilter] = useState<'ALL' | 'Grade A' | 'Grade B' | 'Grade C'>('ALL');
@@ -437,18 +442,68 @@ export const AggregatorDashboard: React.FC = () => {
         })
       };
 
+      setPlanSaveError(null);
       if (draftPlan.id) {
         await api.updateProcurementPlan(draftPlan.id, payload);
         alert('Procurement Plan Updated Successfully!');
       } else {
         await api.createProcurementPlan(payload);
-        alert('Procurement Plan Created Successfully! You can now track fulfillment and create batches when ready.');
+        alert('Procurement Plan Created Successfully! Real inventory is now actively reserved.');
       }
       setShowPlanBuilderModal(false);
+      setPlanSaveError(null);
       await fetchData();
       setActiveTab('procurement');
     } catch (err) {
-      alert('Error saving procurement plan: ' + (err as Error).message);
+      const msg = (err as Error).message || 'Error saving procurement plan';
+      setPlanSaveError(msg);
+      // Auto-refresh supply in the background so aggregator sees latest inventory status
+      handleRefreshModalSupply();
+    }
+  };
+
+  // Helper to refresh supply availability while modal is open
+  const handleRefreshModalSupply = async () => {
+    setIsRefreshingSupply(true);
+    try {
+      const supplyRes = await api.getAggregatorSupply();
+      if (Array.isArray(supplyRes)) {
+        setFarmerSupply(supplyRes);
+        // Refresh available quantities for currently selected farmers
+        setDraftPlan(prev => ({
+          ...prev,
+          selectedFarmers: prev.selectedFarmers.map(f => {
+            const sId = f.listingId || f.id;
+            const updated = supplyRes.find(s => (s.listingId || s.id) === sId);
+            if (updated) {
+              const newAvail = Number(updated.availableQuantityTons ?? updated.quantityTons ?? 0);
+              return {
+                ...f,
+                availableQuantityTons: newAvail
+              };
+            }
+            return f;
+          })
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to refresh supply:', e);
+    } finally {
+      setIsRefreshingSupply(false);
+    }
+  };
+
+  // Cancel procurement plan and release reserved farmer inventory
+  const handleCancelPlan = async (plan: ProcurementPlan) => {
+    if (!window.confirm(`Are you sure you want to cancel Procurement Plan #${plan.id}? This will immediately release all reserved farmer inventory.`)) {
+      return;
+    }
+    try {
+      await api.cancelProcurementPlan(plan.id);
+      alert('Procurement plan cancelled and farmer reservations released successfully.');
+      await fetchData();
+    } catch (err) {
+      alert('Error cancelling plan: ' + (err as Error).message);
     }
   };
 
@@ -915,7 +970,8 @@ export const AggregatorDashboard: React.FC = () => {
                 .filter(d => demandCropFilter === 'All' || d.cropName?.toLowerCase() === demandCropFilter.toLowerCase())
                 .map((req) => {
                   const bType = req.buyerType || (req.quantityTons >= 20 ? 'bulk' : 'local');
-                  const availSupply = Number(req.availableSupplyTons || 62);
+                  const availSupply = Number(req.availableSupplyTons !== undefined ? req.availableSupplyTons : 0);
+                  const regionalSupply = Number(req.totalRegionalSupplyTons !== undefined ? req.totalRegionalSupplyTons : availSupply);
                   const reqTons = Number(req.quantityTons);
                   const remainingTons = Math.max(0, reqTons - availSupply);
                   const minDirectLot = Number(req.minimumDirectFarmerLotKg || (bType === 'bulk' ? 20000 : 250)) / 1000;
@@ -982,7 +1038,12 @@ export const AggregatorDashboard: React.FC = () => {
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between items-center text-[11px]">
                             <span className="text-slate-600">
-                              Current Available Supply: <strong>{availSupply} Ton</strong>
+                              Available Supply ({req.serviceRadiusKm || 50}km Radius): <strong>{availSupply} Ton</strong>
+                              {regionalSupply > availSupply && (
+                                <span className="ml-1 text-[10px] text-purple-700 font-bold">
+                                  ({regionalSupply}T state-wide)
+                                </span>
+                              )}
                             </span>
                             <span className="font-black text-amber-700">
                               Remaining: <strong>{remainingTons} Ton</strong>
@@ -1079,44 +1140,57 @@ export const AggregatorDashboard: React.FC = () => {
               {farmerSupply
                 .filter(s => cropFilter === 'All' || s.cropName?.toLowerCase() === cropFilter.toLowerCase())
                 .map((supplyItem) => {
-                  const qty = Number(supplyItem.quantityTons);
+                  const sId = supplyItem.listingId || supplyItem.id;
+                  const totalQty = Number(supplyItem.quantityTons);
+                  const availTons = Number(supplyItem.availableQuantityTons ?? supplyItem.quantityTons ?? 0);
+                  const reservedTons = Number(supplyItem.reservedQuantityTons || 0);
                   const price = Number(supplyItem.expectedPricePerKg || supplyItem.pricePerKg);
                   const dist = supplyItem.distanceKm ?? 12;
+                  const isAvailable = availTons > 0;
 
                   return (
                     <div
-                      key={supplyItem.listingId || supplyItem.id}
+                      key={sId}
                       className="bg-white rounded-2xl border-2 border-slate-200 p-4 shadow-xs hover:border-emerald-400 transition-all flex flex-col justify-between space-y-3"
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between">
                           <div>
-                            <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
-                              {supplyItem.cropName} ({supplyItem.variety})
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">
+                                {supplyItem.cropName} ({supplyItem.variety})
+                              </span>
+                              <span className="text-[10px] font-mono bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200 font-bold">
+                                #{sId}
+                              </span>
+                            </div>
                             <h4 className="text-sm font-black text-slate-900 mt-1">
                               {supplyItem.farmerName}
                             </h4>
                             <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                               <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                              <span>{supplyItem.location || 'Kushinagar'}</span>
+                              <span>{supplyItem.location || 'Local'}</span>
                               <strong className="text-slate-700">• {dist} km away</strong>
                             </div>
                           </div>
 
                           <div className="text-right">
-                            <span className="text-base font-black text-slate-900">
-                              {qty} Ton
+                            <span className="text-base font-black text-slate-900 block">
+                              {availTons} Ton Avail
                             </span>
-                            <span className="text-[10px] text-slate-400 block">{qty * 10} क्विंटल</span>
+                            <span className="text-[10px] text-slate-400 block">
+                              Total: {totalQty}T {reservedTons > 0 ? `(${reservedTons}T reserved)` : ''}
+                            </span>
                           </div>
                         </div>
 
                         {/* Price & Quality Details */}
                         <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 grid grid-cols-2 gap-2 text-xs">
                           <div>
-                            <span className="text-[10px] text-slate-400 block">Grade:</span>
-                            <span className="font-extrabold text-slate-800">{supplyItem.grade || 'Grade A'}</span>
+                            <span className="text-[10px] text-slate-400 block">Grade / Harvest:</span>
+                            <span className="font-extrabold text-slate-800">
+                              {supplyItem.grade || 'Grade A'} • {supplyItem.harvestDate ? supplyItem.harvestDate : 'Ready'}
+                            </span>
                           </div>
                           <div>
                             <span className="text-[10px] text-slate-400 block">Expected Price:</span>
@@ -1127,22 +1201,28 @@ export const AggregatorDashboard: React.FC = () => {
 
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                         <span className="text-[11px] text-slate-500">
-                          Total Value: <strong>₹{(qty * 1000 * price).toLocaleString('en-IN')}</strong>
+                          Total Value: <strong>₹{(availTons * 1000 * price).toLocaleString('en-IN')}</strong>
                         </span>
 
-                        <button
-                          onClick={() => {
-                            if (!draftPlan.targetReq && buyerDemands.length > 0) {
-                              setDraftPlan(prev => ({ ...prev, targetReq: buyerDemands[0] }));
-                            }
-                            toggleFarmerInPlan(supplyItem);
-                            setShowPlanBuilderModal(true);
-                          }}
-                          className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          <span>Add to Procurement Plan</span>
-                        </button>
+                        {isAvailable ? (
+                          <button
+                            onClick={() => {
+                              if (!draftPlan.targetReq && buyerDemands.length > 0) {
+                                setDraftPlan(prev => ({ ...prev, targetReq: buyerDemands[0] }));
+                              }
+                              toggleFarmerInPlan(supplyItem);
+                              setShowPlanBuilderModal(true);
+                            }}
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>Add to Procurement Plan</span>
+                          </button>
+                        ) : (
+                          <span className="px-3 py-1 rounded-xl bg-slate-100 text-slate-400 font-bold text-xs border border-slate-200">
+                            Fully Committed
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -1223,9 +1303,11 @@ export const AggregatorDashboard: React.FC = () => {
                           <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
                             plan.status === 'BATCH_CREATED'
                               ? 'bg-emerald-100 text-emerald-800'
+                              : plan.status === 'CANCELLED'
+                              ? 'bg-slate-100 text-slate-500 line-through'
                               : 'bg-amber-100 text-amber-800'
                           }`}>
-                            {plan.status}
+                            {plan.status === 'CANCELLED' ? 'CANCELLED (Released)' : plan.status}
                           </span>
                         </div>
                         <span className="text-xs text-slate-500 mt-0.5 block">
@@ -1300,7 +1382,18 @@ export const AggregatorDashboard: React.FC = () => {
                       </span>
 
                       <div className="flex items-center gap-2">
-                        {plan.status !== 'BATCH_CREATED' && (
+                        {plan.status !== 'CANCELLED' && plan.status !== 'BATCH_CREATED' && (
+                          <button
+                            onClick={() => handleCancelPlan(plan)}
+                            className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-extrabold text-xs transition-colors flex items-center gap-1 cursor-pointer border border-red-200"
+                            title="Cancel plan and release reserved farmer inventory"
+                          >
+                            <XCircle className="h-3.5 w-3.5 text-red-600" />
+                            <span>Cancel Plan</span>
+                          </button>
+                        )}
+
+                        {plan.status !== 'CANCELLED' && plan.status !== 'BATCH_CREATED' && (
                           <button
                             onClick={() => handleEditPlan(plan)}
                             className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs transition-colors flex items-center gap-1 cursor-pointer"
@@ -1310,7 +1403,7 @@ export const AggregatorDashboard: React.FC = () => {
                           </button>
                         )}
 
-                        {plan.status !== 'BATCH_CREATED' && (
+                        {plan.status !== 'CANCELLED' && plan.status !== 'BATCH_CREATED' && (
                           <button
                             onClick={() => handleFulfillPlan(plan)}
                             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -1785,6 +1878,42 @@ export const AggregatorDashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Plan Save Error Banner with Refresh Availability action */}
+            {planSaveError && (
+              <div className="p-3 bg-red-50 border-2 border-red-300 rounded-xl text-xs text-red-900 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-black text-red-800">
+                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                    <span>Procurement Reservation Warning</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPlanSaveError(null)}
+                    className="text-red-500 hover:text-red-700 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-[11px] leading-relaxed font-semibold text-red-700 bg-white p-2 rounded-lg border border-red-200">
+                  {planSaveError}
+                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-red-200/60">
+                  <button
+                    type="button"
+                    onClick={handleRefreshModalSupply}
+                    disabled={isRefreshingSupply}
+                    className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10px] flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <RotateCw className={`h-3 w-3 ${isRefreshingSupply ? 'animate-spin' : ''}`} />
+                    <span>{isRefreshingSupply ? 'Refreshing...' : 'Refresh Available Inventory'}</span>
+                  </button>
+                  <span className="text-[10px] text-red-600">
+                    Other valid selections are preserved. Please adjust the requested quantity.
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Smart Supply Matching, Search, Sort & Quick Allocation Tools */}
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1793,7 +1922,28 @@ export const AggregatorDashboard: React.FC = () => {
                   <span>Compatible Farmer Supply Lots:</span>
                 </span>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleRefreshModalSupply}
+                    disabled={isRefreshingSupply}
+                    className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition-colors cursor-pointer flex items-center gap-1"
+                    title="Refresh latest stock availability"
+                  >
+                    <RotateCw className={`h-3 w-3 ${isRefreshingSupply ? 'animate-spin' : ''}`} />
+                    <span>{isRefreshingSupply ? 'Refreshing...' : 'Refresh Supply'}</span>
+                  </button>
+
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-700 font-bold bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={onlyWithinRadius}
+                      onChange={(e) => setOnlyWithinRadius(e.target.checked)}
+                      className="rounded text-emerald-600"
+                    />
+                    <span>Within {profile?.serviceRadiusKm || 50}km Only</span>
+                  </label>
+
                   <button
                     type="button"
                     onClick={handleAutoFillDemand}
@@ -1824,7 +1974,7 @@ export const AggregatorDashboard: React.FC = () => {
                     type="text"
                     value={supplySearchQuery}
                     onChange={(e) => setSupplySearchQuery(e.target.value)}
-                    placeholder="Search farmer, variety, location..."
+                    placeholder="Search farmer, listing ID, variety..."
                     className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-amber-400"
                   />
                 </div>
@@ -1865,15 +2015,19 @@ export const AggregatorDashboard: React.FC = () => {
                     if (draftPlan.targetReq && s.cropName?.toLowerCase() !== draftPlan.targetReq.cropName?.toLowerCase()) {
                       return false;
                     }
+                    if (onlyWithinRadius && s.distanceKm && s.distanceKm > (profile?.serviceRadiusKm || 50)) {
+                      return false;
+                    }
                     if (supplyGradeFilter !== 'ALL' && s.grade !== supplyGradeFilter) {
                       return false;
                     }
                     if (supplySearchQuery.trim()) {
                       const q = supplySearchQuery.toLowerCase();
                       const matchName = s.farmerName?.toLowerCase().includes(q);
+                      const matchId = (s.listingId || s.id)?.toLowerCase().includes(q);
                       const matchLoc = s.location?.toLowerCase().includes(q) || s.farmerLocation?.toLowerCase().includes(q);
                       const matchVar = s.variety?.toLowerCase().includes(q);
-                      if (!matchName && !matchLoc && !matchVar) return false;
+                      if (!matchName && !matchId && !matchLoc && !matchVar) return false;
                     }
                     return true;
                   })
@@ -1902,15 +2056,19 @@ export const AggregatorDashboard: React.FC = () => {
                     const selectedItem = draftPlan.selectedFarmers.find(f => (f.listingId || f.id) === sId);
                     const isChecked = !!selectedItem;
                     const availTons = Number(s.availableQuantityTons ?? s.quantityTons ?? 0);
+                    const totalTons = Number(s.quantityTons ?? availTons);
                     const pricePerKg = Number(s.expectedPricePerKg || s.pricePerKg || 18.5);
                     const currentAlloc = selectedItem ? Number(selectedItem.allocatedQuantityTons ?? selectedItem.quantityTons) : 0;
+                    const isUnavailable = availTons <= 0 && !isChecked;
                     const hasOverAllocError = isChecked && (currentAlloc > availTons || currentAlloc <= 0);
 
                     return (
                       <div
                         key={sId}
                         className={`p-3 rounded-2xl border text-xs transition-all ${
-                          isChecked 
+                          isUnavailable
+                            ? 'bg-slate-50/80 border-slate-200 opacity-70'
+                            : isChecked 
                             ? 'bg-emerald-50/70 border-emerald-400 shadow-xs' 
                             : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/60'
                         }`}
@@ -1918,18 +2076,22 @@ export const AggregatorDashboard: React.FC = () => {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                           {/* Checkbox and Farmer Details */}
                           <div 
-                            onClick={() => toggleFarmerInPlan(s)}
-                            className="flex items-start gap-2.5 cursor-pointer flex-1"
+                            onClick={() => !isUnavailable && toggleFarmerInPlan(s)}
+                            className={`flex items-start gap-2.5 flex-1 ${isUnavailable ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                           >
                             <input 
                               type="checkbox" 
                               checked={isChecked} 
+                              disabled={isUnavailable}
                               onChange={() => {}} 
-                              className="mt-0.5 rounded text-emerald-600 cursor-pointer"
+                              className="mt-0.5 rounded text-emerald-600 cursor-pointer disabled:cursor-not-allowed"
                             />
                             <div>
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-black text-slate-900">{s.farmerName}</span>
+                                <span className="text-[10px] font-mono bg-purple-50 text-purple-700 px-1.5 py-0.2 rounded border border-purple-200 font-bold">
+                                  #{sId}
+                                </span>
                                 <span className="text-[10px] bg-slate-200/70 text-slate-700 px-1.5 py-0.2 rounded font-semibold">
                                   {s.grade || 'Grade A'}
                                 </span>
@@ -1938,7 +2100,7 @@ export const AggregatorDashboard: React.FC = () => {
                                 )}
                               </div>
                               <span className="text-[10px] text-slate-500 block">
-                                {s.distanceKm ?? 12} km away • {s.location || s.farmerLocation || 'Local'} • Harvest Status: {s.harvestStatus || 'Ready'}
+                                {s.distanceKm ?? 12} km away • {s.location || s.farmerLocation || 'Local'} • Harvest: {s.harvestDate || s.harvest_date || 'Ready'}
                               </span>
                             </div>
                           </div>
@@ -1946,9 +2108,15 @@ export const AggregatorDashboard: React.FC = () => {
                           {/* Available Quantity & Expected Price */}
                           <div className="flex items-center justify-between sm:justify-end gap-3 text-right">
                             <div>
-                              <span className="font-black text-slate-900 block">
-                                Available: {availTons} Ton
-                              </span>
+                              {isUnavailable ? (
+                                <span className="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded-full block">
+                                  0T Available (Committed)
+                                </span>
+                              ) : (
+                                <span className="font-black text-slate-900 block">
+                                  Available: {availTons} Ton {totalTons > availTons ? `(${totalTons}T total)` : ''}
+                                </span>
+                              )}
                               <span className="text-[10px] text-slate-500 font-bold">
                                 @ ₹{pricePerKg.toFixed(2)}/kg
                               </span>

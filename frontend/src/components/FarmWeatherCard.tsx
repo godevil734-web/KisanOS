@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, ChevronRight, RefreshCw, AlertTriangle } from 'lucide-react';
+import { MapPin, ChevronRight, RefreshCw, AlertTriangle, Navigation } from 'lucide-react';
 import { FarmWeatherResponse } from '../services/api';
 import { FarmLocationData } from '../hooks/useFarmLocation';
 import { FarmWeatherModal } from './FarmWeatherModal';
@@ -53,19 +53,36 @@ export const FarmWeatherCard: React.FC<FarmWeatherCardProps> = ({
         <div className="flex flex-col justify-between h-full">
           {/* Location line */}
           <div className="text-xs font-bold text-[#17251D] flex items-center justify-between gap-1">
-            <span className="flex items-center gap-1.5 truncate max-w-[145px]">
+            <span className="flex items-center gap-1.5 truncate max-w-[130px] sm:max-w-[145px]">
               <MapPin className={`h-3.5 w-3.5 shrink-0 ${isHarvest ? 'text-[#176B45]' : 'text-emerald-600'}`} />
               <span className="truncate">{shortLocation}</span>
             </span>
-            {isStale && (
-              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" title="Cached data" />
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRequestGps();
+                }}
+                disabled={isLoading}
+                className="px-1.5 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer"
+                title="मेरा वर्तमान स्थान पहचानें (Detect My Location)"
+              >
+                <Navigation className={`h-2.5 w-2.5 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>{isLoading ? '...' : 'पहचानें'}</span>
+              </button>
+              {isStale && (
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse shrink-0" title="Cached data" />
+              )}
+            </div>
           </div>
 
           {/* Subtitle */}
           <div className="text-[10px] sm:text-[11px] text-[#657468] flex items-center justify-between">
-            <span>मौसम पूर्वानुमान (Weather)</span>
-            <span className="text-[9px] sm:text-[10px] font-bold text-[#176B45] group-hover:underline flex items-center gap-0.5">
+            <span className="truncate">
+              {location.source === 'gps' ? '📍 GPS सत्यापित' : location.source === 'ip' ? '🌐 नेटवर्क स्थान' : 'मौसम पूर्वानुमान'}
+            </span>
+            <span className="text-[9px] sm:text-[10px] font-bold text-[#176B45] group-hover:underline flex items-center gap-0.5 shrink-0">
               <span>7 दिन</span>
               <ChevronRight className="h-2.5 w-2.5" />
             </span>

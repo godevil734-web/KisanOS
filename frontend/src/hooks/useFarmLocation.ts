@@ -31,6 +31,12 @@ const DEFAULT_LOCATION: FarmLocationData = {
   source: 'default'
 };
 
+function isDummyAgraDemo(loc?: any): boolean {
+  if (!loc) return false;
+  const str = typeof loc === 'string' ? loc.toLowerCase() : (loc.displayName || loc.farmLocation || loc.location || '').toLowerCase();
+  return str.includes('khandauli') || (str.includes('agra') && !str.includes('firozabad') && !str.includes('fatehabad'));
+}
+
 /**
  * High-reliability reverse geocoding:
  * Calls KisanOS backend API /api/location/reverse-geocode first (immune to browser CSP),
@@ -102,30 +108,34 @@ async function reverseGeocodeCoords(lat: number, lon: number): Promise<{ village
 
 export function useFarmLocation(user?: any) {
   const [location, setLocation] = useState<FarmLocationData>(() => {
-    // 1. Check user profile if already present
-    if (user?.farmerProfile?.farmLocation || user?.location) {
-      const locStr = user.farmerProfile?.farmLocation || user.location;
-      const parts = locStr.split(',').map((s: string) => s.trim());
-      const coords = user.farmerProfile?.coordinates || null;
-      return {
-        village: user.village || parts[0] || 'Khandauli',
-        district: user.district || parts[1] || 'Agra',
-        state: user.state || parts[2] || 'Uttar Pradesh',
-        country: 'India',
-        displayName: locStr,
-        coords: coords ? { lat: Number(coords.lat), lon: Number(coords.lon) } : { lat: 27.1767, lon: 78.0081 },
-        source: 'saved_profile'
-      };
-    }
-
-    // 2. Check local storage
+    // 1. Check local storage FIRST if user previously set or detected a real location
     try {
       const cached = localStorage.getItem(STORAGE_KEY_LOCATION);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed?.displayName && parsed?.coords?.lat && parsed?.coords?.lon) return parsed;
+        if (parsed?.displayName && parsed?.coords?.lat && parsed?.coords?.lon && parsed.source && parsed.source !== 'default' && !isDummyAgraDemo(parsed)) {
+          return parsed;
+        }
       }
     } catch {}
+
+    // 2. Check user profile if present and NOT dummy demo location
+    if (user?.farmerProfile?.farmLocation || user?.location) {
+      const locStr = user.farmerProfile?.farmLocation || user.location;
+      if (!isDummyAgraDemo(locStr)) {
+        const parts = locStr.split(',').map((s: string) => s.trim());
+        const coords = user.farmerProfile?.coordinates || null;
+        return {
+          village: user.village || parts[0] || '',
+          district: user.district || parts[1] || 'Agra',
+          state: user.state || parts[2] || 'Uttar Pradesh',
+          country: 'India',
+          displayName: locStr,
+          coords: coords ? { lat: Number(coords.lat), lon: Number(coords.lon) } : { lat: 27.1767, lon: 78.0081 },
+          source: 'saved_profile'
+        };
+      }
+    }
 
     return DEFAULT_LOCATION;
   });
@@ -150,44 +160,99 @@ export function useFarmLocation(user?: any) {
     };
   }, []);
 
-  // Sync when user prop loads with saved profile data
+  // Sync when user prop loads with saved profile data (only if not dummy demo location)
   useEffect(() => {
     if (user?.farmerProfile?.farmLocation || user?.location) {
       const locStr = user.farmerProfile?.farmLocation || user.location;
-      const parts = locStr.split(',').map((s: string) => s.trim());
-      const coords = user.farmerProfile?.coordinates || null;
-      setLocation(prev => {
-        if (prev.source === 'default' || prev.source === 'ip' || prev.source === 'saved_profile') {
-          return {
-            village: user.village || parts[0] || prev.village,
-            district: user.district || parts[1] || prev.district,
-            state: user.state || parts[2] || prev.state,
-            country: 'India',
-            displayName: locStr,
-            coords: coords ? { lat: Number(coords.lat), lon: Number(coords.lon) } : prev.coords,
-            source: 'saved_profile'
-          };
-        }
-        return prev;
-      });
+      if (!isDummyAgraDemo(locStr)) {
+        const parts = locStr.split(',').map((s: string) => s.trim());
+        const coords = user.farmerProfile?.coordinates || null;
+        setLocation(prev => {
+          if (prev.source === 'default' || prev.source === 'ip') {
+            return {
+              village: user.village || parts[0] || prev.village,
+              district: user.district || parts[1] || prev.district,
+              state: user.state || parts[2] || prev.state,
+              country: 'India',
+              displayName: locStr,
+              coords: coords ? { lat: Number(coords.lat), lon: Number(coords.lon) } : prev.coords,
+              source: 'saved_profile'
+            };
+          }
+          return prev;
+        });
+      }
     }
   }, [user]);
 
   /**
+   * Helper: perform IP / Edge detection fallback
+   */
+  const detectIpLocation = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await api.detectLocation();
+      if (!isMounted.current) return false;
+      if (res?.success && res.location?.coords) {
+        const detectedLoc: FarmLocationData = {
+          village: res.location.village || '',
+          district: res.location.district || 'Agra',
+          state: res.location.state || 'Uttar Pradesh',
+          country: res.location.country || 'India',
+          displayName: res.location.displayName,
+          coords: res.location.coords,
+          source: 'ip'
+        };
+        setLocation(detectedLoc);
+        try {
+          localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(detectedLoc));
+        } catch {}
+        return true;
+      }
+    } catch (e) {
+      console.warn('[useFarmLocation] IP detect failed:', e);
+    }
+    return false;
+  }, []);
+
+  /**
    * Request GPS Geolocation from browser
+   * If GPS times out, fails, or is denied, AUTOMATICALLY falls back to IP/Edge detection!
    */
   const requestGpsLocation = useCallback(async () => {
-    if (!navigator.geolocation) {
-      setPermissionStatus('unavailable');
-      setErrorMessage('आपका ब्राउज़र जीपीएस लोकेशन का समर्थन नहीं करता है (Geolocation not supported).');
-      return;
-    }
-
     setIsLoading(true);
     setErrorMessage(null);
 
+    // If browser doesn't support geolocation at all, use IP
+    if (!navigator.geolocation) {
+      const ipSuccess = await detectIpLocation();
+      if (!isMounted.current) return;
+      setIsLoading(false);
+      if (!ipSuccess) {
+        setErrorMessage('स्थान प्राप्त नहीं हो सका। कृपया मैन्युअल रूप से अपना जिला चुनें।');
+      }
+      return;
+    }
+
+    let resolved = false;
+
+    // Timeout safety timer
+    const safetyTimer = setTimeout(async () => {
+      if (!resolved && isMounted.current) {
+        console.warn('[useFarmLocation] GPS wait threshold reached, triggering edge IP fallback');
+        const ipSuccess = await detectIpLocation();
+        if (isMounted.current) {
+          setIsLoading(false);
+          if (ipSuccess) {
+            setErrorMessage(null);
+          }
+        }
+      }
+    }, 4500);
+
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        resolved = true;
+        clearTimeout(safetyTimer);
         if (!isMounted.current) return;
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
@@ -207,6 +272,7 @@ export function useFarmLocation(user?: any) {
           setLocation(newLoc);
           setPermissionStatus('granted');
           setIsLoading(false);
+          setErrorMessage(null);
 
           try {
             localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(newLoc));
@@ -232,72 +298,88 @@ export function useFarmLocation(user?: any) {
 
         } catch (err: any) {
           if (!isMounted.current) return;
+          await detectIpLocation();
           setIsLoading(false);
-          setErrorMessage('स्थान का नाम पहचानने में समस्या आई, अक्षांश/देशांतर सुरक्षित कर लिया गया है।');
         }
       },
-      (error) => {
+      async (error) => {
+        resolved = true;
+        clearTimeout(safetyTimer);
         if (!isMounted.current) return;
+
+        console.warn('[useFarmLocation] Geolocation error:', error.message, 'Falling back to IP detection');
+        // When GPS permission is denied or times out, ALWAYS automatically fallback to IP!
+        const ipSuccess = await detectIpLocation();
         setIsLoading(false);
-        if (error.code === error.PERMISSION_DENIED) {
-          setPermissionStatus('denied');
-          setErrorMessage('स्थान अनुमति अस्वीकृत कर दी गई है। आप नीचे से मैन्युअल रूप से अपना गांव/जिला चुन सकते हैं।');
-          try {
-            localStorage.setItem(STORAGE_KEY_PERMISSION, 'denied');
-          } catch {}
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          setPermissionStatus('unavailable');
-          setErrorMessage('जीपीएस सिग्नल उपलब्ध नहीं है। कृपया मैन्युअल रूप से जिला चुनें।');
-        } else if (error.code === error.TIMEOUT) {
-          setPermissionStatus('unavailable');
-          setErrorMessage('लोकेशन अनुरोध का समय समाप्त हो गया। कृपया पुनः प्रयास करें या मैन्युअल भरें।');
+
+        if (ipSuccess) {
+          setErrorMessage(null);
         } else {
-          setPermissionStatus('unavailable');
-          setErrorMessage('लोकेशन प्राप्त नहीं हो सकी। कृपया मैन्युअल चयन करें।');
+          if (error.code === error.PERMISSION_DENIED) {
+            setPermissionStatus('denied');
+            setErrorMessage('स्थान अनुमति अस्वीकृत है। नीचे त्वरित बटन से अपना जिला चुनें।');
+          } else {
+            setPermissionStatus('unavailable');
+            setErrorMessage('जीपीएस सिग्नल उपलब्ध नहीं है। नीचे से अपना जिला चुनें।');
+          }
         }
       },
       {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000 // 5 minutes cache
+        enableHighAccuracy: false, // Allows instantaneous WiFi / cell-tower / CoreLocation position without waiting for satellite fix
+        timeout: 4000,
+        maximumAge: 300000
       }
     );
-  }, [user]);
+  }, [user, detectIpLocation]);
 
   /**
    * Automatic background location detection on initial mount
-   * If location is default and user hasn't explicitly set location or denied permission
+   * If location is default demo or dummy Agra, detect real location!
    */
   useEffect(() => {
     let cancel = false;
-    if (location.source === 'default' && !user?.farmerProfile?.coordinates) {
-      api.detectLocation()
-        .then(res => {
-          if (cancel || !isMounted.current) return;
-          if (res?.success && res.location?.coords) {
-            const detectedLoc: FarmLocationData = {
-              village: res.location.village || '',
-              district: res.location.district || 'Agra',
-              state: res.location.state || 'Uttar Pradesh',
-              country: res.location.country || 'India',
-              displayName: res.location.displayName,
-              coords: res.location.coords,
-              source: 'ip'
+    const needsDetection =
+      location.source === 'default' ||
+      isDummyAgraDemo(location) ||
+      !location.coords;
+
+    if (needsDetection) {
+      // First try silent fast geolocation if browser already granted permission
+      if (navigator.geolocation && permissionStatus === 'granted') {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            if (cancel || !isMounted.current) return;
+            const geo = await reverseGeocodeCoords(pos.coords.latitude, pos.coords.longitude);
+            const newLoc: FarmLocationData = {
+              village: geo.village,
+              district: geo.district,
+              state: geo.state,
+              country: geo.country,
+              displayName: geo.displayName,
+              coords: { lat: pos.coords.latitude, lon: pos.coords.longitude },
+              source: 'gps'
             };
-            setLocation(detectedLoc);
+            setLocation(newLoc);
             try {
-              localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(detectedLoc));
+              localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(newLoc));
             } catch {}
-          }
-        })
-        .catch(() => {
-          // Keep default benchmark silently
-        });
+          },
+          () => {
+            if (!cancel && isMounted.current) {
+              detectIpLocation();
+            }
+          },
+          { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 }
+        );
+      } else {
+        // Run edge IP detection
+        detectIpLocation();
+      }
     }
     return () => {
       cancel = true;
     };
-  }, []);
+  }, [detectIpLocation]);
 
   /**
    * Save a manually selected farm location

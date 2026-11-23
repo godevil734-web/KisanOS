@@ -432,7 +432,7 @@ export const FarmWeatherModal: React.FC<FarmWeatherModalProps> = ({
                     className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
                   >
                     <Navigation className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                    <span>{isLoading ? 'स्थान खोजा जा रहा है...' : 'GPS से वर्तमान स्थान खोजें'}</span>
+                    <span>{isLoading ? 'स्थान खोजा जा रहा है...' : 'GPS / नेटवर्क से स्थान पहचानें'}</span>
                   </button>
 
                   <button
@@ -441,6 +441,37 @@ export const FarmWeatherModal: React.FC<FarmWeatherModalProps> = ({
                   >
                     <span>स्थान बदलें / मैन्युअल भरें</span>
                   </button>
+                </div>
+
+                {/* Quick Select District Chips */}
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-500 w-full">त्वरित जिला चयन (1-क्लिक):</span>
+                  {[
+                    { label: 'नई दिल्ली', district: 'New Delhi', state: 'Delhi' },
+                    { label: 'लखनऊ', district: 'Lucknow', state: 'Uttar Pradesh' },
+                    { label: 'गोरखपुर', district: 'Gorakhpur', state: 'Uttar Pradesh' },
+                    { label: 'वाराणसी', district: 'Varanasi', state: 'Uttar Pradesh' },
+                    { label: 'कानपुर', district: 'Kanpur', state: 'Uttar Pradesh' },
+                    { label: 'आगरा', district: 'Agra', state: 'Uttar Pradesh' },
+                    { label: 'करनाल', district: 'Karnal', state: 'Haryana' },
+                    { label: 'लुधियाना', district: 'Ludhiana', state: 'Punjab' },
+                    { label: 'जयपुर', district: 'Jaipur', state: 'Rajasthan' },
+                    { label: 'इंदौर', district: 'Indore', state: 'Madhya Pradesh' },
+                    { label: 'नासिक', district: 'Nashik', state: 'Maharashtra' },
+                    { label: 'पटना', district: 'Patna', state: 'Bihar' }
+                  ].map(chip => (
+                    <button
+                      key={chip.district}
+                      type="button"
+                      onClick={() => {
+                        onSaveManualLocation({ village: '', district: chip.district, state: chip.state });
+                        setShowLocationForm(false);
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-500 text-slate-700 hover:text-emerald-900 font-semibold text-[10px] transition-colors cursor-pointer"
+                    >
+                      📍 {chip.label}
+                    </button>
+                  ))}
                 </div>
 
                 {errorMessage && (

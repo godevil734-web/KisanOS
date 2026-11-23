@@ -71,75 +71,65 @@ export function useRotatingMandiPrices(
       const results: Record<string, MandiCropPriceData> = {};
       let anyErrorOccurred = false;
 
-      // Fetch prices in parallel for all registered crops of this farmer
-      await Promise.all(
-        registeredCrops.map(async (crop) => {
-          try {
-            const res = await api.getMandiPrices({
-              state: stateToQuery,
-              district: districtToQuery,
-              commodity: crop,
-              refresh: isManual
-            });
+      // Fetch prices in 1 single unified call for the state & district instead of hammering N parallel requests
+      const res = await api.getMandiPrices({
+        state: stateToQuery,
+        district: districtToQuery === 'all' ? undefined : districtToQuery,
+        refresh: isManual
+      }).catch(err => {
+        console.debug('[useRotatingMandiPrices] Unified fetch error, retrying with state only:', err.message);
+        return api.getMandiPrices({ state: stateToQuery }).catch(() => null);
+      });
 
-            if (res && Array.isArray(res.records) && res.records.length > 0) {
-              // Find matching record, prioritizing farmer's district if possible
-              let matchedRec: MandiPriceRecord | undefined = res.records.find(
-                (r: MandiPriceRecord) => (r.district || '').toLowerCase() === districtToQuery.toLowerCase()
-              );
-              if (!matchedRec) {
-                matchedRec = res.records[0];
-              }
+      const allRecords: MandiPriceRecord[] = (res && Array.isArray(res.records)) ? res.records : [];
+      const reportDate = res?.reportDate || 'आज';
 
-              results[crop] = {
-                cropName: crop,
-                modalPrice: Number(matchedRec.modalPrice) || null,
-                minPrice: Number(matchedRec.minPrice) || null,
-                maxPrice: Number(matchedRec.maxPrice) || null,
-                mandiName: matchedRec.market || 'सरकारी मंडी',
-                district: matchedRec.district || districtToQuery,
-                state: matchedRec.state || stateToQuery,
-                marketDate: matchedRec.arrivalDate || res.reportDate || '30/10/2026',
-                priceUnit: '₹/क्विंटल',
-                priceStatus: 'VERIFIED',
-                mspBenchmark: null,
-                mspDiff: null,
-                trend: null // Only reported when authentic historical data exists
-              };
-            } else {
-              // No verified price found for this specific crop
-              results[crop] = {
-                cropName: crop,
-                modalPrice: null,
-                minPrice: null,
-                maxPrice: null,
-                mandiName: 'मंडी में आवक नहीं',
-                district: districtToQuery,
-                state: stateToQuery,
-                marketDate: res?.reportDate || 'आज',
-                priceUnit: '₹/क्विंटल',
-                priceStatus: 'UNAVAILABLE'
-              };
-            }
-          } catch (err: any) {
-            console.debug(`[useRotatingMandiPrices] Price check error for ${crop}:`, err.message);
-            anyErrorOccurred = true;
-            // If already cached from earlier fetch, retain previous valid price
-            results[crop] = priceMap[crop] || {
-              cropName: crop,
-              modalPrice: null,
-              minPrice: null,
-              maxPrice: null,
-              mandiName: 'कनेक्शन त्रुटि',
-              district: districtToQuery,
-              state: stateToQuery,
-              marketDate: 'अनुपलब्ध',
-              priceUnit: '₹/क्विंटल',
-              priceStatus: 'UNAVAILABLE'
-            };
-          }
-        })
-      );
+      for (const crop of registeredCrops) {
+        const cropLower = crop.toLowerCase().trim();
+        // Match by commodity name or variety, prioritizing farmer's district
+        let matchedRec: MandiPriceRecord | undefined = allRecords.find(
+          (r: MandiPriceRecord) =>
+            (r.commodity || '').toLowerCase().includes(cropLower) &&
+            (r.district || '').toLowerCase() === districtToQuery.toLowerCase()
+        );
+
+        if (!matchedRec) {
+          matchedRec = allRecords.find((r: MandiPriceRecord) =>
+            (r.commodity || '').toLowerCase().includes(cropLower)
+          );
+        }
+
+        if (matchedRec) {
+          results[crop] = {
+            cropName: crop,
+            modalPrice: Number(matchedRec.modalPrice) || null,
+            minPrice: Number(matchedRec.minPrice) || null,
+            maxPrice: Number(matchedRec.maxPrice) || null,
+            mandiName: matchedRec.market || 'सरकारी मंडी',
+            district: matchedRec.district || districtToQuery,
+            state: matchedRec.state || stateToQuery,
+            marketDate: matchedRec.arrivalDate || reportDate,
+            priceUnit: '₹/क्विंटल',
+            priceStatus: 'VERIFIED',
+            mspBenchmark: null,
+            mspDiff: null,
+            trend: null
+          };
+        } else {
+          results[crop] = priceMap[crop] || {
+            cropName: crop,
+            modalPrice: null,
+            minPrice: null,
+            maxPrice: null,
+            mandiName: 'मंडी में आवक नहीं',
+            district: districtToQuery,
+            state: stateToQuery,
+            marketDate: reportDate,
+            priceUnit: '₹/क्विंटल',
+            priceStatus: 'UNAVAILABLE'
+          };
+        }
+      }
 
       if (isMounted.current) {
         setPriceMap(prev => ({ ...prev, ...results }));

@@ -5,7 +5,8 @@ import {
   FarmerTrustMetrics, 
   FarmerDigitalProfile,
   DashboardDesign,
-  DashboardAppearanceSetting
+  DashboardAppearanceSetting,
+  ThreeWayComparisonResult
 } from '../types';
 
 function resolveApiBase(): string {
@@ -164,6 +165,10 @@ export const api = {
     request<any>(`/aggregator/procurement-plans/${id}/create-batch`, { method: 'POST', body: JSON.stringify(data) }),
   cancelProcurementPlan: (id: string) =>
     request<any>(`/aggregator/procurement-plans/${id}/cancel`, { method: 'POST' }),
+  getPlanAllocations: (id: string) =>
+    request<any>(`/aggregator/procurement-plans/${id}/allocations`),
+  getFarmerProcurementAllocations: () =>
+    request<any[]>('/farmer/procurement-allocations'),
 
   // AI Recommendation
   getAiBuyerRecommendation: (data: any) => 
@@ -183,6 +188,7 @@ export const api = {
   bookStorage: (data: any) => request<any>('/storage/book', { method: 'POST', body: JSON.stringify(data) }),
   getMyStorageBookings: () => request<any[]>('/storage/bookings/my'),
   calculateStorageScenario: (data: any) => request<any>('/storage/scenario', { method: 'POST', body: JSON.stringify(data) }),
+  get3WayRealizationComparison: (params: any) => request<ThreeWayComparisonResult>('/net-realization/3way-comparison', { method: 'POST', body: JSON.stringify(params) }),
 
   // Transporters
   getTransporters: () => request<any[]>('/transporters'),
@@ -192,6 +198,10 @@ export const api = {
   getMarketPrices: (params: Record<string, string> = {}) => {
     const query = new URLSearchParams(params).toString();
     return request<any[]>(`/market-prices${query ? `?${query}` : ''}`);
+  },
+  getHistoricalClearingPrices: (params: Record<string, string> = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request<any>(`/market-prices/historical-clearing${query ? `?${query}` : ''}`);
   },
 
   // Real Government Mandi Prices (Agmarknet & data.gov.in)
@@ -320,7 +330,17 @@ export const api = {
   getFarmerPoints: (userId?: string) => 
     request<{ success: boolean; balance: number; ledger: KisanPointsLedgerEntry[]; rules: any }>(`/farmer/points${userId ? `?userId=${userId}` : ''}`),
   getFarmerSales: (userId?: string) => 
-    request<{ success: boolean; trust: FarmerTrustMetrics; sales: any[]; totalCount: number }>(`/farmer/sales${userId ? `?userId=${userId}` : ''}`)
+    request<{ success: boolean; trust: FarmerTrustMetrics; sales: any[]; totalCount: number }>(`/farmer/sales${userId ? `?userId=${userId}` : ''}`),
+
+  // Escrow & Payment Transactions Ledger
+  getOrderPayments: (orderId: string) => request<any[]>(`/orders/${orderId}/payments`),
+  createOrderPayment: (orderId: string, data: any) => 
+    request<any>(`/orders/${orderId}/payments`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Digital Weighbridge & Quality Inspection Slips
+  getOrderInspection: (orderId: string) => request<any[]>(`/orders/${orderId}/inspection`),
+  createInspectionSlip: (orderId: string, data: any) => 
+    request<any>(`/orders/${orderId}/inspection`, { method: 'POST', body: JSON.stringify(data) })
 };
 
 export interface MandiLocationState {

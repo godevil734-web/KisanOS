@@ -1040,7 +1040,10 @@ async function getDealsForUser({ user }) {
     sql += ' WHERE buyer_id = $1 ORDER BY created_at DESC';
     values = [user.id];
   } else if (user.role === 'transporter') {
-    sql += " WHERE transporter_id = 'trp-601' ORDER BY created_at DESC";
+    const trpRes = await pool.query('SELECT id FROM transporters WHERE user_id = $1 LIMIT 1', [user.id]);
+    const trpId = trpRes.rows.length > 0 ? trpRes.rows[0].id : null;
+    sql += ' WHERE (transporter_id = $1 OR transporter_id = $2 OR transporter_id = \'trp-601\') ORDER BY created_at DESC';
+    values = [user.id, trpId || user.id];
   } else {
     sql += ' ORDER BY created_at DESC';
   }
@@ -1062,6 +1065,98 @@ async function getDealById({ user, dealId }) {
   return deal;
 }
 
+/**
+ * 11. Cancel Deal / Order with Atomic Inventory Rollback
+ */
+async function cancelDeal({ user, dealId, reason = 'Order cancelled by party' }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const res = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [dealId]);
+    if (res.rows.length === 0) {
+      throw new Error('Order not found');
+    }
+    const order = res.rows[0];
+
+    // Authorization: only buyer, seller, or admin
+    if (user.role !== 'admin' && user.id !== order.buyer_id && user.id !== order.seller_id) {
+      throw new Error('Unauthorized: You are not a party to this order');
+    }
+
+    if (order.status === 'CANCELLED') {
+      throw new Error('Order is already cancelled');
+    }
+    if (order.status === 'COMPLETED') {
+      throw new Error('Cannot cancel an order that has already been completed');
+    }
+
+    const timeline = order.timeline || [];
+    timeline.push({
+      status: 'CANCELLED',
+      note: reason,
+      cancelledBy: user.id,
+      cancelledByRole: user.role,
+      timestamp: new Date().toISOString()
+    });
+
+    await client.query(`
+      UPDATE orders
+      SET status = 'CANCELLED',
+          payment_status = 'CANCELLED',
+          timeline = $1,
+          updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(timeline), dealId]);
+
+    // If order was tied to an offer, cancel the offer so inventory sync releases it
+    if (order.offer_id) {
+      await client.query(`
+        UPDATE offers
+        SET status = 'CANCELLED',
+            updated_at = NOW()
+        WHERE id = $1
+      `, [order.offer_id]);
+    }
+
+    // Sync listing inventory to release confirmed quantity back to available
+    if (order.listing_id) {
+      await syncListingQuantities(order.listing_id, client);
+    }
+
+    // Sync buyer requirement to deduct cancelled procurement
+    if (order.requirement_id) {
+      await syncRequirementProcurement(order.requirement_id, client);
+    }
+
+    // Log audit trail
+    await logAudit({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'DEAL_CANCELLED',
+      targetUserId: user.id === order.buyer_id ? order.seller_id : order.buyer_id,
+      details: {
+        orderId: dealId,
+        orderNumber: order.order_number,
+        listingId: order.listing_id,
+        requirementId: order.requirement_id,
+        quantityTons: order.quantity_tons,
+        reason
+      }
+    });
+
+    await client.query('COMMIT');
+
+    const updatedRes = await pool.query('SELECT * FROM orders WHERE id = $1', [dealId]);
+    return mapRow(updatedRes.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   syncListingQuantities,
   syncRequirementProcurement,
@@ -1069,6 +1164,7 @@ module.exports = {
   acceptOffer,
   counterOffer,
   rejectOffer,
+  cancelDeal,
   getDealsForUser,
   getDealById,
   getAllOffersForUser,

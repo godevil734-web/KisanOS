@@ -31,6 +31,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.23.1",
+    "pg-mem": "^3.0.14",
     "@google/genai": "^2.27.0"
   }
 }

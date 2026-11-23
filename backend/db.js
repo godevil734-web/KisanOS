@@ -4,45 +4,110 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const { Pool } = require('pg');
+const { Pool: PgPool } = require('pg');
 const bcrypt = require('bcryptjs');
+const { initMemoryDb } = require('./services/memoryDbFallback');
 
 function hashPassword(pass) {
   const salt = bcrypt.genSaltSync(10);
   return bcrypt.hashSync(pass, salt);
 }
 
-const pool = new Pool({
+const rawPgPool = new PgPool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: Number(process.env.PG_MAX_POOL) || (process.env.NODE_ENV === 'production' || process.env.VERCEL ? 3 : 5),
   idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 15000,
+  connectionTimeoutMillis: 5000,
   keepAlive: true
 });
 
-pool.on('error', (err) => {
+rawPgPool.on('error', (err) => {
   console.warn('[PG POOL] Warning: Idle database client error (handled):', err.message);
 });
 
-const originalQuery = pool.query.bind(pool);
-pool.query = async function (sql, params, callback) {
-  if (typeof params === 'function') {
-    callback = params;
-    params = undefined;
+let usingMemoryFallback = false;
+let memoryInitPromise = null;
+
+async function switchToMemoryFallback(reason) {
+  if (!usingMemoryFallback) {
+    console.warn(`⚠️ [DATABASE] Remote PostgreSQL connection failed (${reason}). Activating resilient in-memory fallback database...`);
+    usingMemoryFallback = true;
+    tableColumnsCache = null;
+    memoryInitPromise = initMemoryDb();
   }
-  try {
-    return await originalQuery(sql, params);
-  } catch (err) {
-    if (err.message && (err.message.includes('timeout') || err.message.includes('terminated') || err.message.includes('closed') || err.message.includes('ECONNRESET'))) {
-      console.warn('[PG POOL] Retrying query after transient connection issue:', err.message);
-      return await originalQuery(sql, params);
+  return await memoryInitPromise;
+}
+
+async function getActivePool() {
+  if (usingMemoryFallback) {
+    if (!memoryInitPromise) {
+      memoryInitPromise = initMemoryDb();
     }
-    throw err;
+    return await memoryInitPromise;
+  }
+  return rawPgPool;
+}
+
+// Proactive background connectivity check on startup
+rawPgPool.query('SELECT 1').catch((err) => {
+  const msg = err?.message || '';
+  if (msg.includes('ENOTFOUND') || msg.includes('tenant/user') || msg.includes('ECONNREFUSED') || msg.includes('timeout')) {
+    switchToMemoryFallback(msg);
+  }
+});
+
+const pool = {
+  query: async function (sql, params, callback) {
+    if (typeof params === 'function') {
+      callback = params;
+      params = undefined;
+    }
+    try {
+      const current = await getActivePool();
+      return await current.query(sql, params);
+    } catch (err) {
+      const msg = err?.message || '';
+      const isConnError = msg.includes('ENOTFOUND') ||
+        msg.includes('tenant/user') ||
+        msg.includes('Connection terminated') ||
+        msg.includes('ECONNREFUSED') ||
+        msg.includes('timeout');
+
+      if (isConnError) {
+        await switchToMemoryFallback(msg);
+        const memPool = await getActivePool();
+        return await memPool.query(sql, params);
+      }
+      throw err;
+    }
+  },
+  connect: async function () {
+    try {
+      const current = await getActivePool();
+      return await current.connect();
+    } catch (err) {
+      const msg = err?.message || '';
+      const isConnError = msg.includes('ENOTFOUND') ||
+        msg.includes('tenant/user') ||
+        msg.includes('Connection terminated') ||
+        msg.includes('ECONNREFUSED') ||
+        msg.includes('timeout');
+
+      if (isConnError) {
+        await switchToMemoryFallback(msg);
+        const memPool = await getActivePool();
+        return await memPool.connect();
+      }
+      throw err;
+    }
+  },
+  on: function (event, handler) {
+    rawPgPool.on(event, handler);
   }
 };
 
-const safeQuery = pool.query;
+const safeQuery = (...args) => pool.query(...args);
 
 // Helper for snake_case -> camelCase conversion
 function snakeToCamel(s) {
@@ -114,7 +179,14 @@ const TABLE_MAP = {
   farmerFields: 'farmer_fields',
   farmerCropRecords: 'farmer_crop_records',
   kisanPointsLedger: 'kisan_points_ledger',
-  systemSettings: 'system_settings'
+  systemSettings: 'system_settings',
+  paymentTransactions: 'payment_transactions',
+  inspectionSlips: 'inspection_slips',
+  procurementAllocations: 'procurement_allocations',
+  mandiHistoricalObservations: 'mandi_historical_observations',
+  weatherHistoricalObservations: 'weather_historical_observations',
+  weatherForecastRecords: 'weather_forecast_records',
+  weatherDisasterAlerts: 'weather_disaster_alerts'
 };
 
 let tableColumnsCache = null;
@@ -255,6 +327,10 @@ class PostgresDatabaseAdapter {
     const sql = `UPDATE ${table} SET ${setClauses} WHERE id = $${values.length} RETURNING *`;
     const res = await pool.query(sql, values);
     return res.rows.length > 0 ? mapRow(res.rows[0]) : null;
+  }
+
+  async update(collection, id, updates) {
+    return this.updateById(collection, id, updates);
   }
 
   async deleteById(collection, id) {

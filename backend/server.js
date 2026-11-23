@@ -9,7 +9,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { db, hashPassword, findUserByIdentifier, findUserByGoogleId, findUserById, pool, mapRow } = require('./db');
 const { calculateMatch, evaluateEligibility } = require('./services/matchingService');
-const { calculateNetRealization, calculateStorageScenario } = require('./services/netRealizationService');
+const { calculateNetRealization, calculateStorageScenario, getMandiModalBenchmark, calculateFarmer3WayComparison } = require('./services/netRealizationService');
 const { predictYield, analyzeProduceQualityCV } = require('./services/forecastService');
 const { otpProvider } = require('./services/otpService');
 const { getHyperlocalWeather, getComprehensiveWeatherForecast } = require('./services/weatherService');
@@ -20,6 +20,7 @@ const {
   acceptOffer,
   counterOffer,
   rejectOffer,
+  cancelDeal,
   getDealsForUser,
   getDealById,
   getAllOffersForUser,
@@ -347,7 +348,12 @@ app.post('/api/auth/signup/init', authLimiter, async (req, res) => {
       operatingArea, 
       capacity, 
       buyerType, 
-      procurementCrops 
+      procurementCrops,
+      traderSubtype,
+      apmcLicenseNumber,
+      mandiName,
+      companyType,
+      taxIdGst
     } = req.body;
 
     // 1. Role validation
@@ -425,6 +431,11 @@ app.post('/api/auth/signup/init', authLimiter, async (req, res) => {
         operatingArea: (operatingArea || '').trim(),
         capacity: (capacity || '').trim(),
         buyerType: (buyerType || '').trim(),
+        traderSubtype: traderSubtype || null,
+        apmcLicenseNumber: (apmcLicenseNumber || '').trim() || null,
+        mandiName: (mandiName || '').trim() || null,
+        companyType: (companyType || '').trim() || null,
+        taxIdGst: (taxIdGst || '').trim().toUpperCase() || null,
         procurementCrops: Array.isArray(procurementCrops) ? procurementCrops : []
       },
       JWT_SECRET,
@@ -583,8 +594,13 @@ app.post('/api/auth/signup/verify', authLimiter, async (req, res) => {
         phone: payload.phone,
         password: hashPassword(payload.password),
         role: 'dealer',
+        traderSubtype: payload.traderSubtype || null,
+        apmcLicenseNumber: payload.apmcLicenseNumber || null,
+        mandiName: payload.mandiName || null,
+        companyType: payload.companyType || null,
+        taxIdGst: payload.taxIdGst || null,
         status: 'active',
-        location: `${payload.district || 'Delhi'}, ${payload.state || 'India'}`,
+        location: `${payload.mandiName ? payload.mandiName + ', ' : ''}${payload.district || 'Delhi'}, ${payload.state || 'India'}`,
         rating: 5.0,
         reviewsCount: 0,
         verified: true,
@@ -597,6 +613,11 @@ app.post('/api/auth/signup/verify', authLimiter, async (req, res) => {
           businessName: (payload.businessName || payload.name).trim(),
           contactPerson: payload.name,
           buyerType: payload.buyerType || 'Wholesale Buyer',
+          traderSubtype: payload.traderSubtype || null,
+          apmcLicenseNumber: payload.apmcLicenseNumber || null,
+          mandiName: payload.mandiName || null,
+          companyType: payload.companyType || null,
+          taxIdGst: payload.taxIdGst || null,
           procurementCrops: payload.procurementCrops || [],
           city: `${payload.district || 'Delhi'}, ${payload.state || 'India'}`
         }
@@ -1048,13 +1069,27 @@ app.post('/api/auth/google/resend-otp', authLimiter, async (req, res) => {
 });
 
 
-// Step 2: Aggregator / Dealer Sign Up (Status = "pending")
+// Step 2: Aggregator / Dealer / Trader Sign Up (Status = "pending")
 app.post('/api/auth/signup/business', authLimiter, async (req, res) => {
   try {
-    const { role, businessName, contactPerson, mobile, email, city, password } = req.body;
+    const { 
+      role, 
+      businessName, 
+      contactPerson, 
+      mobile, 
+      email, 
+      city, 
+      password,
+      traderSubtype,
+      apmcLicenseNumber,
+      mandiName,
+      companyType,
+      taxIdGst
+    } = req.body;
 
-    if (!role || (role !== 'aggregator' && role !== 'dealer')) {
-      return res.status(400).json({ error: 'Please select a valid role (Aggregator or Big Dealer)' });
+    const allowedRoles = ['aggregator', 'dealer', 'buyer'];
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({ error: 'Please select a valid role (Aggregator, Buyer, or Big Dealer)' });
     }
 
     if (!businessName || !contactPerson || !mobile || !email || !password) {
@@ -1076,15 +1111,24 @@ app.post('/api/auth/signup/business', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'An account with this email or mobile number already exists. Please log in.' });
     }
 
+    // Validate traderSubtype if provided
+    const validSubtypes = ['mandi_trader', 'commission_agent', 'local_trader', 'bulk_processor', 'exporter'];
+    const sanitizedSubtype = traderSubtype && validSubtypes.includes(traderSubtype) ? traderSubtype : null;
+
     const newBusinessUser = {
       id: `usr-${role.slice(0, 3)}-${Date.now()}`,
       name: contactPerson.trim(),
       email: cleanEmail,
       phone: cleanPhone,
       password: hashPassword(password),
-      role: role,
+      role: role === 'dealer' ? 'buyer' : role, // Canonical role
+      traderSubtype: sanitizedSubtype,
+      apmcLicenseNumber: apmcLicenseNumber ? apmcLicenseNumber.trim() : null,
+      mandiName: mandiName ? mandiName.trim() : null,
+      companyType: companyType ? companyType.trim() : null,
+      taxIdGst: taxIdGst ? taxIdGst.trim().toUpperCase() : null,
       status: 'pending', // Account status = "pending" until an admin approves
-      location: city || 'Agra, UP',
+      location: city || (mandiName ? `${mandiName} Mandi` : 'Agra, UP'),
       rating: 0,
       reviewsCount: 0,
       verified: false,
@@ -1093,7 +1137,10 @@ app.post('/api/auth/signup/business', authLimiter, async (req, res) => {
       businessProfile: {
         businessName: businessName.trim(),
         contactPerson: contactPerson.trim(),
-        city: city || 'Agra, UP'
+        city: city || 'Agra, UP',
+        traderSubtype: sanitizedSubtype,
+        apmcLicenseNumber: apmcLicenseNumber || null,
+        mandiName: mandiName || null
       }
     };
 
@@ -2187,6 +2234,18 @@ app.get('/api/matches/listing/:listingId', optionalAuth, async (req, res) => {
   const listing = await db.findById('farmerListings', req.params.listingId);
   if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
+  // Fetch live Mandi modal benchmark for this crop
+  let mandiBenchmark = null;
+  try {
+    mandiBenchmark = await getMandiModalBenchmark({
+      cropName: listing.cropName,
+      state: listing.state || 'Uttar Pradesh',
+      district: listing.district || null
+    });
+  } catch (mErr) {
+    console.warn('[MATCHES] Mandi benchmark lookup non-fatal error:', mErr.message);
+  }
+
   const allReqs = await db.find('buyerRequirements', r => r.status === 'OPEN');
   const matches = allReqs.map(reqItem => {
     const matchResult = calculateMatch(listing, reqItem);
@@ -2197,6 +2256,18 @@ app.get('/api/matches/listing/:listingId', optionalAuth, async (req, res) => {
       buyerPicksUp: reqItem.deliveryType === 'PICKUP_REQUIRED',
       storageCostPerKg: listing.storageRequirement === 'COLD_STORAGE' ? 0.45 : 0
     });
+
+    if (mandiBenchmark && mandiBenchmark.available) {
+      const spreadPerKg = Number((netCalc.estimatedNetRealization - mandiBenchmark.netMandiRealizationPerKg).toFixed(2));
+      const spreadPercent = mandiBenchmark.netMandiRealizationPerKg > 0
+        ? Number(((spreadPerKg / mandiBenchmark.netMandiRealizationPerKg) * 100).toFixed(1))
+        : 0;
+      netCalc.mandiBenchmark = {
+        ...mandiBenchmark,
+        spreadPerKg,
+        spreadPercent
+      };
+    }
 
     return {
       requirement: {
@@ -2221,7 +2292,7 @@ app.get('/api/matches/listing/:listingId', optionalAuth, async (req, res) => {
   .sort((a, b) => b.matchScore - a.matchScore);
 
   const sanitized = await sanitizeListing(listing, req.user);
-  res.json({ listing: sanitized, matches });
+  res.json({ listing: sanitized, matches, mandiBenchmark });
 });
 
 // Find multi-channel matching supply for a buyer requirement (Direct, Aggregator, Cold Storage)
@@ -2802,9 +2873,12 @@ app.post('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggr
       plan.updatedAt
     ]);
 
-    // Atomically reserve inventory on farmer_listings
+    // Atomically reserve inventory on farmer_listings & record child procurement_allocations
     for (const f of validatedFarmers) {
       const tons = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+      const farmerPrice = Number(f.farmerPricePerKg ?? f.pricePerKg ?? 18);
+      const allocId = `alloc-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
       if (f.listingId && tons > 0) {
         await client.query(
           `UPDATE farmer_listings 
@@ -2813,6 +2887,13 @@ app.post('/api/aggregator/procurement-plans', authMiddleware, requireRole(['aggr
           [tons, f.listingId]
         );
       }
+
+      await client.query(
+        `INSERT INTO procurement_allocations (
+           id, plan_id, listing_id, farmer_id, farmer_name, allocated_quantity_tons, agreed_farmer_price_per_kg, status, created_at, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+        [allocId, plan.id, f.listingId || null, f.farmerId || f.id || null, f.farmerName || 'Farmer', tons, farmerPrice, 'ALLOCATED']
+      );
     }
 
     await client.query('COMMIT');
@@ -2929,6 +3010,24 @@ app.put('/api/aggregator/procurement-plans/:id', authMiddleware, requireRole(['a
       plan.id
     ]);
 
+    // Sync child procurement_allocations table
+    if (selectedFarmers !== undefined) {
+      await client.query('DELETE FROM procurement_allocations WHERE plan_id = $1', [plan.id]);
+      for (const f of validatedFarmers) {
+        const tons = Number(f.allocatedQuantityTons ?? f.quantityTons ?? 0);
+        const farmerPrice = Number(f.farmerPricePerKg ?? f.pricePerKg ?? 18);
+        const allocId = `alloc-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        await client.query(
+          `INSERT INTO procurement_allocations (
+             id, plan_id, listing_id, farmer_id, farmer_name, allocated_quantity_tons, agreed_farmer_price_per_kg, status, created_at, updated_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+          [allocId, plan.id, f.listingId || null, f.farmerId || f.id || null, f.farmerName || 'Farmer', tons, farmerPrice, newStatus || 'ALLOCATED']
+        );
+      }
+    } else if (status) {
+      await client.query('UPDATE procurement_allocations SET status = $1, updated_at = NOW() WHERE plan_id = $2', [status, plan.id]);
+    }
+
     await client.query('COMMIT');
     const updatedPlan = {
       ...plan,
@@ -2972,6 +3071,14 @@ app.post('/api/aggregator/procurement-plans/:id/cancel', authMiddleware, require
       return res.json({ success: true, message: 'Plan was already cancelled', plan });
     }
 
+    const protectedStatuses = ['COMPLETED', 'DISPATCHED', 'FULFILLED'];
+    if (protectedStatuses.includes(String(plan.status).toUpperCase())) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `Cannot cancel a procurement plan with status "${plan.status}". Fulfilled and in-transit allocations are locked.`
+      });
+    }
+
     // Release reservations on farmer_listings
     const sf = Array.isArray(plan.selectedFarmers) ? plan.selectedFarmers : [];
     for (const f of sf) {
@@ -2994,6 +3101,9 @@ app.post('/api/aggregator/procurement-plans/:id/cancel', authMiddleware, require
        RETURNING *`,
       [plan.id]
     );
+
+    // Cancel child procurement allocations
+    await client.query("UPDATE procurement_allocations SET status = 'CANCELLED', updated_at = NOW() WHERE plan_id = $1", [plan.id]);
 
     await client.query('COMMIT');
     res.json({
@@ -3062,7 +3172,83 @@ app.post('/api/aggregator/procurement-plans/:id/create-batch', authMiddleware, r
   plan.updatedAt = new Date().toISOString();
   await db.update('procurementPlans', plan.id, plan);
 
+  // Update status in child procurement_allocations
+  await pool.query(
+    "UPDATE procurement_allocations SET status = 'CONFIRMED', updated_at = NOW() WHERE plan_id = $1",
+    [plan.id]
+  );
+
   res.status(201).json({ plan, batch });
+});
+
+// GET /api/aggregator/procurement-plans/:id/allocations
+// Retrieve individual farmer allocations and payout ledger for a procurement plan
+app.get('/api/aggregator/procurement-plans/:id/allocations', authMiddleware, requireRole(['aggregator', 'admin']), async (req, res) => {
+  const plan = await db.findById('procurementPlans', req.params.id);
+  if (!plan) return res.status(404).json({ error: 'Procurement plan not found' });
+  if (plan.aggregatorId !== req.user.id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  const { rows } = await pool.query(
+    'SELECT * FROM procurement_allocations WHERE plan_id = $1 ORDER BY created_at ASC',
+    [plan.id]
+  );
+
+  const mapped = rows.map(mapRow);
+  const totalAllocatedTons = Number(mapped.reduce((sum, a) => sum + Number(a.allocatedQuantityTons || 0), 0).toFixed(2));
+  const totalFarmerPayout = Number(mapped.reduce((sum, a) => sum + (Number(a.allocatedQuantityTons || 0) * 1000 * Number(a.agreedFarmerPricePerKg || 0)), 0).toFixed(2));
+
+  res.json({
+    planId: plan.id,
+    planStatus: plan.status,
+    cropName: plan.cropName,
+    buyerName: plan.buyerName || plan.buyerCompany,
+    indicativeBuyerPricePerKg: plan.indicativeBuyerPricePerKg,
+    totalAllocations: mapped.length,
+    totalAllocatedTons,
+    totalFarmerPayout,
+    allocations: mapped.map(a => ({
+      ...a,
+      payoutAmount: Number((Number(a.allocatedQuantityTons || 0) * 1000 * Number(a.agreedFarmerPricePerKg || 0)).toFixed(2))
+    }))
+  });
+});
+
+// GET /api/farmer/procurement-allocations
+// Allows smallholder farmers to view all active aggregations where their produce is pooled
+app.get('/api/farmer/procurement-allocations', authMiddleware, requireRole(['farmer', 'admin']), async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        pa.id,
+        pa.plan_id,
+        pa.listing_id,
+        pa.allocated_quantity_tons,
+        pa.agreed_farmer_price_per_kg,
+        pa.status as allocation_status,
+        pa.created_at,
+        pp.crop_name,
+        pp.variety,
+        pp.aggregator_name,
+        pp.buyer_name,
+        pp.buyer_company,
+        pp.status as plan_status
+      FROM procurement_allocations pa
+      JOIN procurement_plans pp ON pp.id = pa.plan_id
+      WHERE pa.farmer_id = $1
+         OR pa.listing_id IN (SELECT id FROM farmer_listings WHERE farmer_id = $1)
+      ORDER BY pa.created_at DESC
+    `;
+    const result = await pool.query(query, [req.user.id]);
+    res.json(result.rows.map(r => ({
+      ...mapRow(r),
+      estimatedFarmerPayout: Number((Number(r.allocated_quantity_tons || 0) * 1000 * Number(r.agreed_farmer_price_per_kg || 0)).toFixed(2))
+    })));
+  } catch (err) {
+    console.error('[FARMER ALLOCATIONS] Error:', err.message);
+    res.status(500).json({ error: 'Failed to retrieve farmer procurement allocations', details: err.message });
+  }
 });
 
 // ---------------------------------------------
@@ -3458,7 +3644,10 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
   } else if (user.role === 'buyer') {
     orders = await db.find('orders', o => o.buyerId === user.id);
   } else if (user.role === 'transporter') {
-    orders = await db.find('orders', o => o.transporterId === 'trp-601');
+    // Dynamically match transporter's carrier id, user id, or legacy demo 'trp-601'
+    const trpRecord = await db.findOne('transporters', t => t.userId === user.id);
+    const trpId = trpRecord ? trpRecord.id : null;
+    orders = await db.find('orders', o => o.transporterId === user.id || (trpId && o.transporterId === trpId) || o.transporterId === 'trp-601');
   } else {
     orders = await db.find('orders'); // Admin sees all
   }
@@ -3468,10 +3657,20 @@ app.get('/api/orders', authMiddleware, async (req, res) => {
 app.get('/api/orders/:id', authMiddleware, async (req, res) => {
   const order = await db.findById('orders', req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
+  
+  // Object-level permission check: only buyer, seller, assigned transporter, or admin
+  const isParty = req.user.role === 'admin' ||
+    req.user.id === order.buyerId ||
+    req.user.id === order.sellerId ||
+    req.user.id === order.transporterId;
+  if (!isParty) {
+    return res.status(403).json({ error: 'Unauthorized: You are not a party to this order' });
+  }
+
   res.json(order);
 });
 
-// Advance order status
+// Advance order status with strict RBAC and cancellation inventory recovery
 app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
   const { status, note } = req.body;
   const validStatuses = ['CREATED', 'CONFIRMED', 'AGGREGATING', 'READY_FOR_PICKUP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'CANCELLED'];
@@ -3483,10 +3682,45 @@ app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
   const order = await db.findById('orders', req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
+  // 1. Authorization: Only Buyer, Seller, Assigned Transporter, or Admin
+  const isBuyer = req.user.id === order.buyerId;
+  const isSeller = req.user.id === order.sellerId;
+  const isTransporter = req.user.id === order.transporterId || (req.user.role === 'transporter' && order.transporterId === 'trp-601');
+  const isAdmin = req.user.role === 'admin';
+
+  if (!isAdmin && !isBuyer && !isSeller && !isTransporter) {
+    return res.status(403).json({ error: 'Unauthorized: You are not authorized to update this order' });
+  }
+
+  // 2. Specific state-transition guards
+  if (status === 'COMPLETED' && !isBuyer && !isAdmin) {
+    return res.status(403).json({ error: 'Only the buyer or an admin can confirm delivery completion' });
+  }
+  if ((status === 'IN_TRANSIT' || status === 'DELIVERED') && !isTransporter && !isSeller && !isAdmin) {
+    return res.status(403).json({ error: 'Only the assigned transporter, seller, or admin can update transit status' });
+  }
+
+  // 3. Handle Order Cancellation with Atomic Inventory Rollback
+  if (status === 'CANCELLED') {
+    try {
+      const cancelledOrder = await cancelDeal({
+        user: req.user,
+        dealId: req.params.id,
+        reason: note || 'Order cancelled by party'
+      });
+      return res.json(cancelledOrder);
+    } catch (cancelErr) {
+      return res.status(400).json({ error: cancelErr.message });
+    }
+  }
+
+  // 4. Progress standard order lifecycle
   const timeline = order.timeline || [];
   timeline.push({
     status,
     note: note || `Order advanced to ${status}`,
+    updatedBy: req.user.id,
+    updatedByRole: req.user.role,
     timestamp: new Date().toISOString()
   });
 
@@ -3502,17 +3736,154 @@ app.put('/api/orders/:id/status', authMiddleware, async (req, res) => {
 
   const updatedOrder = await db.updateById('orders', req.params.id, updates);
 
-  // Notify parties
-  await db.insert('notifications', {
-    userId: order.buyerId,
-    title: `Order ${order.orderNumber} Status: ${status}`,
-    message: note || `Order transitioned to ${status}`,
-    type: 'ORDER',
-    read: false,
-    timestamp: new Date().toISOString()
-  });
+  // Notify counterparty
+  const notifyRecipient = isBuyer ? order.sellerId : order.buyerId;
+  if (notifyRecipient) {
+    await db.insert('notifications', {
+      userId: notifyRecipient,
+      title: `Order ${order.orderNumber} Status: ${status}`,
+      message: note || `Order transitioned to ${status}`,
+      type: 'ORDER',
+      read: false,
+      timestamp: new Date().toISOString()
+    });
+  }
 
   res.json(updatedOrder);
+});
+
+// 7.1. PAYMENT TRANSACTIONS & ESCROW LEDGER
+// ---------------------------------------------
+app.get('/api/orders/:id/payments', authMiddleware, async (req, res) => {
+  const order = await db.findById('orders', req.params.id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  // Access control: Only parties or admin
+  const isParty = req.user.role === 'admin' ||
+    req.user.id === order.buyerId ||
+    req.user.id === order.sellerId ||
+    req.user.id === order.transporterId;
+  if (!isParty) {
+    return res.status(403).json({ error: 'Unauthorized: You are not a party to this order' });
+  }
+
+  const transactions = await db.find('paymentTransactions', { orderId: req.params.id });
+  res.json(transactions);
+});
+
+app.post('/api/orders/:id/payments', authMiddleware, async (req, res) => {
+  const { amount, transactionType, payeeId, paymentGatewayRef, bankReference, notes } = req.body;
+  const order = await db.findById('orders', req.params.id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  const isParty = req.user.role === 'admin' ||
+    req.user.id === order.buyerId ||
+    req.user.id === order.sellerId;
+  if (!isParty) {
+    return res.status(403).json({ error: 'Unauthorized to record payment transaction on this order' });
+  }
+
+  const amt = Number(amount);
+  if (isNaN(amt) || amt <= 0) {
+    return res.status(400).json({ error: 'Valid positive payment amount is required' });
+  }
+
+  const validTypes = ['ESCROW_DEPOSIT', 'FARMER_PAYOUT', 'AGGREGATOR_COMMISSION', 'TRANSPORTER_FREIGHT', 'PLATFORM_FEE', 'REFUND', 'DISPUTE_HOLD'];
+  if (!validTypes.includes(transactionType)) {
+    return res.status(400).json({ error: `Invalid transaction type. Must be one of: ${validTypes.join(', ')}` });
+  }
+
+  const newTx = {
+    id: `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    orderId: req.params.id,
+    payerId: req.user.id,
+    payeeId: payeeId || order.sellerId,
+    amount: amt,
+    transactionType,
+    status: transactionType === 'ESCROW_DEPOSIT' ? 'ESCROWED' : 'SETTLED',
+    paymentGatewayRef: paymentGatewayRef || null,
+    bankReference: bankReference || null,
+    notes: notes || null,
+    createdAt: new Date().toISOString(),
+    settledAt: transactionType === 'ESCROW_DEPOSIT' ? null : new Date().toISOString()
+  };
+
+  const created = await db.insert('paymentTransactions', newTx);
+
+  // Update order payment status if escrow deposited
+  if (transactionType === 'ESCROW_DEPOSIT') {
+    await db.updateById('orders', req.params.id, { paymentStatus: 'ESCROW_FUNDED' });
+  }
+
+  res.status(201).json(created);
+});
+
+// 7.2. WEIGHBRIDGE & QUALITY INSPECTION SLIPS
+// ---------------------------------------------
+app.get('/api/orders/:id/inspection', authMiddleware, async (req, res) => {
+  const order = await db.findById('orders', req.params.id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  const isParty = req.user.role === 'admin' ||
+    req.user.id === order.buyerId ||
+    req.user.id === order.sellerId ||
+    req.user.id === order.transporterId;
+  if (!isParty) {
+    return res.status(403).json({ error: 'Unauthorized: You are not a party to this order' });
+  }
+
+  const slips = await db.find('inspectionSlips', { orderId: req.params.id });
+  res.json(slips);
+});
+
+app.post('/api/orders/:id/inspection', authMiddleware, async (req, res) => {
+  const { 
+    weighbridgeGrossKg, 
+    weighbridgeTareKg, 
+    netWeightKg, 
+    moisturePercent, 
+    foreignMatterPercent, 
+    qualityGradeVerified, 
+    deductionKg, 
+    notes,
+    slipImages = []
+  } = req.body;
+
+  const order = await db.findById('orders', req.params.id);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+
+  const isParty = req.user.role === 'admin' ||
+    req.user.id === order.buyerId ||
+    req.user.id === order.sellerId;
+  if (!isParty) {
+    return res.status(403).json({ error: 'Unauthorized to record inspection slip on this order' });
+  }
+
+  const net = Number(netWeightKg);
+  if (isNaN(net) || net <= 0) {
+    return res.status(400).json({ error: 'Valid net weight in kilograms is required' });
+  }
+
+  const newSlip = {
+    id: `qc-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    orderId: req.params.id,
+    inspectorId: req.user.id,
+    inspectorName: req.user.name,
+    weighbridgeGrossKg: weighbridgeGrossKg ? Number(weighbridgeGrossKg) : null,
+    weighbridgeTareKg: weighbridgeTareKg ? Number(weighbridgeTareKg) : null,
+    netWeightKg: net,
+    moisturePercent: moisturePercent ? Number(moisturePercent) : null,
+    foreignMatterPercent: foreignMatterPercent ? Number(foreignMatterPercent) : null,
+    qualityGradeVerified: qualityGradeVerified || order.qualityGrade || 'Standard',
+    deductionKg: deductionKg ? Number(deductionKg) : 0,
+    slipImages: slipImages,
+    notes: notes || null,
+    status: 'VERIFIED',
+    createdAt: new Date().toISOString()
+  };
+
+  const created = await db.insert('inspectionSlips', newSlip);
+  res.status(201).json(created);
 });
 
 // ---------------------------------------------
@@ -3685,12 +4056,23 @@ app.get('/api/storage/:id', async (req, res) => {
 
 // Book cold storage space
 app.post('/api/storage/book', authMiddleware, async (req, res) => {
-  const { storageId, cropName, variety, quantityTons, durationMonths } = req.body;
+  const { storageId, cropName, variety, quantityTons, durationMonths, listingId } = req.body;
   const storage = await db.findById('coldStorages', storageId);
-  if (!storage) return res.status(404).json({ error: 'Storage not found' });
+  if (!storage) return res.status(404).json({ error: 'Storage facility not found' });
 
-  const months = Number(durationMonths) || 3;
-  const qty = Number(quantityTons) || 10;
+  const qty = Number(quantityTons);
+  if (isNaN(qty) || qty <= 0) {
+    return res.status(400).json({ error: 'Quantity must be a positive number of tons' });
+  }
+
+  const currentAvailable = Number(storage.availableCapacityTons ?? storage.totalCapacityTons ?? 0);
+  if (qty > currentAvailable) {
+    return res.status(400).json({
+      error: `Booking exceeds available capacity (${currentAvailable} tons available, requested ${qty} tons)`
+    });
+  }
+
+  const months = Math.max(1, Number(durationMonths) || 3);
   const totalCost = qty * (storage.storageChargePerMonthPerTon || 180) * months;
 
   const newBooking = {
@@ -3699,9 +4081,10 @@ app.post('/api/storage/book', authMiddleware, async (req, res) => {
     storageName: storage.name,
     farmerId: req.user.id,
     farmerName: req.user.name,
-    cropName,
+    cropName: cropName || 'Produce',
     variety: variety || 'Standard',
     quantityTons: qty,
+    listingId: listingId || null,
     entryDate: new Date().toISOString().split('T')[0],
     expectedReleaseDate: new Date(Date.now() + months * 30 * 86400000).toISOString().split('T')[0],
     durationMonths: months,
@@ -3714,9 +4097,9 @@ app.post('/api/storage/book', authMiddleware, async (req, res) => {
 
   await db.insert('storageBookings', newBooking);
 
-  // Update storage capacity
+  // Update storage capacity atomically
   const occ = (storage.occupiedCapacityTons || 0) + qty;
-  const avail = Math.max(0, (storage.availableCapacityTons || storage.totalCapacityTons) - qty);
+  const avail = Math.max(0, currentAvailable - qty);
   const totalCap = storage.totalCapacityTons || 1000;
   await db.updateById('coldStorages', storageId, {
     occupiedCapacityTons: occ,
@@ -3733,16 +4116,102 @@ app.get('/api/storage/bookings/my', authMiddleware, async (req, res) => {
 });
 
 // Storage Decision Analysis: "Sell Now vs Store & Sell Later"
-app.post('/api/storage/scenario', publicSimulationLimiter, (req, res) => {
-  const { currentOfferPricePerKg, expectedFuturePricePerKg, storageDurationMonths, storageChargePerMonthPerKg } = req.body;
+app.post('/api/storage/scenario', publicSimulationLimiter, async (req, res) => {
+  const {
+    currentOfferPricePerKg,
+    expectedFuturePricePerKg,
+    storageDurationMonths,
+    storageChargePerMonthPerKg,
+    coldStorageId,
+    cropName,
+    state = 'Uttar Pradesh',
+    district = null
+  } = req.body;
+
+  let monthlyRate = Number(storageChargePerMonthPerKg);
+  let facilityName = null;
+
+  if (coldStorageId) {
+    try {
+      const cs = await pool.query('SELECT name, storage_charge_per_month_per_ton FROM cold_storages WHERE id = $1', [coldStorageId]);
+      if (cs.rows && cs.rows.length > 0) {
+        facilityName = cs.rows[0].name;
+        const tonRate = Number(cs.rows[0].storage_charge_per_month_per_ton);
+        if (tonRate > 0) {
+          monthlyRate = Number((tonRate / 1000).toFixed(3));
+        }
+      }
+    } catch (dbErr) {
+      console.warn('[STORAGE SCENARIO] DB lookup warning:', dbErr.message);
+    }
+  }
+
+  // Baseline price from authentic mandi snapshot if cropName provided
+  let baselineCurrent = Number(currentOfferPricePerKg);
+  let baselineFuture = Number(expectedFuturePricePerKg);
+
+  if ((!baselineCurrent || !baselineFuture) && cropName) {
+    try {
+      const mb = await getMandiModalBenchmark({ cropName, state, district });
+      if (mb && mb.available) {
+        if (!baselineCurrent) baselineCurrent = mb.modalPricePerKg;
+        if (!baselineFuture) baselineFuture = Number((mb.modalPricePerKg * 1.25).toFixed(2));
+      }
+    } catch (mErr) {
+      console.warn('[STORAGE SCENARIO] Mandi baseline warning:', mErr.message);
+    }
+  }
+
   const analysis = calculateStorageScenario({
-    currentOfferPricePerKg: Number(currentOfferPricePerKg) || 18.0,
-    expectedFuturePricePerKg: Number(expectedFuturePricePerKg) || 22.5,
+    currentOfferPricePerKg: baselineCurrent || 18.0,
+    expectedFuturePricePerKg: baselineFuture || 22.5,
     storageDurationMonths: Number(storageDurationMonths) || 3,
-    storageChargePerMonthPerKg: Number(storageChargePerMonthPerKg) || 0.45
+    storageChargePerMonthPerKg: monthlyRate || 0.45
   });
 
+  if (facilityName) {
+    analysis.facilityName = facilityName;
+  }
+
   res.json(analysis);
+});
+
+// Comprehensive 3-Way Comparative Decision Support: Direct vs Mandi Spot vs Cold Store
+app.all('/api/net-realization/3way-comparison', optionalAuth, async (req, res) => {
+  try {
+    const payload = req.method === 'POST' ? req.body : req.query;
+    const {
+      buyerPricePerKg,
+      cropName,
+      state,
+      district,
+      distanceKm,
+      buyerPicksUp,
+      storageDurationMonths,
+      coldStorageId,
+      quantityKg
+    } = payload;
+
+    const userState = req.user?.state || state || 'Uttar Pradesh';
+    const userDistrict = req.user?.district || district || null;
+
+    const result = await calculateFarmer3WayComparison({
+      buyerPricePerKg: Number(buyerPricePerKg) || 18.0,
+      cropName: cropName || 'Potato',
+      state: userState,
+      district: userDistrict,
+      distanceKm: Number(distanceKm) || 30,
+      buyerPicksUp: buyerPicksUp === true || buyerPicksUp === 'true',
+      storageDurationMonths: Number(storageDurationMonths) || 3,
+      coldStorageId: coldStorageId || null,
+      quantityKg: Number(quantityKg) || 1000
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('[3-WAY COMPARISON] Error:', err);
+    res.status(500).json({ error: 'Failed to calculate comparative net realization', details: err.message });
+  }
 });
 
 // ---------------------------------------------
@@ -3798,6 +4267,128 @@ app.get('/api/market-prices', async (req, res) => {
   res.json(prices);
 });
 
+// GET /api/market-prices/historical-clearing
+// Historical Transaction Outcome Dataset: Real executed deals clearing rates vs APMC modal benchmark
+app.get('/api/market-prices/historical-clearing', optionalAuth, async (req, res) => {
+  try {
+    const { crop, variety, district, state, limit = 50 } = req.query;
+
+    let whereClauses = ["o.status NOT IN ('CANCELLED', 'REJECTED')"];
+    let params = [];
+
+    if (crop && crop.trim() && crop.toLowerCase() !== 'all') {
+      params.push(`%${crop.trim()}%`);
+      whereClauses.push(`o.crop_name ILIKE $${params.length}`);
+    }
+
+    if (variety && variety.trim() && variety.toLowerCase() !== 'all') {
+      params.push(`%${variety.trim()}%`);
+      whereClauses.push(`o.variety ILIKE $${params.length}`);
+    }
+
+    if (district && district.trim()) {
+      params.push(`%${district.trim()}%`);
+      whereClauses.push(`(o.pickup_location ILIKE $${params.length} OR o.delivery_location ILIKE $${params.length})`);
+    }
+
+    params.push(Math.min(100, Math.max(1, Number(limit) || 50)));
+    const limitParam = `$${params.length}`;
+
+    const query = `
+      SELECT 
+        o.id,
+        o.order_number,
+        o.crop_name,
+        o.variety,
+        o.quality_grade,
+        o.quantity_tons,
+        COALESCE(o.agreed_price_per_kg, o.unit_price_per_kg) as clearing_price_per_kg,
+        o.produce_total,
+        o.total_amount,
+        o.status as order_status,
+        o.payment_status,
+        o.pickup_location,
+        o.delivery_location,
+        o.created_at
+      FROM orders o
+      WHERE ${whereClauses.join(' AND ')}
+      ORDER BY o.created_at DESC
+      LIMIT ${limitParam}
+    `;
+
+    const { rows } = await pool.query(query, params);
+    const trades = rows.map(r => ({
+      orderId: r.id,
+      orderNumber: r.order_number,
+      cropName: r.crop_name,
+      variety: r.variety || 'Standard',
+      grade: r.quality_grade || 'Grade A',
+      quantityTons: Number(r.quantity_tons) || 0,
+      clearingPricePerKg: Number(r.clearing_price_per_kg) || 0,
+      grossValueInr: Number(r.produce_total || r.total_amount) || 0,
+      location: r.pickup_location || 'North India Hub',
+      status: r.order_status,
+      paymentStatus: r.payment_status || 'SECURED',
+      clearedAt: r.created_at
+    }));
+
+    // Compute statistical aggregates
+    const totalTrades = trades.length;
+    const totalVolumeTons = Number(trades.reduce((sum, t) => sum + t.quantityTons, 0).toFixed(2));
+    const totalGrossValueInr = Number(trades.reduce((sum, t) => sum + t.grossValueInr, 0).toFixed(2));
+
+    const totalWeightKg = totalVolumeTons * 1000;
+    const weightedGross = trades.reduce((sum, t) => sum + (t.quantityTons * 1000 * t.clearingPricePerKg), 0);
+    const weightedAveragePricePerKg = totalWeightKg > 0 
+      ? Number((weightedGross / totalWeightKg).toFixed(2))
+      : (trades.length > 0 ? Number((trades.reduce((sum, t) => sum + t.clearingPricePerKg, 0) / trades.length).toFixed(2)) : 0);
+
+    const prices = trades.map(t => t.clearingPricePerKg).filter(p => p > 0);
+    const minPricePerKg = prices.length > 0 ? Math.min(...prices) : 0;
+    const maxPricePerKg = prices.length > 0 ? Math.max(...prices) : 0;
+
+    // Pull authentic APMC benchmark comparison if crop is specified or detected
+    let apmcBenchmark = null;
+    const targetCrop = (crop && crop.toLowerCase() !== 'all') ? crop : (trades.length > 0 ? trades[0].cropName : 'Potato');
+    if (targetCrop) {
+      try {
+        const bm = await getMandiModalBenchmark({ cropName: targetCrop, state: state || 'Uttar Pradesh', district: district || null });
+        if (bm && bm.available) {
+          const spreadVsModal = Number((weightedAveragePricePerKg - bm.modalPricePerKg).toFixed(2));
+          const premiumPercent = bm.modalPricePerKg > 0 ? Number(((spreadVsModal / bm.modalPricePerKg) * 100).toFixed(1)) : 0;
+          apmcBenchmark = {
+            market: bm.market,
+            district: bm.district,
+            state: bm.state,
+            modalPricePerKg: bm.modalPricePerKg,
+            spreadVsModal,
+            premiumPercent
+          };
+        }
+      } catch (e) {
+        console.warn('[CLEARING DATASET] Mandi benchmark warning:', e.message);
+      }
+    }
+
+    res.json({
+      filter: { crop: crop || 'all', variety: variety || 'all', district: district || 'all' },
+      summary: {
+        totalTrades,
+        totalVolumeTons,
+        totalGrossValueInr,
+        weightedAveragePricePerKg,
+        minPricePerKg,
+        maxPricePerKg
+      },
+      apmcBenchmark,
+      trades
+    });
+  } catch (err) {
+    console.error('[HISTORICAL CLEARING] Error:', err);
+    res.status(500).json({ error: 'Failed to retrieve clearing price dataset', details: err.message });
+  }
+});
+
 // Official Government Mandi Locations
 app.get('/api/mandi-locations', async (req, res) => {
   try {
@@ -3825,10 +4416,7 @@ app.get('/api/mandi-prices', optionalAuth, async (req, res) => {
     }
 
     if (!targetState || typeof targetState !== 'string' || !targetState.trim()) {
-      return res.status(400).json({
-        success: false,
-        error: 'State parameter is required to query official government mandi prices.'
-      });
+      targetState = 'Uttar Pradesh';
     }
 
     const data = await getMandiPrices({

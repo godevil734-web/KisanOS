@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { api } from '../services/api';
-import { FarmerListing, RequirementMatch, Order, Offer, Crop, BuyerRequirement, FarmActivity } from '../types';
+import { FarmerListing, RequirementMatch, Order, Offer, Crop, BuyerRequirement, FarmActivity, ThreeWayComparisonResult } from '../types';
 import { 
   Sprout, 
   Plus, 
@@ -200,6 +200,34 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
 
   // Match score explanation modal
   const [selectedMatchExplanation, setSelectedMatchExplanation] = useState<RequirementMatch | null>(null);
+
+  // 3-Way Decision Comparison Modal State
+  const [selected3WayMatch, setSelected3WayMatch] = useState<RequirementMatch | null>(null);
+  const [threeWayData, setThreeWayData] = useState<ThreeWayComparisonResult | null>(null);
+  const [loading3Way, setLoading3Way] = useState<boolean>(false);
+
+  const open3WayComparison = async (matchItem: RequirementMatch) => {
+    setSelected3WayMatch(matchItem);
+    setLoading3Way(true);
+    setThreeWayData(null);
+    try {
+      const res = await api.get3WayRealizationComparison({
+        buyerPricePerKg: matchItem.requirement.offeredPricePerKg,
+        cropName: matchItem.requirement.cropName || activeListing?.cropName || 'Potato',
+        state: user?.state || activeListing?.state || 'Uttar Pradesh',
+        district: user?.district || activeListing?.district || null,
+        distanceKm: matchItem.distanceKm || 25,
+        buyerPicksUp: matchItem.requirement.deliveryType === 'PICKUP_REQUIRED',
+        storageDurationMonths: 3,
+        quantityKg: activeListing ? activeListing.quantityTons * 1000 : 1000
+      });
+      setThreeWayData(res);
+    } catch (err) {
+      console.error('Failed to load 3-way comparison:', err);
+    } finally {
+      setLoading3Way(false);
+    }
+  };
 
   // Find Buyers Filter & Interactive View states
   const [buyerFilterCrop, setBuyerFilterCrop] = useState<string>('All');
@@ -2629,6 +2657,31 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
                           </div>
                         </div>
 
+                        {/* Live Mandi Benchmark Spread Pill */}
+                        {nr?.mandiBenchmark?.available && (
+                          <div className="bg-emerald-50/90 rounded-xl p-2.5 border border-emerald-200 text-xs flex items-center justify-between gap-2">
+                            <div>
+                              <span className="text-[10px] text-slate-500 block truncate max-w-[190px]">
+                                APMC {nr.mandiBenchmark.market || 'मंडी'} ({nr.mandiBenchmark.district || 'UP'})
+                              </span>
+                              <span className="text-[11px] font-bold text-slate-700">
+                                मोडल: ₹{Number(nr.mandiBenchmark.modalPricePerKg).toFixed(2)} • शुद्ध: ₹{Number(nr.mandiBenchmark.netMandiRealizationPerKg).toFixed(2)}/kg
+                              </span>
+                            </div>
+                            <div className="text-right shrink-0">
+                              {Number(nr.mandiBenchmark.spreadPerKg) > 0 ? (
+                                <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-700 text-white font-black text-[10px] shadow-xs">
+                                  +₹{Number(nr.mandiBenchmark.spreadPerKg).toFixed(2)}/kg लाभ
+                                </span>
+                              ) : (
+                                <span className="inline-block px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold text-[10px]">
+                                  मंडी समकक्ष
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Quantity Eligibility Warning / Status Banner */}
                         {isBulk && !isEligibleDirect && (
                           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-1">
@@ -2647,12 +2700,21 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
 
                       {/* Card Footer Actions */}
                       <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
-                        <button
-                          onClick={() => setSelectedMatchExplanation(matchItem)}
-                          className="text-xs font-bold text-slate-600 hover:text-slate-900 underline cursor-pointer"
-                        >
-                          हिसाब समझें (Details)
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelectedMatchExplanation(matchItem)}
+                            className="text-xs font-bold text-slate-500 hover:text-slate-900 underline cursor-pointer"
+                          >
+                            हिसाब (Details)
+                          </button>
+                          <span className="text-slate-300">•</span>
+                          <button
+                            onClick={() => open3WayComparison(matchItem)}
+                            className="text-xs font-extrabold text-cyan-700 hover:text-cyan-900 bg-cyan-50 hover:bg-cyan-100 px-2 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                          >
+                            <span>⚖️ 3-Way तुलना</span>
+                          </button>
+                        </div>
 
                         {isEligibleDirect ? (
                           <button
@@ -4016,6 +4078,281 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({ currentRole, o
             >
               बंद करें (Close)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3-WAY DECISION SUPPORT MODAL: DIRECT VS MANDI SPOT VS COLD STORE */}
+      {selected3WayMatch && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-5 sm:p-7 shadow-2xl space-y-5 my-8 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">⚖️</span>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900">
+                    3-Way निर्णय विश्लेषण (Farmer Realization & Decision Support)
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  खेत पर सीधा सौदा (Farm Gate Direct) vs स्थानीय APMC मंडी (Mandi Spot) vs कोल्ड स्टोरेज (3-Month Carry)
+                </p>
+              </div>
+              <button 
+                onClick={() => { setSelected3WayMatch(null); setThreeWayData(null); }}
+                className="h-8 w-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {loading3Way ? (
+              <div className="py-16 text-center space-y-3">
+                <div className="inline-block animate-spin text-3xl">⚙️</div>
+                <div className="text-sm font-bold text-slate-700">
+                  सरकारी APMC मंडी आंकड़ों और कोल्ड स्टोरेज दरों का मिलान हो रहा है...
+                </div>
+                <p className="text-xs text-slate-400">Comparing real-time APMC records with platform offers</p>
+              </div>
+            ) : threeWayData ? (
+              <div className="space-y-5">
+                {/* Synthesis Banner */}
+                <div className={`p-4 rounded-2xl border ${
+                  threeWayData.synthesis.bestOption === 'DIRECT_SALE' 
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                    : threeWayData.synthesis.bestOption === 'COLD_STORAGE'
+                    ? 'bg-cyan-50 border-cyan-300 text-cyan-950'
+                    : 'bg-amber-50 border-amber-300 text-amber-950'
+                } flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3`}>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase px-2.5 py-0.5 rounded-full bg-white/80 shadow-xs border">
+                        💡 अनुशंसित विकल्प: {
+                          threeWayData.synthesis.bestOption === 'DIRECT_SALE' ? 'खेत पर सीधा सौदा (Direct Sale)' :
+                          threeWayData.synthesis.bestOption === 'COLD_STORAGE' ? 'कोल्ड स्टोरेज में भंडारण (Store & Sell Later)' :
+                          'मंडी स्पॉट (APMC Mandi)'
+                        }
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold mt-1">
+                      {lang === 'hi' ? threeWayData.synthesis.summaryHi : threeWayData.synthesis.summaryEn}
+                    </p>
+                  </div>
+                  {threeWayData.options.mandiSpot.spreadVsDirectPerKg > 0 && (
+                    <div className="shrink-0 bg-white/90 px-3 py-2 rounded-xl text-center border border-emerald-300 shadow-xs">
+                      <span className="text-[10px] text-slate-500 font-bold block">सीधा लाभ (Direct Spread)</span>
+                      <span className="text-base font-black text-emerald-700">
+                        +₹{threeWayData.options.mandiSpot.spreadVsDirectPerKg}/kg
+                      </span>
+                      <span className="text-[10px] text-emerald-800 font-bold block">
+                        (+{threeWayData.options.mandiSpot.spreadVsDirectPercent}%)
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3 Columns Comparison */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Column 1: Farm Gate Direct */}
+                  <div className={`rounded-2xl p-4 border-2 flex flex-col justify-between space-y-4 ${
+                    threeWayData.synthesis.bestOption === 'DIRECT_SALE' ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-200 bg-white'
+                  }`}>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full">
+                          विकल्प 1: खेत पर सौदा
+                        </span>
+                        <span className="text-xs font-bold text-slate-500">KisanOS Contract</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-500 block">खरीदार का भाव:</span>
+                        <span className="text-xl font-black text-slate-900">
+                          ₹{Number(threeWayData.options.direct.grossPricePerKg).toFixed(2)}/kg
+                        </span>
+                        <span className="text-[11px] text-emerald-700 font-bold block mt-0.5">
+                          {threeWayData.options.direct.buyerPicksUp ? '🚜 खरीदार स्वयं उठाएगा (Zero Transit)' : '🚚 डिलीवरी'}
+                        </span>
+                      </div>
+                      <div className="bg-white/80 rounded-xl p-2.5 border border-slate-100 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-600">
+                          <span>ढुलाई खर्च:</span>
+                          <span>-₹{Number(threeWayData.options.direct.deductions.transport).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>हम्माली व लोडिंग:</span>
+                          <span>-₹{Number(threeWayData.options.direct.deductions.loading).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>प्लेटफॉर्म शुल्क:</span>
+                          <span>-₹{Number(threeWayData.options.direct.deductions.platformFee).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="border-t border-slate-100 pt-1 flex justify-between font-bold text-slate-700">
+                          <span>कुल कटौती:</span>
+                          <span>-₹{Number(threeWayData.options.direct.deductions.total).toFixed(2)}/kg</span>
+                        </div>
+                      </div>
+                      <div className="bg-emerald-100/70 p-3 rounded-xl border border-emerald-300">
+                        <span className="text-[10px] text-emerald-900 font-bold uppercase block">हाथ में शुद्ध आय (Net in hand)</span>
+                        <div className="text-2xl font-black text-emerald-800">
+                          ₹{Number(threeWayData.options.direct.netRealizationPerKg).toFixed(2)}/kg
+                        </div>
+                        <div className="text-[11px] text-emerald-700 font-bold mt-1">
+                          कुल आय ({threeWayData.quantityKg} kg): ₹{Number(threeWayData.options.direct.totalNetValue).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span>100% एस्क्रो भुगतान सुरक्षित</span>
+                    </div>
+                  </div>
+
+                  {/* Column 2: Local Mandi Spot */}
+                  <div className={`rounded-2xl p-4 border-2 flex flex-col justify-between space-y-4 ${
+                    threeWayData.synthesis.bestOption === 'MANDI_SPOT' ? 'border-amber-500 bg-amber-50/30' : 'border-slate-200 bg-white'
+                  }`}>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
+                          विकल्प 2: मंडी में बिक्री
+                        </span>
+                        <span className="text-xs font-bold text-slate-500">APMC Spot</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-500 block">सरकारी मोडल भाव (Modal):</span>
+                        <span className="text-xl font-black text-slate-900">
+                          ₹{Number(threeWayData.options.mandiSpot.grossPricePerKg).toFixed(2)}/kg
+                        </span>
+                        <span className="text-[11px] text-slate-600 block mt-0.5">
+                          {threeWayData.options.mandiSpot.market || 'स्थानीय मंडी'} ({threeWayData.options.mandiSpot.district || 'UP'})
+                        </span>
+                      </div>
+                      <div className="bg-white/80 rounded-xl p-2.5 border border-slate-100 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-600">
+                          <span>मंडी तक ढुलाई:</span>
+                          <span>-₹{Number(threeWayData.options.mandiSpot.deductions?.transportToMandiPerKg || 0.10).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>APMC मंडी सेस (1.5%):</span>
+                          <span>-₹{Number(threeWayData.options.mandiSpot.deductions?.apmcCessPerKg || 0.20).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>हम्माली व उतराई:</span>
+                          <span>-₹{Number(threeWayData.options.mandiSpot.deductions?.hammaliLoadingPerKg || 0.25).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="border-t border-slate-100 pt-1 flex justify-between font-bold text-slate-700">
+                          <span>कुल मंडी खर्चे:</span>
+                          <span>-₹{Number(threeWayData.options.mandiSpot.deductions?.totalMandiDeductionsPerKg || 0.60).toFixed(2)}/kg</span>
+                        </div>
+                      </div>
+                      <div className="bg-slate-100 p-3 rounded-xl border border-slate-200">
+                        <span className="text-[10px] text-slate-600 font-bold uppercase block">मंडी में शुद्ध हाथ में</span>
+                        <div className="text-2xl font-black text-slate-800">
+                          ₹{Number(threeWayData.options.mandiSpot.netRealizationPerKg).toFixed(2)}/kg
+                        </div>
+                        <div className="text-[11px] text-slate-600 font-bold mt-1">
+                          कुल आय: ₹{Number(threeWayData.options.mandiSpot.totalNetValue).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      मंडी में अनिश्चित नीलामी व भुगतान विलंब संभव
+                    </div>
+                  </div>
+
+                  {/* Column 3: Cold Storage Carry */}
+                  <div className={`rounded-2xl p-4 border-2 flex flex-col justify-between space-y-4 ${
+                    threeWayData.synthesis.bestOption === 'COLD_STORAGE' ? 'border-cyan-500 bg-cyan-50/30' : 'border-slate-200 bg-white'
+                  }`}>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase bg-cyan-100 text-cyan-900 px-2 py-0.5 rounded-full">
+                          विकल्प 3: कोल्ड स्टोरेज
+                        </span>
+                        <span className="text-xs font-bold text-slate-500">3-Month Carry</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-slate-500 block">अनुमानित भविष्य भाव:</span>
+                        <span className="text-xl font-black text-slate-900">
+                          ₹{Number(threeWayData.options.coldStorage.projectedGrossFuturePricePerKg).toFixed(2)}/kg
+                        </span>
+                        <span className="text-[11px] text-slate-600 block mt-0.5 truncate" title={threeWayData.options.coldStorage.facilityName}>
+                          {threeWayData.options.coldStorage.facilityName}
+                        </span>
+                      </div>
+                      <div className="bg-white/80 rounded-xl p-2.5 border border-slate-100 space-y-1 text-xs">
+                        <div className="flex justify-between text-slate-600">
+                          <span>3 माह किराया ({threeWayData.options.coldStorage.monthlyChargePerKg}₹/kg):</span>
+                          <span>-₹{Number(threeWayData.options.coldStorage.totalStorageChargePerKg).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>हम्माली व बैगिंग:</span>
+                          <span>-₹{Number(threeWayData.options.coldStorage.handlingPerKg).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>वजन घटत (2.5% PLW):</span>
+                          <span>-₹{(Number(threeWayData.options.coldStorage.projectedGrossFuturePricePerKg) * 0.025).toFixed(2)}/kg</span>
+                        </div>
+                        <div className="border-t border-slate-100 pt-1 flex justify-between font-bold text-slate-700">
+                          <span>कुल संचित लागत:</span>
+                          <span>-₹{(Number(threeWayData.options.coldStorage.totalStorageChargePerKg) + Number(threeWayData.options.coldStorage.handlingPerKg) + (Number(threeWayData.options.coldStorage.projectedGrossFuturePricePerKg) * 0.025)).toFixed(2)}/kg</span>
+                        </div>
+                      </div>
+                      <div className="bg-cyan-50 p-3 rounded-xl border border-cyan-200">
+                        <span className="text-[10px] text-cyan-900 font-bold uppercase block">भविष्य शुद्ध अनुमानित आय</span>
+                        <div className="text-2xl font-black text-cyan-800">
+                          ₹{Number(threeWayData.options.coldStorage.netRealizationPerKg).toFixed(2)}/kg
+                        </div>
+                        <div className="text-[11px] text-cyan-700 font-bold mt-1">
+                          कुल आय: ₹{Number(threeWayData.options.coldStorage.totalNetValue).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {threeWayData.options.coldStorage.recommendation}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Action Buttons */}
+                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <button
+                    onClick={() => {
+                      const req = selected3WayMatch.requirement;
+                      setSelected3WayMatch(null);
+                      setThreeWayData(null);
+                      openMakeOfferModal(req, activeListing);
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs cursor-pointer"
+                  >
+                    सौदा भेजें (Make Direct Offer to Buyer)
+                  </button>
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <button
+                      onClick={() => {
+                        setSelected3WayMatch(null);
+                        setThreeWayData(null);
+                        setActiveTab('storage');
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                    >
+                      कोल्ड स्टोरेज देखें (View Cold Storage)
+                    </button>
+                    <button
+                      onClick={() => { setSelected3WayMatch(null); setThreeWayData(null); }}
+                      className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                    >
+                      बंद करें (Close)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-xs text-slate-500">
+                तुलनात्मक विश्लेषण लोड करने में असमर्थ। कृपया पुनः प्रयास करें।
+              </div>
+            )}
           </div>
         </div>
       )}

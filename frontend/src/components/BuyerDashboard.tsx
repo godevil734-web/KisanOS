@@ -78,6 +78,46 @@ export const BuyerDashboard: React.FC = () => {
 
   // NaLamKI Passport Modal State
   const [selectedListingForPassport, setSelectedListingForPassport] = useState<FarmerListing | null>(null);
+
+  // Phase 3: Escrow Payment Modal State
+  const [escrowModal, setEscrowModal] = useState<{
+    isOpen: boolean;
+    order: any | null;
+    amount: number;
+    paymentRef: string;
+    isSubmitting: boolean;
+  }>({
+    isOpen: false,
+    order: null,
+    amount: 0,
+    paymentRef: '',
+    isSubmitting: false
+  });
+
+  // Phase 3: Weighbridge & QC Modal State
+  const [qcModal, setQcModal] = useState<{
+    isOpen: boolean;
+    order: any | null;
+    grossKg: number;
+    tareKg: number;
+    moisturePercent: number;
+    foreignMatterPercent: number;
+    grade: string;
+    deductionKg: number;
+    notes: string;
+    isSubmitting: boolean;
+  }>({
+    isOpen: false,
+    order: null,
+    grossKg: 0,
+    tareKg: 0,
+    moisturePercent: 18.0,
+    foreignMatterPercent: 1.0,
+    grade: 'Grade A',
+    deductionKg: 0,
+    notes: '',
+    isSubmitting: false
+  });
   const [showPassportModal, setShowPassportModal] = useState(false);
 
   // New Demand Post Modal
@@ -358,6 +398,55 @@ export const BuyerDashboard: React.FC = () => {
     }
   };
 
+  const handleEscrowDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!escrowModal.order) return;
+    setEscrowModal(prev => ({ ...prev, isSubmitting: true }));
+    try {
+      await api.createOrderPayment(escrowModal.order.id, {
+        amount: escrowModal.amount,
+        transactionType: 'ESCROW_DEPOSIT',
+        payeeId: escrowModal.order.sellerId,
+        paymentGatewayRef: escrowModal.paymentRef || `UPI-${Date.now().toString().slice(-6)}`,
+        bankReference: `CMS-REF-${Date.now().toString().slice(-6)}`,
+        notes: '100% Escrow secured for contract'
+      });
+      alert('एस्क्रो जमा सफल! Escrow payment locked for contract.');
+      setEscrowModal(prev => ({ ...prev, isOpen: false }));
+      await fetchData();
+    } catch (err: any) {
+      alert('Error funding escrow: ' + err.message);
+    } finally {
+      setEscrowModal(prev => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
+  const handleQcSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!qcModal.order) return;
+    const netWeight = Math.max(0, (qcModal.grossKg || 0) - (qcModal.tareKg || 0));
+    setQcModal(prev => ({ ...prev, isSubmitting: true }));
+    try {
+      await api.createInspectionSlip(qcModal.order.id, {
+        weighbridgeGrossKg: qcModal.grossKg,
+        weighbridgeTareKg: qcModal.tareKg,
+        netWeightKg: netWeight || ((qcModal.order.quantityTons || 10) * 1000),
+        moisturePercent: qcModal.moisturePercent,
+        foreignMatterPercent: qcModal.foreignMatterPercent,
+        qualityGradeVerified: qcModal.grade,
+        deductionKg: qcModal.deductionKg,
+        notes: qcModal.notes
+      });
+      alert('वेब्रिज व गुणवत्ता पर्ची सत्यापित! Weighbridge & QC verified.');
+      setQcModal(prev => ({ ...prev, isOpen: false }));
+      await fetchData();
+    } catch (err: any) {
+      alert('Error recording inspection slip: ' + err.message);
+    } finally {
+      setQcModal(prev => ({ ...prev, isSubmitting: false }));
+    }
+  };
+
   const advanceOrderStatus = async (orderId: string, nextStatus: string) => {
     try {
       await api.updateOrderStatus(orderId, nextStatus, `Updated by Buyer ${user?.name}`);
@@ -376,17 +465,35 @@ export const BuyerDashboard: React.FC = () => {
             🏭
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-slate-900">
-                {user?.buyerProfile?.companyName || 'FreshBites Foods Pvt Ltd'}
+                {user?.buyerProfile?.businessName || user?.buyerProfile?.companyName || user?.name || 'Commercial Procurement Hub'}
               </h1>
-              <span className="text-xs bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-bold border border-blue-200 flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3 text-blue-600" />
-                Verified Institutional Buyer
-              </span>
+              {user?.traderSubtype === 'commission_agent' ? (
+                <span className="text-xs bg-purple-100 text-purple-900 px-2.5 py-0.5 rounded-full font-bold border border-purple-200 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-purple-600" />
+                  आढ़तिया / Commission Agent
+                </span>
+              ) : user?.traderSubtype === 'mandi_trader' ? (
+                <span className="text-xs bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full font-bold border border-amber-200 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-amber-600" />
+                  APMC मंडी व्यापारी (Mandi Trader)
+                </span>
+              ) : (
+                <span className="text-xs bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-bold border border-blue-200 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-blue-600" />
+                  Verified Institutional Buyer
+                </span>
+              )}
+              {user?.apmcLicenseNumber && (
+                <span className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-bold border border-slate-200">
+                  APMC: {user.apmcLicenseNumber}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              {user?.buyerProfile?.businessType || 'Food Processor'} • Annual Volume: {user?.buyerProfile?.annualDemandTons || 2500} Tonnes • Delivery Hub: {user?.location}
+              {user?.mandiName ? `Mandi: ${user.mandiName} • ` : ''}
+              {user?.buyerProfile?.businessType || (user?.traderSubtype ? user.traderSubtype.replace('_', ' ').toUpperCase() : 'Commercial Trader')} • Delivery Hub: {user?.location || 'Agra NH-19'}
             </p>
           </div>
         </div>
@@ -1151,7 +1258,42 @@ export const BuyerDashboard: React.FC = () => {
                   <div className="text-[11px] text-slate-500">
                     Current stage: <strong>{ord.status}</strong>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {ord.paymentStatus !== 'ESCROW_FUNDED' && ord.paymentStatus !== 'RELEASED_TO_SELLER' && ord.status !== 'CANCELLED' && (
+                      <button
+                        onClick={() => setEscrowModal({
+                          isOpen: true,
+                          order: ord,
+                          amount: Number(ord.totalAmount) || 0,
+                          paymentRef: '',
+                          isSubmitting: false
+                        })}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1"
+                      >
+                        <DollarSign className="h-3.5 w-3.5" />
+                        <span>एस्क्रो जमा (Deposit Escrow)</span>
+                      </button>
+                    )}
+                    {ord.status !== 'CREATED' && ord.status !== 'CANCELLED' && (
+                      <button
+                        onClick={() => setQcModal({
+                          isOpen: true,
+                          order: ord,
+                          grossKg: (Number(ord.quantityTons) || 10) * 1000 + 4200,
+                          tareKg: 4200,
+                          moisturePercent: 18.0,
+                          foreignMatterPercent: 1.0,
+                          grade: ord.qualityGrade || 'Grade A',
+                          deductionKg: 0,
+                          notes: '',
+                          isSubmitting: false
+                        })}
+                        className="px-3 py-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-900 font-bold text-xs flex items-center gap-1 border border-blue-300"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                        <span>वेब्रिज पर्ची (QC & Weighbridge)</span>
+                      </button>
+                    )}
                     {ord.status === 'CONFIRMED' && (
                       <button
                         onClick={() => advanceOrderStatus(ord.id, 'READY_FOR_PICKUP')}
@@ -1673,6 +1815,167 @@ export const BuyerDashboard: React.FC = () => {
         initialListing={selectedListingForPassport || undefined}
         language={language === 'hi' ? 'hi' : 'en'}
       />
+
+      {/* Phase 3: Escrow Deposit Modal */}
+      {escrowModal.isOpen && escrowModal.order && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-sm">💰</span>
+                <h3 className="font-extrabold text-slate-900 text-base">सुरक्षित एस्क्रो जमा (Escrow Deposit)</h3>
+              </div>
+              <button onClick={() => setEscrowModal(prev => ({ ...prev, isOpen: false }))} className="text-slate-400 hover:text-slate-600 font-bold text-lg">×</button>
+            </div>
+            <form onSubmit={handleEscrowDeposit} className="space-y-4 pt-3">
+              <div>
+                <span className="text-xs text-slate-500 block">अनुबंध संख्या (Order Number)</span>
+                <span className="font-extrabold text-sm text-slate-800">{escrowModal.order.orderNumber}</span>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">जमा राशि (Amount in ₹)</label>
+                <input
+                  type="number"
+                  required
+                  value={escrowModal.amount}
+                  onChange={(e) => setEscrowModal(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 font-black text-emerald-700 text-base"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">भुगतान संदर्भ / UPI Ref (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. UPI-REF-998822"
+                  value={escrowModal.paymentRef}
+                  onChange={(e) => setEscrowModal(prev => ({ ...prev, paymentRef: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium"
+                />
+              </div>
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 leading-relaxed">
+                🛡️ यह राशि KisanOS सुरक्षित एस्क्रो में सुरक्षित रहेगी और वेब्रिज व गुणवत्ता सत्यापन के बाद ही किसान को जारी होगी।
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEscrowModal(prev => ({ ...prev, isOpen: false }))}
+                  className="w-1/3 py-2.5 rounded-xl bg-slate-100 font-bold text-xs text-slate-600"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={escrowModal.isSubmitting}
+                  className="w-2/3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs"
+                >
+                  {escrowModal.isSubmitting ? 'जमा हो रहा है...' : 'एस्क्रो लॉक करें (Lock Escrow)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3: Weighbridge & QC Modal */}
+      {qcModal.isOpen && qcModal.order && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-blue-100 text-blue-800 font-bold text-sm">⚖️</span>
+                <h3 className="font-extrabold text-slate-900 text-base">धर्मकांटा पर्ची व गुणवत्ता सत्यापन (Weighbridge & QC)</h3>
+              </div>
+              <button onClick={() => setQcModal(prev => ({ ...prev, isOpen: false }))} className="text-slate-400 hover:text-slate-600 font-bold text-lg">×</button>
+            </div>
+            <form onSubmit={handleQcSubmit} className="space-y-3 pt-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">सकल वजन (Gross Kg)</label>
+                  <input
+                    type="number"
+                    value={qcModal.grossKg}
+                    onChange={(e) => setQcModal(prev => ({ ...prev, grossKg: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">खाली वाहन (Tare Kg)</label>
+                  <input
+                    type="number"
+                    value={qcModal.tareKg}
+                    onChange={(e) => setQcModal(prev => ({ ...prev, tareKg: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold"
+                  />
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs flex justify-between font-bold">
+                <span>शुद्ध वजन (Net Weight):</span>
+                <span className="text-blue-700 font-black">{Math.max(0, qcModal.grossKg - qcModal.tareKg).toLocaleString()} kg ({((qcModal.grossKg - qcModal.tareKg)/1000).toFixed(2)} MT)</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">नमी % (Moisture)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={qcModal.moisturePercent}
+                    onChange={(e) => setQcModal(prev => ({ ...prev, moisturePercent: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">अपद्रव्य % (Foreign Matter)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={qcModal.foreignMatterPercent}
+                    onChange={(e) => setQcModal(prev => ({ ...prev, foreignMatterPercent: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">सत्यापित गुणवत्ता ग्रेड</label>
+                <select
+                  value={qcModal.grade}
+                  onChange={(e) => setQcModal(prev => ({ ...prev, grade: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold"
+                >
+                  <option value="Grade A">Grade A (उत्कृष्ट - A ग्रेड)</option>
+                  <option value="Grade B">Grade B (मध्यम - B ग्रेड)</option>
+                  <option value="Grade C">Grade C (औसत - C ग्रेड)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">गुणवत्ता कटौती (Deduction in Kg)</label>
+                <input
+                  type="number"
+                  value={qcModal.deductionKg}
+                  onChange={(e) => setQcModal(prev => ({ ...prev, deductionKg: Number(e.target.value) }))}
+                  placeholder="e.g. 50 kg for soil/rot"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-medium"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setQcModal(prev => ({ ...prev, isOpen: false }))}
+                  className="w-1/3 py-2.5 rounded-xl bg-slate-100 font-bold text-xs text-slate-600"
+                >
+                  रद्द करें
+                </button>
+                <button
+                  type="submit"
+                  disabled={qcModal.isSubmitting}
+                  className="w-2/3 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs"
+                >
+                  {qcModal.isSubmitting ? 'सत्यापित हो रहा है...' : 'पर्ची रिकॉर्ड करें (Save QC)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

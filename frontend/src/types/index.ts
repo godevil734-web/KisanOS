@@ -1,5 +1,7 @@
 export type UserRole = 'farmer' | 'aggregator' | 'dealer' | 'buyer' | 'cold_storage' | 'transporter' | 'admin';
 
+export type TraderSubtype = 'mandi_trader' | 'commission_agent' | 'local_trader' | 'bulk_processor' | 'exporter';
+
 export interface User {
   id: string;
   name: string;
@@ -7,6 +9,11 @@ export interface User {
   phone: string;
   role: UserRole;
   buyerType?: 'local' | 'bulk';
+  traderSubtype?: TraderSubtype | null;
+  apmcLicenseNumber?: string | null;
+  mandiName?: string | null;
+  companyType?: string | null;
+  taxIdGst?: string | null;
   latitude?: number;
   longitude?: number;
   status?: 'active' | 'pending' | 'rejected' | 'blocked';
@@ -153,6 +160,85 @@ export interface NetRealization {
   estimatedNetRealization: number;
   isEstimate: boolean;
   disclaimer: string;
+  mandiBenchmark?: {
+    available: boolean;
+    commodity?: string;
+    market?: string;
+    district?: string;
+    state?: string;
+    arrivalDate?: string;
+    modalPricePerKg?: number;
+    minPricePerKg?: number;
+    maxPricePerKg?: number;
+    mandiDeductions?: {
+      transportToMandiPerKg: number;
+      apmcCessPerKg: number;
+      hammaliLoadingPerKg: number;
+      weighmentPerKg: number;
+      totalMandiDeductionsPerKg: number;
+    };
+    netMandiRealizationPerKg?: number;
+    spreadPerKg?: number;
+    spreadPercent?: number;
+  };
+}
+
+export interface ThreeWayComparisonResult {
+  cropName: string;
+  state: string;
+  district?: string;
+  quantityKg: number;
+  options: {
+    direct: {
+      label: string;
+      grossPricePerKg: number;
+      buyerPicksUp: boolean;
+      deductions: {
+        transport: number;
+        loading: number;
+        platformFee: number;
+        total: number;
+      };
+      netRealizationPerKg: number;
+      totalNetValue: number;
+      paymentTerms: string;
+    };
+    mandiSpot: {
+      label: string;
+      available: boolean;
+      market?: string;
+      district?: string;
+      arrivalDate?: string;
+      grossPricePerKg: number;
+      minPricePerKg: number;
+      maxPricePerKg: number;
+      deductions?: Record<string, number>;
+      netRealizationPerKg: number;
+      totalNetValue: number;
+      spreadVsDirectPerKg: number;
+      spreadVsDirectPercent: number;
+    };
+    coldStorage: {
+      label: string;
+      facilityName: string;
+      storageDurationMonths: number;
+      monthlyChargePerKg: number;
+      totalStorageChargePerKg: number;
+      handlingPerKg: number;
+      weightLossPercent: number;
+      projectedGrossFuturePricePerKg: number;
+      effectiveFutureGrossPerKg: number;
+      netRealizationPerKg: number;
+      totalNetValue: number;
+      netGainOrLossVsDirectPerKg: number;
+      recommendation: string;
+    };
+  };
+  synthesis: {
+    bestOption: 'DIRECT_SALE' | 'MANDI_SPOT' | 'COLD_STORAGE';
+    summaryHi: string;
+    summaryEn: string;
+  };
 }
 
 export interface RequirementMatch {
@@ -759,4 +845,101 @@ export interface DashboardAppearanceSetting {
   fallback?: boolean;
   publishedPalette?: ThemePalette | null;
 }
+
+export type PaymentTransactionType = 
+  | 'ESCROW_DEPOSIT' 
+  | 'FARMER_PAYOUT' 
+  | 'AGGREGATOR_COMMISSION' 
+  | 'TRANSPORTER_FREIGHT' 
+  | 'PLATFORM_FEE' 
+  | 'REFUND' 
+  | 'DISPUTE_HOLD';
+
+export type PaymentTransactionStatus = 'PENDING' | 'ESCROWED' | 'SETTLED' | 'DISPUTED' | 'REFUNDED';
+
+export interface PaymentTransaction {
+  id: string;
+  orderId: string;
+  payerId: string;
+  payeeId: string;
+  amount: number;
+  transactionType: PaymentTransactionType;
+  status: PaymentTransactionStatus;
+  paymentGatewayRef?: string | null;
+  bankReference?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  settledAt?: string | null;
+}
+
+export interface InspectionSlip {
+  id: string;
+  orderId: string;
+  inspectorId?: string | null;
+  inspectorName?: string | null;
+  weighbridgeGrossKg?: number | null;
+  weighbridgeTareKg?: number | null;
+  netWeightKg: number;
+  moisturePercent?: number | null;
+  foreignMatterPercent?: number | null;
+  qualityGradeVerified: string;
+  deductionKg?: number;
+  slipImages?: string[];
+  notes?: string | null;
+  status: 'PENDING' | 'VERIFIED' | 'DISPUTED' | 'REJECTED';
+  createdAt: string;
+}
+
+export interface ProcurementAllocation {
+  id: string;
+  planId: string;
+  listingId: string;
+  farmerId: string;
+  farmerName?: string;
+  allocatedQuantityTons: number;
+  agreedFarmerPricePerKg: number;
+  status: 'COMMITTED' | 'ALLOCATED' | 'CONFIRMED' | 'DISPATCHED' | 'SETTLED' | 'CANCELLED';
+  createdAt: string;
+  updatedAt?: string;
+  payoutAmount?: number;
+}
+
+export interface HistoricalClearingDataset {
+  filter: {
+    crop: string;
+    variety: string;
+    district: string;
+  };
+  summary: {
+    totalTrades: number;
+    totalVolumeTons: number;
+    totalGrossValueInr: number;
+    weightedAveragePricePerKg: number;
+    minPricePerKg: number;
+    maxPricePerKg: number;
+  };
+  apmcBenchmark?: {
+    market: string;
+    district: string;
+    state: string;
+    modalPricePerKg: number;
+    spreadVsModal: number;
+    premiumPercent: number;
+  };
+  trades: Array<{
+    orderId: string;
+    orderNumber: string;
+    cropName: string;
+    variety: string;
+    grade: string;
+    quantityTons: number;
+    clearingPricePerKg: number;
+    grossValueInr: number;
+    location: string;
+    status: string;
+    paymentStatus: string;
+    clearedAt: string;
+  }>;
+}
+
 

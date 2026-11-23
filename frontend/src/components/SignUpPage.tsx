@@ -161,9 +161,13 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
   const [capacity, setCapacity] = useState('');
   const [fpoName, setFpoName] = useState('');
 
-  // Role-Specific Fields - Buyer
+  // Role-Specific Fields - Buyer / Trader Subtypes
   const [companyName, setCompanyName] = useState('');
   const [buyerType, setBuyerType] = useState('Wholesale Buyer');
+  const [traderSubtype, setTraderSubtype] = useState<string>('mandi_trader');
+  const [apmcLicenseNumber, setApmcLicenseNumber] = useState('');
+  const [mandiName, setMandiName] = useState('');
+  const [taxIdGst, setTaxIdGst] = useState('');
   const [procurementQuantity, setProcurementQuantity] = useState('');
 
   // Step 3 OTP Verification States
@@ -378,6 +382,10 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
         operatingArea: selectedRole === 'aggregator' ? operatingArea.trim() : undefined,
         capacity: selectedRole === 'aggregator' ? (capacity.trim() || fpoName.trim()) : undefined,
         buyerType: selectedRole === 'dealer' ? buyerType : undefined,
+        traderSubtype: selectedRole === 'dealer' ? traderSubtype : undefined,
+        apmcLicenseNumber: selectedRole === 'dealer' && apmcLicenseNumber.trim() ? apmcLicenseNumber.trim() : undefined,
+        mandiName: selectedRole === 'dealer' && mandiName.trim() ? mandiName.trim() : undefined,
+        taxIdGst: selectedRole === 'dealer' && taxIdGst.trim() ? taxIdGst.trim() : undefined,
         procurementQuantity: selectedRole === 'dealer' ? procurementQuantity.trim() : undefined
       };
 
@@ -1122,19 +1130,71 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                   </div>
                 )}
 
-                {/* C. BUYER SPECIFIC DETAILS */}
+                {/* C. BUYER / TRADER SPECIFIC DETAILS */}
                 {selectedRole === 'dealer' && (
                   <div className="space-y-3 pt-2 border-t border-stone-800">
                     <span className="text-xs font-bold text-stone-200 block">
-                      {isHi ? 'थोक खरीद एवं व्यापार प्रकार' : 'Procurement & Buyer Type'}
+                      {isHi ? 'व्यापारिक श्रेणी एवं APMC मंडी विवरण' : 'Trader Classification & Mandi Credentials'}
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] font-semibold text-stone-300 mb-1">{isHi ? 'खरीदार का प्रकार' : 'Buyer Type'}</label>
+                        <label className="block text-[11px] font-semibold text-stone-300 mb-1">
+                          {isHi ? 'व्यापारी उप-प्रकार' : 'Commercial Subtype'}
+                        </label>
+                        <select
+                          value={traderSubtype}
+                          onChange={(e) => setTraderSubtype(e.target.value)}
+                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-cyan-500"
+                        >
+                          <option value="mandi_trader">{isHi ? 'मंडी व्यापारी (Mandi Trader)' : 'Mandi Trader (APMC)'}</option>
+                          <option value="commission_agent">{isHi ? 'कमीशन एजेंट / आढ़तिया (Commission Agent)' : 'Commission Agent / Arhatiya'}</option>
+                          <option value="local_trader">{isHi ? 'स्थानीय ग्रामीण व्यापारी (Local Trader)' : 'Local Aggregation Trader'}</option>
+                          <option value="bulk_processor">{isHi ? 'फूड प्रोसेसर / फैक्ट्री (Bulk Processor)' : 'Industrial / Food Processor'}</option>
+                          <option value="exporter">{isHi ? 'कृषि निर्यातक (Commodity Exporter)' : 'Commodity Exporter'}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-stone-300 mb-1">
+                          {isHi ? 'APMC लाइसेंस नंबर' : 'APMC License Number'}
+                        </label>
+                        <input
+                          type="text"
+                          value={apmcLicenseNumber}
+                          onChange={(e) => setApmcLicenseNumber(e.target.value)}
+                          placeholder="e.g. UP-AGR-APMC-8842"
+                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-stone-300 mb-1">
+                          {isHi ? 'कार्यरत मंडी / केंद्र' : 'Operating Mandi / Terminal'}
+                        </label>
+                        <input
+                          type="text"
+                          value={mandiName}
+                          onChange={(e) => setMandiName(e.target.value)}
+                          placeholder="e.g. Agra Mandi, Azadpur Mandi"
+                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-stone-300 mb-1">
+                          {isHi ? 'GSTIN / कर पहचान' : 'GSTIN / Tax ID'}
+                        </label>
+                        <input
+                          type="text"
+                          value={taxIdGst}
+                          onChange={(e) => setTaxIdGst(e.target.value)}
+                          placeholder="e.g. 09AAACA8842K1ZB"
+                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-stone-300 mb-1">{isHi ? 'खरीदार का प्रकार' : 'Buyer Category'}</label>
                         <select
                           value={buyerType}
                           onChange={(e) => setBuyerType(e.target.value)}
-                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-emerald-500"
+                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-cyan-500"
                         >
                           {buyerTypes.map(t => (
                             <option key={t.value} value={t.value}>
@@ -1150,7 +1210,7 @@ export const SignUpPage: React.FC<SignUpPageProps> = ({ onSuccess, onNavigate })
                           value={district}
                           onChange={(e) => setDistrict(e.target.value)}
                           placeholder="Delhi / Agra"
-                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-emerald-500"
+                          className="w-full min-h-[42px] px-3 py-1.5 rounded-xl bg-stone-900 border border-stone-700 text-white text-xs outline-none focus:border-cyan-500"
                         />
                       </div>
                       <div className="sm:col-span-2">

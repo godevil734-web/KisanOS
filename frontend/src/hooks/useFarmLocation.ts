@@ -13,7 +13,7 @@ export interface FarmLocationData {
   country: string;
   displayName: string;
   coords: FarmLocationCoords | null;
-  source: 'gps' | 'saved_profile' | 'manual' | 'default';
+  source: 'gps' | 'saved_profile' | 'manual' | 'default' | 'ip';
 }
 
 export type LocationPermissionStatus = 'prompt' | 'granted' | 'denied' | 'unavailable' | 'loading';
@@ -32,13 +32,31 @@ const DEFAULT_LOCATION: FarmLocationData = {
 };
 
 /**
- * Reverse geocode latitude/longitude to village, district, state
- * Uses BigDataCloud client reverse geocoding (fast, free, rural-friendly)
+ * High-reliability reverse geocoding:
+ * Calls KisanOS backend API /api/location/reverse-geocode first (immune to browser CSP),
+ * with client fallbacks if offline.
  */
-async function reverseGeocodeCoords(lat: number, lon: number): Promise<{ village: string; district: string; state: string; country: string }> {
+async function reverseGeocodeCoords(lat: number, lon: number): Promise<{ village: string; district: string; state: string; country: string; displayName: string }> {
+  // 1. Call KisanConnect backend reverse-geocode (fast, same-origin, bypasses browser CSP)
+  try {
+    const res = await api.reverseGeocode(lat, lon);
+    if (res?.success && res.location) {
+      return {
+        village: res.location.village || '',
+        district: res.location.district || 'Agra',
+        state: res.location.state || 'Uttar Pradesh',
+        country: res.location.country || 'India',
+        displayName: res.location.displayName || `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`
+      };
+    }
+  } catch (backendErr) {
+    console.warn('[useFarmLocation] Backend reverse geocode failed, trying client fallback:', backendErr);
+  }
+
+  // 2. Client fallback via BigDataCloud
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), 3500);
     const res = await fetch(
       `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
       { signal: controller.signal }
@@ -48,7 +66,6 @@ async function reverseGeocodeCoords(lat: number, lon: number): Promise<{ village
     if (res.ok) {
       const data = await res.json();
       const village = data.locality || data.city || '';
-      // Extract district if available in administrative hierarchy
       let district = '';
       if (Array.isArray(data.localityInfo?.administrative)) {
         const distObj = data.localityInfo.administrative.find((a: any) =>
@@ -64,19 +81,22 @@ async function reverseGeocodeCoords(lat: number, lon: number): Promise<{ village
 
       const state = data.principalSubdivision || 'Uttar Pradesh';
       const country = data.countryName || 'India';
+      const parts = [village, district, state].filter(Boolean);
+      const displayName = parts.length > 0 ? parts.join(', ') : `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
 
-      return { village, district, state, country };
+      return { village, district, state, country, displayName };
     }
   } catch (e) {
-    console.warn('[useFarmLocation] Reverse geocoding fetch error:', e);
+    console.warn('[useFarmLocation] Client reverse geocoding fetch error:', e);
   }
 
-  // Graceful fallback if offline
+  // 3. Graceful fallback
   return {
     village: '',
     district: 'Agra',
     state: 'Uttar Pradesh',
-    country: 'India'
+    country: 'India',
+    displayName: `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`
   };
 }
 
@@ -103,7 +123,7 @@ export function useFarmLocation(user?: any) {
       const cached = localStorage.getItem(STORAGE_KEY_LOCATION);
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed?.displayName) return parsed;
+        if (parsed?.displayName && parsed?.coords?.lat && parsed?.coords?.lon) return parsed;
       }
     } catch {}
 
@@ -137,8 +157,7 @@ export function useFarmLocation(user?: any) {
       const parts = locStr.split(',').map((s: string) => s.trim());
       const coords = user.farmerProfile?.coordinates || null;
       setLocation(prev => {
-        // Only update if currently default or if profile has fresher data
-        if (prev.source === 'default' || prev.source === 'saved_profile') {
+        if (prev.source === 'default' || prev.source === 'ip' || prev.source === 'saved_profile') {
           return {
             village: user.village || parts[0] || prev.village,
             district: user.district || parts[1] || prev.district,
@@ -175,15 +194,12 @@ export function useFarmLocation(user?: any) {
 
         try {
           const geo = await reverseGeocodeCoords(lat, lon);
-          const parts = [geo.village, geo.district, geo.state].filter(Boolean);
-          const displayName = parts.length > 0 ? parts.join(', ') : `${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
-
           const newLoc: FarmLocationData = {
             village: geo.village,
             district: geo.district,
             state: geo.state,
             country: geo.country,
-            displayName,
+            displayName: geo.displayName,
             coords: { lat, lon },
             source: 'gps'
           };
@@ -204,7 +220,7 @@ export function useFarmLocation(user?: any) {
               village: geo.village,
               district: geo.district,
               state: geo.state,
-              farmLocation: displayName,
+              farmLocation: geo.displayName,
               latitude: lat,
               longitude: lon
             }).catch(err => {
@@ -243,13 +259,49 @@ export function useFarmLocation(user?: any) {
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 600000 // 10 minutes cache
+        maximumAge: 300000 // 5 minutes cache
       }
     );
   }, [user]);
 
   /**
+   * Automatic background location detection on initial mount
+   * If location is default and user hasn't explicitly set location or denied permission
+   */
+  useEffect(() => {
+    let cancel = false;
+    if (location.source === 'default' && !user?.farmerProfile?.coordinates) {
+      api.detectLocation()
+        .then(res => {
+          if (cancel || !isMounted.current) return;
+          if (res?.success && res.location?.coords) {
+            const detectedLoc: FarmLocationData = {
+              village: res.location.village || '',
+              district: res.location.district || 'Agra',
+              state: res.location.state || 'Uttar Pradesh',
+              country: res.location.country || 'India',
+              displayName: res.location.displayName,
+              coords: res.location.coords,
+              source: 'ip'
+            };
+            setLocation(detectedLoc);
+            try {
+              localStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(detectedLoc));
+            } catch {}
+          }
+        })
+        .catch(() => {
+          // Keep default benchmark silently
+        });
+    }
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  /**
    * Save a manually selected farm location
+   * Geocodes district/state to real coordinates so weather forecast updates accurately!
    */
   const setManualLocation = useCallback(async (details: { village: string; district: string; state: string; lat?: number; lon?: number }) => {
     setIsSaving(true);
@@ -258,10 +310,20 @@ export function useFarmLocation(user?: any) {
     const parts = [details.village, details.district, details.state].filter(Boolean);
     const displayName = parts.join(', ');
 
-    // Fallback coordinates for common districts or keep existing
+    // 1. Resolve coordinates from explicit input or via backend geocoding API
     let coords: FarmLocationCoords = location.coords || { lat: 27.1767, lon: 78.0081 };
     if (details.lat && details.lon) {
       coords = { lat: details.lat, lon: details.lon };
+    } else {
+      try {
+        const queryStr = [details.village, details.district, details.state].filter(Boolean).join(', ');
+        const geoRes = await api.geocodeLocation(queryStr);
+        if (geoRes?.success && geoRes.location?.coords) {
+          coords = geoRes.location.coords;
+        }
+      } catch (err) {
+        console.warn('[useFarmLocation] Geocoding manual location error, using closest benchmark:', err);
+      }
     }
 
     const newLoc: FarmLocationData = {

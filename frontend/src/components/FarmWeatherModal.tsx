@@ -411,9 +411,13 @@ export const FarmWeatherModal: React.FC<FarmWeatherModalProps> = ({
                     <span className="font-black text-xs text-slate-900">वर्तमान सक्रिय खेत स्थान</span>
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                    location.source === 'gps' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                    location.source === 'gps'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : location.source === 'ip'
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-slate-100 text-slate-700'
                   }`}>
-                    {location.source === 'gps' ? 'GPS सत्यापित' : 'मैन्युअल सेट'}
+                    {location.source === 'gps' ? 'GPS सत्यापित' : location.source === 'ip' ? 'नेटवर्क द्वारा पहचाना गया' : 'स्थान सेट'}
                   </span>
                 </div>
 
@@ -425,10 +429,10 @@ export const FarmWeatherModal: React.FC<FarmWeatherModalProps> = ({
                   <button
                     onClick={onRequestGps}
                     disabled={isLoading}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
                   >
-                    <Navigation className="h-3.5 w-3.5" />
-                    <span>GPS से वर्तमान स्थान खोजें</span>
+                    <Navigation className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                    <span>{isLoading ? 'स्थान खोजा जा रहा है...' : 'GPS से वर्तमान स्थान खोजें'}</span>
                   </button>
 
                   <button

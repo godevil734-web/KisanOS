@@ -49,7 +49,12 @@ function configureHelmet() {
           "http://localhost:*", 
           "ws://localhost:*", 
           "https://accounts.google.com", 
-          "https://api.brevo.com"
+          "https://api.brevo.com",
+          "https://api.open-meteo.com",
+          "https://api.bigdatacloud.net",
+          "https://nominatim.openstreetmap.org",
+          "http://ip-api.com",
+          "https://ip-api.com"
         ],
         frameAncestors: ["'none'"],
         baseUri: ["'self'"],

@@ -224,6 +224,11 @@ export const api = {
     return request<FarmWeatherResponse>(`/weather/forecast${q.toString() ? `?${q.toString()}` : ''}`);
   },
 
+  // Location Intelligence
+  detectLocation: () => request<ApiLocationResponse>('/location/detect'),
+  reverseGeocode: (lat: number, lon: number) => request<ApiLocationResponse>(`/location/reverse-geocode?lat=${lat}&lon=${lon}`),
+  geocodeLocation: (query: string) => request<ApiLocationResponse>(`/location/geocode?query=${encodeURIComponent(query)}`),
+
   // Forecasts & AI
   getRegionalForecasts: () => request<any[]>('/forecasts/regional'),
   predictYield: (data: any) => request<any>('/forecasts/predict-yield', { method: 'POST', body: JSON.stringify(data) }),
@@ -470,4 +475,19 @@ export interface FarmWeatherResponse {
   daily7: DailyWeatherPoint[];
   advisories: FarmWeatherAdvisory[];
   disclaimer: string;
+}
+
+export interface ApiLocationResult {
+  village?: string;
+  district: string;
+  state: string;
+  country: string;
+  displayName: string;
+  coords: { lat: number; lon: number };
+  source?: string;
+}
+
+export interface ApiLocationResponse {
+  success: boolean;
+  location: ApiLocationResult;
 }

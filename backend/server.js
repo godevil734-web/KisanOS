@@ -13,7 +13,7 @@ const { calculateNetRealization, calculateStorageScenario, getMandiModalBenchmar
 const { predictYield, analyzeProduceQualityCV } = require('./services/forecastService');
 const { otpProvider } = require('./services/otpService');
 const { getHyperlocalWeather, getComprehensiveWeatherForecast } = require('./services/weatherService');
-const { calculateDistanceKm, resolveCoordinates, filterByDistance } = require('./services/locationService');
+const { calculateDistanceKm, resolveCoordinates, filterByDistance, reverseGeocode, geocode, detectLocationFromReq } = require('./services/locationService');
 const { generateBuyerRecommendation, generateKisanSaathiResponse } = require('./services/geminiService');
 const {
   createOffer,
@@ -4495,6 +4495,77 @@ app.get('/api/weather/forecast', optionalAuth, async (req, res) => {
   } catch (error) {
     console.error('[API] /api/weather/forecast error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to fetch weather forecast' });
+  }
+});
+
+// ---------------------------------------------
+// LOCATION INTELLIGENCE & REVERSE-GEOCODING API
+// ---------------------------------------------
+app.get('/api/location/detect', async (req, res) => {
+  try {
+    const loc = await detectLocationFromReq(req);
+    res.setHeader('Cache-Control', 'private, max-age=60');
+    res.json({ success: true, location: loc });
+  } catch (error) {
+    console.error('[API] /api/location/detect error:', error.message);
+    res.status(500).json({
+      success: false,
+      location: {
+        village: 'Khandauli',
+        district: 'Agra',
+        state: 'Uttar Pradesh',
+        country: 'India',
+        displayName: 'Khandauli, Agra, Uttar Pradesh',
+        coords: { lat: 27.1767, lon: 78.0081 },
+        source: 'fallback'
+      }
+    });
+  }
+});
+
+app.get('/api/location/reverse-geocode', async (req, res) => {
+  try {
+    const lat = req.query.lat ? Number(req.query.lat) : 27.1767;
+    const lon = req.query.lon ? Number(req.query.lon) : 78.0081;
+    const loc = await reverseGeocode(lat, lon);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.json({ success: true, location: loc });
+  } catch (error) {
+    console.error('[API] /api/location/reverse-geocode error:', error.message);
+    res.status(500).json({
+      success: false,
+      location: {
+        village: '',
+        district: 'Agra',
+        state: 'Uttar Pradesh',
+        country: 'India',
+        displayName: 'Agra, Uttar Pradesh',
+        coords: { lat: 27.1767, lon: 78.0081 },
+        source: 'fallback'
+      }
+    });
+  }
+});
+
+app.get('/api/location/geocode', async (req, res) => {
+  try {
+    const query = req.query.query || req.query.district || req.query.q || '';
+    const loc = await geocode(query);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.json({ success: true, location: loc });
+  } catch (error) {
+    console.error('[API] /api/location/geocode error:', error.message);
+    res.status(500).json({
+      success: false,
+      location: {
+        lat: 27.1767,
+        lon: 78.0081,
+        district: 'Agra',
+        state: 'Uttar Pradesh',
+        country: 'India',
+        displayName: 'Khandauli, Agra, Uttar Pradesh'
+      }
+    });
   }
 });
 
